@@ -1,4 +1,6 @@
 local protocol = require('protocol')
+local okReg, soulRegistry = pcall(require, 'soul_registry_generated')
+if not okReg or type(soulRegistry) ~= 'table' then soulRegistry = nil end
 local State = {}
 State.__index = State
 
@@ -35,12 +37,14 @@ local function copy_catalog(cat)
     for i, e in ipairs(cat.entries or {}) do
         local hl = {}
         for j, line in ipairs(e.highlights or {}) do hl[j] = line end
+        local reg = soulRegistry and soulRegistry.resolve and soulRegistry.resolve(e.key) or nil
         entries[i] = {
             id          = e.id,
+            permanent_id = reg and reg.id or nil,
             key         = e.key,
-            name        = e.name,
+            name        = (reg and reg.displayName) or e.name,
             role        = e.role,
-            icon        = e.icon,
+            icon        = (reg and reg.icon) or e.icon,
             req_level   = e.req_level,
             description = e.description,
             highlights  = hl,

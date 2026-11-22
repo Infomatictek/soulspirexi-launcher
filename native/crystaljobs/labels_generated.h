@@ -1,6 +1,6 @@
 // AUTO-GENERATED FILE — DO NOT EDIT DIRECTLY.
 // Source of truth: soulspirexi-src/registry/souls.json
-// Registry version: 2026.11.22-foundation (schema 1.0.0)
+// Registry version: 2026.11.22-phase2-locked (schema 1.0.0)
 // Regenerate with: python3 tools/registry_compiler.py --generate --launcher-repo <path>
 #pragma once
 #include <cstdint>

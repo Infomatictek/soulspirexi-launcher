@@ -1,6 +1,8 @@
 -- Client-only active Soul bridge via the existing crystaljobs.dll status export.
 -- Does not send packets, alter the server, or inspect arbitrary client memory.
 local M = {}
+local okReg, soulRegistry = pcall(require, 'soul_registry_generated')
+if not okReg or type(soulRegistry) ~= 'table' then soulRegistry = nil end
 local names = {
     [1]={'commander','berserker','spartan'},
     [2]={'sensei','chiweaver','blackbelt'},
@@ -32,6 +34,13 @@ function M.resolve(status, job, character)
         or status.character_id ~= character then return nil end
     local branch = status.branch
     return names[job] and names[job][branch] or nil
+end
+function M.displayName(soulKey)
+    if type(soulKey) ~= 'string' or soulKey == '' then return nil end
+    if soulRegistry and soulRegistry.displayName then
+        return soulRegistry.displayName(soulKey, soulKey)
+    end
+    return soulKey
 end
 local okFfi, ffi = pcall(require, 'ffi')
 local status_t

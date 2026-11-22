@@ -84,6 +84,16 @@ local SKILL_LIST =
     { id = 27, name = 'Throwing' },
 }
 
+local okReg, soulRegistry = pcall(require, 'soul_registry_generated')
+if not okReg or type(soulRegistry) ~= 'table' then soulRegistry = nil end
+local function resolveSpecDisplayName(raw)
+    if type(raw) ~= 'string' or raw == '' or raw == 'Base' then return 'Base' end
+    if soulRegistry and soulRegistry.displayName then
+        return soulRegistry.displayName(raw, raw)
+    end
+    return raw
+end
+
 local state =
 {
     open            = { false },
@@ -214,7 +224,7 @@ local function handleProtoLine(payload)
         state.earned      = tonumber(parts[6]) or 1
         state.mainSkill   = tonumber(parts[7]) or 0
         state.rangedSkill = tonumber(parts[8]) or 0
-        state.specName    = (parts[9] and parts[9] ~= '') and parts[9] or 'Base'
+        state.specName    = resolveSpecDisplayName(parts[9])
         if (prevJob ~= state.jobKey or prevSpec ~= state.specName) and state.selectedWsId ~= nil and state.open[1] then
             requestWS(state.selectedWsId)
         end
