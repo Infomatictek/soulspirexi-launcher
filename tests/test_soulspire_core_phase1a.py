@@ -1,6 +1,7 @@
 import hashlib
 import os
 import pathlib
+import shutil
 import subprocess
 import unittest
 
@@ -28,8 +29,12 @@ class SoulspireCorePhase1ATests(unittest.TestCase):
                 os.chdir(prev_cwd)
             return
 
+        luajit_bin = shutil.which("luajit")
+        if not luajit_bin:
+            self.skipTest("luajit/lupa not installed in this step; covered by run_soul_lua_tests.py")
+
         proc = subprocess.run(
-            ["luajit", str(test_file)],
+            [luajit_bin, str(test_file)],
             cwd=str(CORE_DIR),
             capture_output=True,
             text=True,
