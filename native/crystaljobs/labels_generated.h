@@ -1,11 +1,12 @@
 // AUTO-GENERATED FILE — DO NOT EDIT DIRECTLY.
 // Source of truth: soulspirexi-src/registry/souls.json
-// Registry version: 2026.11.22-phase2-locked (schema 1.0.0)
+// Registry version: 2026.11.22-phase2-locked (schema 1.0.0, hash de6314e97385e328)
 // Regenerate with: python3 tools/registry_compiler.py --generate --launcher-repo <path>
 #pragma once
 #include <cstdint>
 
 namespace crystaljobs {
+constexpr const char* kRegistryHash = "de6314e97385e328";
 inline const char* generated_label_for(uint8_t job, uint8_t branch, bool full = false) noexcept {
     switch (job) {
         case 1: // WAR

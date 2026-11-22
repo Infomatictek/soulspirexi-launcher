@@ -6212,7 +6212,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_soul_actions/data/soul_actions.tsv",
       "targetPath": "soulspire_soul_actions/data/soul_actions.tsv",
-      "sha256": "303fc8e18d03d90a3ca57f9e9b79dba60d85808f5952d4a6438a92ccd8cfc25b",
+      "sha256": "2122dbd6c2226f0d5a38179fab8209366e5c0c6c680e154d033281f3f9e93ede",
       "size": 20017
     },
     {
@@ -7955,7 +7955,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_talents/ws_registry_generated.lua",
       "targetPath": "soulspire_talents/ws_registry_generated.lua",
-      "sha256": "6514827c451ec67ccb79080e730e714493a2fa9eeef3fde5de8ce3a6890a0b25",
+      "sha256": "52609aefb0e4ed5fafed18a1d003188b8f1a8fcc10c575cccdbbb6b78c14d211",
       "size": 51156
     }
   ],

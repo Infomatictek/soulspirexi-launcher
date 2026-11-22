@@ -1,5 +1,5 @@
 # SoulspireXI External Soul Action Definitions (AUTO-GENERATED from registry/entities.json)
-# Registry version: 2026.11.22-phase3-entities
+# Registry version: 2026.11.22-phase4-complete
 # Format (TSV): soul<TAB>kind<TAB>id<TAB>name<TAB>description[<TAB>icon_id<TAB>icon_id_v2]
 # Do not edit directly; edit registry/entities.json and run tools/registry_compiler.py --generate
 zealot	spell	28	Dawnfire	Strike one enemy with light. Costs 8% max MP. 6s recast.

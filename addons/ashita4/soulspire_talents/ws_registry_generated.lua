@@ -1,6 +1,6 @@
 -- AUTO-GENERATED FILE — DO NOT EDIT DIRECTLY.
 -- Source of truth: soulspirexi-src/registry/entities.json (weaponSkills)
--- Registry version: 2026.11.22-phase3-entities
+-- Registry version: 2026.11.22-phase4-complete
 
 local M = { byWsId = {}, byId = {} }
 
