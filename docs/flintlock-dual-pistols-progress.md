@@ -125,6 +125,18 @@ Rebuilt holstered carry sockets across all 7 race skeletons and 182 firearm mode
 - **Verified symmetry across all 182 firearms**: `max|w8.x + w7.x| = 0.0107`, `max|w8.y - w7.y| = 0.0010`, `max|w8.z - w7.z| = 0.0007` (down from 0.334 m rear offset). Guarded by `test_holstered_pistols_are_symmetrical_across_all_182_firearm_dats` in `tests/test_flintlock_dual_pistols.py`.
 - **Live Windows visual verification**: `NOT TESTED (Windows client required)` — verify idle, walk/run, draw/return transitions, repeated `/ra`, multiple gun models, zoning/relogging, and disabled-overlay safety before merging into `main`.
 
+### Forward Nudge Refinement (`fix/flintlock-holster-forward-nudge`, based on `1863c12`)
+Live testing of `1863c12` showed the mirrored holsters still sat slightly too far behind the hip (`+Z` is rear in FFXI pelvis local space, `-Z` is forward). Applied a pure `-Z` forward nudge per race while preserving exact `X = 0` mirror symmetry, height (`Y`), outward spacing (`X`), and all firing/aim-hold/WS sections byte-for-byte:
+- **HumeF (Rin, reference)**: `ΔZ = -0.075` (`+0.1437 → +0.0687`)
+- **HumeM**: `ΔZ = -0.075` (`+0.1402 → +0.0652`)
+- **ElvaanF**: `ΔZ = -0.070` (`+0.1261 → +0.0561`)
+- **Galka**: `ΔZ = -0.065` (`+0.0905 → +0.0255`)
+- **ElvaanM**: `ΔZ = -0.055` (`+0.0829 → +0.0279`)
+- **Mithra**: `ΔZ = -0.030` (`+0.0298 → -0.0002`)
+- **Tarutaru**: `ΔZ = -0.015` (`+0.0026 → -0.0124`)
+- Rebuilt `q3d0..2` / `q3a0..2` in all 7 skeleton DATs via upstream `AkimboRA-Source` IK/motion pipeline and shifted `wep8`, `wep7`, `wep6`, `q4m0`, `q4m1` in all 182 firearm DATs (26 per race); regenerated and verified `manifest.json`.
+- **Live Windows verification required**: idle side view, idle front 3/4 view, walking, running, draw into `/ra`, firing `/ra`, and return to holster.
+
 ---
 
 ## Future Phases (Document Only — Out of Scope for Phase 1)
