@@ -1,0 +1,8 @@
+{
+  "dllPath": "plugins/ashita4/crystaljobs.dll",
+  "dllSha256": "8e10ac388d13531c1d8e3572af1cab196a96d9d61a43f4ce0194960cfc3133e3",
+  "compiledRegistryHash": "legacy-pre-registry",
+  "windowsCiVerifiedRun": "https://github.com/Infomatictek/soulspirexi-launcher/actions/runs/45028338653",
+  "clientVerified": false,
+  "notes": "Tracks which registryHash was compiled into the shipped plugins/ashita4/crystaljobs.dll. When labels_generated.h changes, update this file only after downloading the CI-built DLL, validating PE32 exports, and verifying in-client."
+}
