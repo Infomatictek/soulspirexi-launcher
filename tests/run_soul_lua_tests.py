@@ -12,6 +12,7 @@ def main() -> int:
         (repo_root / "addons/ashita4/crystalsocket", "*_test.lua"),
         (repo_root / "addons/ashita4/soulspire_soul_actions", "*_test.lua"),
         (repo_root / "addons/ashita4/soulspire_flintlock", "*_spec.lua"),
+        (repo_root / "addons/ashita4/soulspire_core", "*_test.lua"),
     ]
     failures = []
     for addon, pattern in suites:

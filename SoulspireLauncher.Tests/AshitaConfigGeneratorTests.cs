@@ -335,6 +335,27 @@ public sealed class AshitaConfigGeneratorTests
     }
 
     [Fact]
+    public void MergeBootScriptContent_IncludesAndDeduplicatesSoulspireCoreAddon()
+    {
+        var existing = string.Join(Environment.NewLine,
+            "/load addons",
+            "/addon load soulspire_core",
+            "/addon load soulspire_core",
+            "/fps 1");
+
+        var merged = _generator.MergeBootScriptContent(existing, new LauncherSettings { FpsCap = 60 });
+
+        var coreCount = merged
+            .Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries)
+            .Count(line => line.Trim().Equals("/addon load soulspire_core", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(1, coreCount);
+        Assert.Contains("/addon load crystalsocket", merged);
+        Assert.Contains("/addon load soulspire_talents", merged);
+        Assert.Contains("/addon load soulspire_soulhud", merged);
+        Assert.Contains("/addon load soulspire_soul_actions", merged);
+    }
+
+    [Fact]
     public void BuildBootIniContent_WritesInputAndGamepadRegistryKeys()
     {
         var settings = new LauncherSettings
