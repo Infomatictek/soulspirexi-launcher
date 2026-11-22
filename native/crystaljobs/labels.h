@@ -8,6 +8,7 @@ constexpr uint32_t capability = 0x43525901;
 constexpr uint32_t marker = 0x43525900;
 constexpr uint32_t lease_ms = 2500;
 
+// Registry-generated Soul labels (source: soulspirexi-src/registry/souls.json).
 inline const char* label_for(uint8_t job, uint8_t branch, bool full = false) noexcept {
     return generated_label_for(job, branch, full);
 }
