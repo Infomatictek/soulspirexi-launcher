@@ -86,10 +86,18 @@ local SKILL_LIST =
 
 local okReg, soulRegistry = pcall(require, 'soul_registry_generated')
 if not okReg or type(soulRegistry) ~= 'table' then soulRegistry = nil end
+local okWsReg, wsRegistry = pcall(require, 'ws_registry_generated')
+if not okWsReg or type(wsRegistry) ~= 'table' then wsRegistry = nil end
 local function resolveSpecDisplayName(raw)
     if type(raw) ~= 'string' or raw == '' or raw == 'Base' then return 'Base' end
     if soulRegistry and soulRegistry.displayName then
         return soulRegistry.displayName(raw, raw)
+    end
+    return raw
+end
+local function resolveWsDisplayName(wsId, raw)
+    if wsRegistry and wsRegistry.displayName and wsId then
+        return wsRegistry.displayName(wsId, raw)
     end
     return raw
 end
@@ -263,11 +271,12 @@ local function handleProtoLine(payload)
             for entry in string.gmatch(parts[2], '([^,]+)') do
                 local wsId, skillId, name, wsType = string.match(entry, '^(%d+):(%d+):(.+):([^:]+)$')
                 if wsId then
+                    local idNum = tonumber(wsId)
                     table.insert(state.tempCatalog,
                     {
-                        id     = tonumber(wsId),
+                        id     = idNum,
                         skill  = tonumber(skillId),
-                        name   = name,
+                        name   = resolveWsDisplayName(idNum, name),
                         wsType = wsType,
                     })
                 end
@@ -294,10 +303,11 @@ local function handleProtoLine(payload)
             end
         end
     elseif kind == 'WS' then
+        local wsIdNum = tonumber(parts[2])
         state.tempWs =
         {
-            id        = tonumber(parts[2]),
-            name      = parts[3] or 'Unknown',
+            id        = wsIdNum,
+            name      = resolveWsDisplayName(wsIdNum, parts[3] or 'Unknown'),
             skillName = parts[4] or '',
             wsType    = parts[5] or 'physical',
             spent     = tonumber(parts[6]) or 0,

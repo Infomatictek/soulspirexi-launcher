@@ -399,37 +399,37 @@ static void multi_job_checks() {
     native_text = &fake_text;
     selftest_alive = true;
 
-    // Test Search rows for MNK, BLM, SAM, DNC, SCH, RUN.
+    // Test Search rows for MNK, BLM, SAM, DNC, SCH, RUN against registry-generated labels.
     state = {};
     make_row(row_a, 301, marker | 1, 2); state.decoded(row_a);
-    assert(state.row_branch(row_a) == 1 && std::strcmp(full_abi(row_a, 2), "Sensei") == 0);
+    assert(state.row_branch(row_a) == 1 && std::strcmp(full_abi(row_a, 2), label_for(2, 1, true)) == 0);
     make_row(row_a, 306, marker | 2, 2); state.decoded(row_a);
-    assert(state.row_branch(row_a) == 2 && std::strcmp(full_abi(row_a, 2), "Chi Weaver") == 0);
+    assert(state.row_branch(row_a) == 2 && std::strcmp(full_abi(row_a, 2), label_for(2, 2, true)) == 0);
     make_row(row_a, 307, marker | 3, 2); state.decoded(row_a);
-    assert(state.row_branch(row_a) == 3 && std::strcmp(full_abi(row_a, 2), "Black Belt") == 0);
+    assert(state.row_branch(row_a) == 3 && std::strcmp(full_abi(row_a, 2), label_for(2, 3, true)) == 0);
     make_row(row_a, 302, marker | 3, 4); state.decoded(row_a);
-    assert(state.row_branch(row_a) == 3 && std::strcmp(full_abi(row_a, 4), "Necromancer") == 0);
+    assert(state.row_branch(row_a) == 3 && std::strcmp(full_abi(row_a, 4), label_for(4, 3, true)) == 0);
     make_row(row_a, 308, marker | 1, 12); state.decoded(row_a);
-    assert(state.row_branch(row_a) == 1 && std::strcmp(full_abi(row_a, 12), "Ronin") == 0);
+    assert(state.row_branch(row_a) == 1 && std::strcmp(full_abi(row_a, 12), label_for(12, 1, true)) == 0);
     make_row(row_a, 309, marker | 2, 12); state.decoded(row_a);
-    assert(state.row_branch(row_a) == 2 && std::strcmp(full_abi(row_a, 12), "Imperial Archer") == 0);
+    assert(state.row_branch(row_a) == 2 && std::strcmp(full_abi(row_a, 12), label_for(12, 2, true)) == 0);
     make_row(row_a, 310, marker | 3, 12); state.decoded(row_a);
-    assert(state.row_branch(row_a) == 3 && std::strcmp(full_abi(row_a, 12), "Warlord") == 0);
+    assert(state.row_branch(row_a) == 3 && std::strcmp(full_abi(row_a, 12), label_for(12, 3, true)) == 0);
     make_row(row_a, 303, marker | 3, 19); state.decoded(row_a);
-    assert(state.row_branch(row_a) == 3 && std::strcmp(full_abi(row_a, 19), "Bladewheel") == 0);
+    assert(state.row_branch(row_a) == 3 && std::strcmp(full_abi(row_a, 19), label_for(19, 3, true)) == 0);
     make_row(row_a, 304, marker | 2, 20); state.decoded(row_a);
-    assert(state.row_branch(row_a) == 2 && std::strcmp(full_abi(row_a, 20), "Sage") == 0);
+    assert(state.row_branch(row_a) == 2 && std::strcmp(full_abi(row_a, 20), label_for(20, 2, true)) == 0);
     make_row(row_a, 305, marker | 1, 22); state.decoded(row_a);
-    assert(state.row_branch(row_a) == 1 && std::strcmp(full_abi(row_a, 22), "Spellblade") == 0);
+    assert(state.row_branch(row_a) == 1 && std::strcmp(full_abi(row_a, 22), label_for(22, 1, true)) == 0);
 
-    // Test item_label for RUN Lifebinder and SAM Imperial Archer.
+    // Test item_label for RUN and SAM against registry-generated abbreviations.
     uint8_t run_event[8] = {1, 1, 22, 2, 100, 0, 0, 0};
     state.update(run_event, 8, GetTickCount());
-    assert(std::strcmp(item_label(2, 22), "LFB") == 0);
+    assert(std::strcmp(item_label(2, 22), label_for(22, 2, false)) == 0);
     assert(std::strcmp(item_label(2, 1), "WAR") == 0);
     uint8_t sam_event[8] = {1, 1, 12, 2, 100, 0, 0, 0};
     state.update(sam_event, 8, GetTickCount());
-    assert(std::strcmp(item_label(2, 12), "IMP") == 0);
+    assert(std::strcmp(item_label(2, 12), label_for(12, 2, false)) == 0);
 
     // Test menu2fon 3-glyph sprite rendering (24px wide: x0 = 0, 8, 16) and tile restoration.
     uint8_t mock_tile[0xE0]{}, mock_node[0x20]{}, mock_sprite[0x30]{};

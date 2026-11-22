@@ -6,6 +6,10 @@
 local Registry = {}
 Registry.__index = Registry
 
+local okSoulReg, soulRegistry = pcall(require, 'core.soul_registry_generated')
+if not okSoulReg or type(soulRegistry) ~= 'table' then soulRegistry = nil end
+Registry.souls = soulRegistry
+
 local DEFAULT_SECTIONS = {
     {
         id = 'soul_crystals',
