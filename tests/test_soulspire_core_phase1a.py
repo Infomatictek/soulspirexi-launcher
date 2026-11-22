@@ -1,4 +1,5 @@
 import hashlib
+import os
 import pathlib
 import subprocess
 import unittest
@@ -13,6 +14,20 @@ class SoulspireCorePhase1ATests(unittest.TestCase):
     def test_lua_unit_suite_passes(self):
         test_file = CORE_DIR / "tests" / "soulspire_core_test.lua"
         self.assertTrue(test_file.is_file(), "Missing soulspire_core_test.lua")
+        try:
+            from lupa.luajit21 import LuaRuntime  # type: ignore[import-not-found]
+        except ImportError:
+            LuaRuntime = None
+
+        if LuaRuntime is not None:
+            prev_cwd = os.getcwd()
+            try:
+                os.chdir(str(CORE_DIR))
+                LuaRuntime().execute(f"dofile({str(test_file)!r})")
+            finally:
+                os.chdir(prev_cwd)
+            return
+
         proc = subprocess.run(
             ["luajit", str(test_file)],
             cwd=str(CORE_DIR),
