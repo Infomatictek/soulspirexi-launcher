@@ -386,7 +386,7 @@
                                             <ComboBox ItemsSource="{Binding FpsCapOptions}" SelectedItem="{Binding SelectedFpsCap}">
                                                 <ComboBox.ItemTemplate>
                                                     <DataTemplate>
-                                                        <TextBlock Text="{Binding Converter={StaticResource FpsLabel}}" Foreground="#0B1019" />
+                                                        <TextBlock Text="{Binding Converter={StaticResource FpsLabel}}" Foreground="{StaticResource TextPrimary}" />
                                                     </DataTemplate>
                                                 </ComboBox.ItemTemplate>
                                             </ComboBox>
