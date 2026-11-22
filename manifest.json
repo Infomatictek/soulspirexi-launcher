@@ -7479,8 +7479,15 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_soulhud/soulhud_roster.lua",
       "targetPath": "soulspire_soulhud/soulhud_roster.lua",
-      "sha256": "0ee93bf173ff005b56d06f7d30a612819029d3b26098d7aa2ff8c615a705f982",
-      "size": 4489
+      "sha256": "d94c1039dc7be2bf042017b0c176761c36aafba41fdfb38de9f8586085758049",
+      "size": 4986
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/ashita4/soulspire_soulhud/soulhud_roster_generated.lua",
+      "targetPath": "soulspire_soulhud/soulhud_roster_generated.lua",
+      "sha256": "f9f73bd21d6762ce928c7d61429e70992134d27216877c8fdd467678a071f711",
+      "size": 15543
     },
     {
       "category": "addon",
