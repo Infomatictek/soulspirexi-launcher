@@ -232,11 +232,34 @@ jobs:
           $dllInfo = Assert-Win32PE "plugins/ashita4/crystaljobs.dll"
           $testInfo = Assert-Win32PE "native/crystaljobs/selftest.exe"
 
+          $regHash = "unknown"
+          if (Test-Path "native/crystaljobs/labels_generated.h") {
+            $m = Select-String -Path "native/crystaljobs/labels_generated.h" -Pattern 'kRegistryHash\s*=\s*"([^"]+)"'
+            if ($m) { $regHash = $m.Matches[0].Groups[1].Value }
+          }
+
+          $provenance = [ordered]@{
+            dllPath              = "plugins/ashita4/crystaljobs.dll"
+            dllSha256            = $dllInfo.Sha256
+            dllSize              = $dllInfo.Size
+            compiledRegistryHash = $regHash
+            sourceCommit         = "${{ github.sha }}"
+            branch               = "${{ github.ref_name }}"
+            ciRunId              = "${{ github.run_id }}"
+            ciRunUrl             = "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            buildTarget          = "Win32-x86-MSVC"
+            ciVerified           = $true
+            clientVerified       = $false
+            notes                = "CI-built crystaljobs.dll provenance. Never set clientVerified=true until verified in the Windows FFXI client."
+          }
+          $provenance | ConvertTo-Json -Depth 4 | Set-Content -Path "crystaljobs-provenance.json" -Encoding UTF8
+
           @(
             "commit_sha=${{ github.sha }}"
             "ref=${{ github.ref }}"
             "branch=${{ github.ref_name }}"
             "run_id=${{ github.run_id }}"
+            "registry_hash=$regHash"
             "crystaljobs_dll_size=$($dllInfo.Size)"
             "crystaljobs_dll_sha256=$($dllInfo.Sha256)"
             "selftest_exe_size=$($testInfo.Size)"
@@ -253,6 +276,7 @@ jobs:
             plugins/ashita4/crystaljobs.dll
             native/crystaljobs/selftest.exe
             crystaljobs-build-info.txt
+            crystaljobs-provenance.json
             crystaljobs-build.log
 
   build-testing-channel:
