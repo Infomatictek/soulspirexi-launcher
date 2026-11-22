@@ -153,12 +153,25 @@ jobs:
           }
           '@
           Set-Content -Path "publish/SoulspireLauncher/soulspire-server.example.json" -Value $sampleConfig -Encoding UTF8
-          # Transitional compatibility copy so existing OverlordsLauncher.exe installs auto-update cleanly
-          Copy-Item -Path "publish/SoulspireLauncher/SoulspireLauncher.exe" -Destination "publish/SoulspireLauncher/OverlordsLauncher.exe" -Force
           Compress-Archive -Path "publish/SoulspireLauncher/SoulspireLauncher.exe", "publish/SoulspireLauncher/soulspire-server.example.json" -DestinationPath "SoulspireLauncher-win-x64.zip" -Force
           if (-not (Test-Path "publish/SoulspireLauncher/SoulspireLauncher.exe")) { throw "Missing SoulspireLauncher.exe" }
-          if (-not (Test-Path "publish/SoulspireLauncher/OverlordsLauncher.exe")) { throw "Missing compatibility OverlordsLauncher.exe" }
+          if (Test-Path "publish/SoulspireLauncher/OverlordsLauncher.exe") { throw "Legacy OverlordsLauncher.exe must not be packaged in new releases" }
           if (-not (Test-Path "SoulspireLauncher-win-x64.zip")) { throw "Missing SoulspireLauncher-win-x64.zip" }
+
+      - name: Verify Windows executable metadata and SoulspireXI identity
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $info = (Get-Item "publish/SoulspireLauncher/SoulspireLauncher.exe").VersionInfo
+          Write-Host "ProductName=$($info.ProductName)"
+          Write-Host "FileDescription=$($info.FileDescription)"
+          Write-Host "CompanyName=$($info.CompanyName)"
+          Write-Host "OriginalFilename=$($info.OriginalFilename)"
+          Write-Host "FileVersion=$($info.FileVersion)"
+          if ($info.ProductName -notmatch 'SoulspireXI') { throw "Unexpected ProductName: $($info.ProductName)" }
+          if ($info.FileDescription -notmatch 'SoulspireXI') { throw "Unexpected FileDescription: $($info.FileDescription)" }
+          if ($info.CompanyName -notmatch 'SoulspireXI') { throw "Unexpected CompanyName: $($info.CompanyName)" }
+          if ($info.ProductName -match 'Overlords' -or $info.FileDescription -match 'Overlords') { throw "Legacy Overlords branding found in executable metadata" }
 
       - name: Upload launcher build artifact
         uses: actions/upload-artifact@v7
@@ -167,7 +180,6 @@ jobs:
           retention-days: 14
           path: |
             publish/SoulspireLauncher/SoulspireLauncher.exe
-            publish/SoulspireLauncher/OverlordsLauncher.exe
             SoulspireLauncher-win-x64.zip
 
   build-crystaljobs:
@@ -243,6 +255,85 @@ jobs:
             crystaljobs-build-info.txt
             crystaljobs-build.log
 
+  build-testing-channel:
+    needs: [verify-manifest, build-and-test]
+    if: needs.verify-manifest.outputs.should_build == 'true'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Checkout 27-hook CrystalJobs source from feat/soul-weapon-templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin feat/soul-weapon-templates
+          git checkout origin/feat/soul-weapon-templates -- native/crystaljobs
+
+      - name: Build and self-test 27-hook crystaljobs.dll (Win32 / x86)
+        shell: pwsh
+        env:
+          CRYSTALJOBS_KEEP_SELFTEST: "1"
+        run: |
+          $ErrorActionPreference = 'Continue'
+          & cmd.exe /c "native\crystaljobs\build.cmd 2>&1" | Tee-Object -FilePath "crystaljobs-testing-build.log"
+          $rc = $LASTEXITCODE
+          if ($rc -ne 0) {
+            Get-Content "crystaljobs-testing-build.log" -Tail 40
+            exit $rc
+          }
+
+      - name: Verify 27-hook crystaljobs.dll and build Testing channel manifest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dllPath = "plugins/ashita4/crystaljobs.dll"
+          $hash = (Get-FileHash -Path $dllPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          $size = (Get-Item $dllPath).Length
+          $templatesCommit = (git rev-parse origin/feat/soul-weapon-templates).Trim()
+          @(
+            "commit_sha=$templatesCommit"
+            "ref=refs/heads/feat/soul-weapon-templates"
+            "branch=feat/soul-weapon-templates"
+            "run_id=${{ github.run_id }}"
+            "crystaljobs_dll_size=$size"
+            "crystaljobs_dll_sha256=$hash"
+          ) | Set-Content -Path "crystaljobs-testing-build-info.txt" -Encoding UTF8
+
+          python scripts/verify-crystaljobs-dll.py $dllPath --build-info crystaljobs-testing-build-info.txt
+          python scripts/publish-testing-channel.py `
+            --crystaljobs-dll $dllPath `
+            --build-info crystaljobs-testing-build-info.txt `
+            --manifest-version "2.1.0-testing.1" `
+            --server-version "feat/soul-weapon-templates (b05c027 / patch 0074)" `
+            --server-branch "feat/soul-weapon-templates" `
+            --server-commit "b05c027" `
+            --server-image "soulspirexi/server:feat-soul-weapon-templates" `
+            --crystaljobs-hooks 27
+
+          # Verify Testing manifest strictly and confirm Stable manifest.json was untouched
+          python scripts/verify-launcher-manifest.py --manifest channels/testing/manifest.json
+          git checkout -- plugins/ashita4/crystaljobs.dll native/crystaljobs
+          python scripts/verify-launcher-manifest.py
+
+      - name: Upload verified Testing channel package artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: SoulspireXI-Testing-Channel-Package
+          retention-days: 14
+          path: |
+            channels/testing/manifest.json
+            channels/testing/payload/plugins/ashita4/crystaljobs.dll
+            crystaljobs-testing-build-info.txt
+            crystaljobs-testing-build.log
+
   publish-release:
     needs: [build-and-test, build-crystaljobs]
     if: startsWith(github.ref, 'refs/tags/v')
@@ -256,20 +347,30 @@ jobs:
           name: SoulspireLauncher-win-x64
           path: release-assets
 
-      - name: Verify release assets exist
+      - name: Verify release assets exist (and no legacy OverlordsLauncher.exe)
         shell: bash
         run: |
           set -euo pipefail
           test -s release-assets/publish/SoulspireLauncher/SoulspireLauncher.exe
-          test -s release-assets/publish/SoulspireLauncher/OverlordsLauncher.exe
+          test ! -e release-assets/publish/SoulspireLauncher/OverlordsLauncher.exe
           test -s release-assets/SoulspireLauncher-win-x64.zip
+
+      - name: Determine release channel (Stable vs Testing prerelease)
+        id: channel
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.ref_name }}" == *"-testing"* ]] || [[ "${{ github.ref_name }}" == *"-rc"* ]] || [[ "${{ github.ref_name }}" == *"-beta"* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Publish GitHub Release on tag
         uses: softprops/action-gh-release@v2
         with:
+          prerelease: ${{ steps.channel.outputs.prerelease == 'true' }}
           generate_release_notes: true
           files: |
             release-assets/publish/SoulspireLauncher/SoulspireLauncher.exe
-            release-assets/publish/SoulspireLauncher/OverlordsLauncher.exe
-            release-assets/SoulspireLauncher-win-x64.zip
             release-assets/SoulspireLauncher-win-x64.zip

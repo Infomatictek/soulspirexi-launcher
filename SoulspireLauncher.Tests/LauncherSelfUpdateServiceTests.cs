@@ -1,4 +1,5 @@
 using System.IO;
+using SoulspireLauncher.Models;
 using SoulspireLauncher.Services;
 using Xunit;
 
@@ -125,5 +126,80 @@ public sealed class LauncherSelfUpdateServiceTests
         Assert.Contains(@"DST=C:\Games\SoulspireXI\SoulspireLauncher.exe", script);
         Assert.Contains("copy /Y \"%SRC%\" \"%DST%\"", script);
         Assert.Contains($"start \"\" \"%DST%\" {LauncherSelfUpdateService.JustUpdatedArg}", script);
+    }
+
+    [Fact]
+    public void BuildUpdaterBatchScript_MigratesLegacyOverlordsExeToSoulspireExe()
+    {
+        var script = LauncherSelfUpdateService.BuildUpdaterBatchScript(
+            9999,
+            @"C:\Temp\SoulspireLauncher-v2.1.0.exe",
+            @"C:\Games\SoulspireXI\OverlordsLauncher.exe");
+
+        Assert.Contains(@"DST=C:\Games\SoulspireXI\SoulspireLauncher.exe", script);
+        Assert.DoesNotContain(@"DST=C:\Games\SoulspireXI\OverlordsLauncher.exe", script);
+        Assert.Contains("if not exist \"%DST%\" goto cleanup", script);
+    }
+
+    [Fact]
+    public void ParseReleaseListJson_IsolatesStableAndTestingChannels()
+    {
+        const string releasesJson = """
+        [
+          {
+            "tag_name": "v2.1.0-testing.2",
+            "html_url": "https://github.com/Infomatictek/soulspirexi-launcher/releases/tag/v2.1.0-testing.2",
+            "draft": false,
+            "prerelease": true,
+            "assets": [
+              { "name": "SoulspireLauncher.exe", "browser_download_url": "https://example.test/testing2/SoulspireLauncher.exe", "size": 65000000 }
+            ]
+          },
+          {
+            "tag_name": "v2.1.0-testing.1",
+            "html_url": "https://github.com/Infomatictek/soulspirexi-launcher/releases/tag/v2.1.0-testing.1",
+            "draft": false,
+            "prerelease": true,
+            "assets": [
+              { "name": "SoulspireLauncher.exe", "browser_download_url": "https://example.test/testing1/SoulspireLauncher.exe", "size": 65000000 }
+            ]
+          },
+          {
+            "tag_name": "v2.0.1",
+            "html_url": "https://github.com/Infomatictek/soulspirexi-launcher/releases/tag/v2.0.1",
+            "draft": false,
+            "prerelease": false,
+            "assets": [
+              { "name": "SoulspireLauncher.exe", "browser_download_url": "https://example.test/stable/SoulspireLauncher.exe", "size": 65000000 }
+            ]
+          }
+        ]
+        """;
+
+        // Stable player on v2.0.1 must NOT be offered v2.1.0-testing.2
+        var stableResult = LauncherSelfUpdateService.ParseReleaseListJson(
+            releasesJson,
+            new Version(2, 0, 1),
+            UpdateChannel.Stable);
+        Assert.False(stableResult.UpdateAvailable);
+
+        // Testing player on v2.0.1 receives v2.1.0-testing.2
+        var testingResult = LauncherSelfUpdateService.ParseReleaseListJson(
+            releasesJson,
+            new Version(2, 0, 1),
+            UpdateChannel.Testing);
+        Assert.True(testingResult.UpdateAvailable);
+        Assert.Equal("v2.1.0-testing.2", testingResult.LatestTag);
+        Assert.True(testingResult.IsPrerelease);
+        Assert.EndsWith("testing2/SoulspireLauncher.exe", testingResult.DownloadUrl);
+
+        // Testing player already on v2.1.0-testing.1 upgrades to v2.1.0-testing.2
+        var testingStep = LauncherSelfUpdateService.ParseReleaseListJson(
+            releasesJson,
+            new Version(2, 1, 0),
+            UpdateChannel.Testing,
+            currentInformationalVersion: "2.1.0-testing.1");
+        Assert.True(testingStep.UpdateAvailable);
+        Assert.Equal("v2.1.0-testing.2", testingStep.LatestTag);
     }
 }

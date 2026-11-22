@@ -169,14 +169,14 @@ public sealed class RenameUpgradeMigrationTests
     }
 
     [Fact]
-    public void SelfUpdateParser_PrefersSoulspireExeAndFallsBackToLegacyOverlordsExe()
+    public void SelfUpdateParser_AcceptsSoulspireExeAndRejectsLegacyOverlordsExe()
     {
         const string bothAssetsJson = """
         {
-          "tag_name": "v2.0.0",
+          "tag_name": "v2.1.0",
           "draft": false,
           "prerelease": false,
-          "html_url": "https://github.com/Infomatictek/soulspirexi-launcher/releases/tag/v2.0.0",
+          "html_url": "https://github.com/Infomatictek/soulspirexi-launcher/releases/tag/v2.1.0",
           "assets": [
             { "name": "OverlordsLauncher.exe", "browser_download_url": "https://example.test/OverlordsLauncher.exe", "size": 1000000 },
             { "name": "SoulspireLauncher.exe", "browser_download_url": "https://example.test/SoulspireLauncher.exe", "size": 1000000 }
@@ -184,24 +184,110 @@ public sealed class RenameUpgradeMigrationTests
         }
         """;
 
-        var both = LauncherSelfUpdateService.ParseLatestReleaseJson(bothAssetsJson, new Version(1, 0, 0));
+        var both = LauncherSelfUpdateService.ParseLatestReleaseJson(bothAssetsJson, new Version(2, 0, 1));
         Assert.True(both.UpdateAvailable);
         Assert.EndsWith("SoulspireLauncher.exe", both.DownloadUrl);
 
         const string legacyOnlyJson = """
         {
-          "tag_name": "v2.0.0",
+          "tag_name": "v2.1.0",
           "draft": false,
           "prerelease": false,
-          "html_url": "https://github.com/Infomatictek/soulspirexi-launcher/releases/tag/v2.0.0",
+          "html_url": "https://github.com/Infomatictek/soulspirexi-launcher/releases/tag/v2.1.0",
           "assets": [
             { "name": "OverlordsLauncher.exe", "browser_download_url": "https://example.test/OverlordsLauncher.exe", "size": 1000000 }
           ]
         }
         """;
 
-        var legacy = LauncherSelfUpdateService.ParseLatestReleaseJson(legacyOnlyJson, new Version(1, 0, 0));
-        Assert.True(legacy.UpdateAvailable);
-        Assert.EndsWith("OverlordsLauncher.exe", legacy.DownloadUrl);
+        // Updater must NEVER download or reinstall legacy OverlordsLauncher.exe.
+        var legacy = LauncherSelfUpdateService.ParseLatestReleaseJson(legacyOnlyJson, new Version(2, 0, 1));
+        Assert.False(legacy.UpdateAvailable);
+        Assert.Equal(string.Empty, legacy.DownloadUrl);
+    }
+
+    [Fact]
+    public void LegacyBinaryCleanup_OnlyRemovesOverlordsExeWhenSoulspireExeIsRunning()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"soulspire_legacy_bin_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+
+        try
+        {
+            var legacyExe = Path.Combine(root, "OverlordsLauncher.exe");
+            var canonicalExe = Path.Combine(root, "SoulspireLauncher.exe");
+            File.WriteAllText(legacyExe, "legacy-stub", Encoding.UTF8);
+            File.WriteAllText(canonicalExe, "canonical-stub", Encoding.UTF8);
+
+            // Running as legacy OverlordsLauncher.exe must NOT delete anything.
+            Assert.False(LauncherSelfUpdateService.CleanupObsoleteLegacyLauncherBinary(legacyExe));
+            Assert.True(File.Exists(legacyExe));
+
+            // Running as verified SoulspireLauncher.exe removes obsolete OverlordsLauncher.exe.
+            Assert.True(LauncherSelfUpdateService.CleanupObsoleteLegacyLauncherBinary(canonicalExe));
+            Assert.False(File.Exists(legacyExe));
+            Assert.True(File.Exists(canonicalExe));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void LegacyDatPath_MigratesUntouchedDefaultAndPreservesEnabledCustomPath()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"soulspire_dat_mig_{Guid.NewGuid():N}");
+        var launcherDir = Path.Combine(root, "Launcher");
+        var appDataDir = Path.Combine(root, "AppData");
+        Directory.CreateDirectory(launcherDir);
+        Directory.CreateDirectory(appDataDir);
+
+        try
+        {
+            var settingsPath = Path.Combine(appDataDir, "settings.json");
+
+            // Untouched legacy default with SyncToCustomDatFolder=false migrates to C:\DATs\Soulspire
+            File.WriteAllText(
+                settingsPath,
+                """{"SyncToCustomDatFolder":false,"CustomDatOverlayPath":"C:\\DATs\\Overlords"}""",
+                Encoding.UTF8);
+
+            var svc = new SettingsService(launcherDir, appDataDir);
+            var migrated = svc.Load();
+            Assert.Equal(LauncherSettings.DefaultCustomDatOverlayPath, migrated.CustomDatOverlayPath);
+
+            // Active custom DAT sync preserves user's configured folder
+            File.WriteAllText(
+                settingsPath,
+                """{"SyncToCustomDatFolder":true,"CustomDatOverlayPath":"C:\\DATs\\Overlords"}""",
+                Encoding.UTF8);
+
+            var preserved = svc.Load();
+            Assert.Equal(@"C:\DATs\Overlords", preserved.CustomDatOverlayPath);
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ShortcutMigrationService_RewritesLegacyShortcutNamesAndGeneratesSafeScript()
+    {
+        Assert.True(ShortcutMigrationService.IsLegacyShortcutName("OverlordsXI Launcher.lnk"));
+        Assert.True(ShortcutMigrationService.IsLegacyShortcutName("OverlordsLauncher.lnk"));
+        Assert.False(ShortcutMigrationService.IsLegacyShortcutName("SoulspireXI Launcher.lnk"));
+
+        var renamed = ShortcutMigrationService.ResolveMigratedShortcutPath(@"C:\Users\Player\Desktop\OverlordsXI Launcher.lnk");
+        Assert.EndsWith("SoulspireXI Launcher.lnk", renamed);
+
+        var script = ShortcutMigrationService.BuildMigrationPowerShellScript(
+            [@"C:\Users\Player\Desktop"],
+            @"C:\Games\SoulspireXI\SoulspireLauncher.exe");
+        Assert.Contains("OverlordsLauncher.exe", script);
+        Assert.Contains("SoulspireXI Launcher.lnk", script);
+        Assert.Contains(@"C:\Games\SoulspireXI\SoulspireLauncher.exe", script);
+        Assert.Contains("SoulspireXI Launcher", script);
     }
 }

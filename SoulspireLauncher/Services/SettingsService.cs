@@ -142,6 +142,16 @@ public sealed class SettingsService
                         loaded.AshitaPath = defaultAshitaDir;
                     }
 
+                    // Migrate untouched legacy default DAT folder path when custom DAT sync is not active.
+                    if (!loaded.SyncToCustomDatFolder &&
+                        string.Equals(
+                            loaded.CustomDatOverlayPath?.Trim(),
+                            LauncherSettings.LegacyDefaultCustomDatOverlayPath,
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        loaded.CustomDatOverlayPath = LauncherSettings.DefaultCustomDatOverlayPath;
+                    }
+
                     return loaded;
                 }
             }

@@ -29,7 +29,7 @@
             </Grid.RowDefinitions>
 
             <!-- Custom Title Bar -->
-            <Grid Grid.Row="0" Background="#080B12">
+            <Grid Grid.Row="0" Background="{StaticResource AbyssBrush}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
@@ -38,8 +38,14 @@
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0">
                     <Image Source="pack://application:,,,/Assets/app.png" Width="22" Height="22" RenderOptions.BitmapScalingMode="HighQuality" Margin="0,0,10,0" />
                     <TextBlock Text="SOULSPIREXI" FontWeight="Bold" FontSize="13" Foreground="{StaticResource GoldAccent}" VerticalAlignment="Center" />
-                    <TextBlock Text="  •  CLIENT LAUNCHER  •  " FontSize="12" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" />
-                    <TextBlock Text="{Binding LauncherVersionText}" FontSize="12" Foreground="{StaticResource CyanAccent}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <TextBlock Text="  •  LAUNCHER  •  " FontSize="12" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding LauncherVersionText}" FontSize="12" Foreground="{StaticResource CyanAccent}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,10,0" />
+                    <Border Background="{Binding SelectedUpdateChannel, Converter={StaticResource ChannelToBadgeBg}}"
+                            BorderBrush="{Binding SelectedUpdateChannel, Converter={StaticResource ChannelToBrush}}"
+                            BorderThickness="1" CornerRadius="4" Padding="7,2" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding ChannelBadgeText}" FontSize="10.5" FontWeight="Bold"
+                                   Foreground="{Binding SelectedUpdateChannel, Converter={StaticResource ChannelToBrush}}" />
+                    </Border>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" WindowChrome.IsHitTestVisibleInChrome="True">
@@ -51,7 +57,7 @@
             </Grid>
 
             <!-- Navigation + Server Status Header -->
-            <Border Grid.Row="1" Background="#0E1420" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,1,0,1" Padding="16,0">
+            <Border Grid.Row="1" Background="{StaticResource MidnightBrush}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,1,0,1" Padding="16,0">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -66,7 +72,7 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Border Background="#131A26" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="14" Padding="12,5" Margin="0,0,8,0">
+                        <Border Background="{StaticResource AbyssBrush}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="14" Padding="12,5" Margin="0,0,8,0">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <Ellipse Width="8" Height="8" Fill="{Binding ServerStatus.IsOnline, Converter={StaticResource BoolToStatusBrush}}" Margin="0,0,8,0" />
                                 <TextBlock Text="{Binding EffectiveHost}" FontWeight="SemiBold" FontSize="12" Margin="0,0,8,0" />
@@ -89,12 +95,12 @@
                     </Grid.RowDefinitions>
 
                     <!-- Hero Banner -->
-                    <Border Grid.Row="0" CornerRadius="10" Padding="24,20" Margin="0,0,0,16" BorderBrush="#2E3B54" BorderThickness="1">
+                    <Border Grid.Row="0" CornerRadius="10" Padding="24,20" Margin="0,0,0,16" BorderBrush="{StaticResource VioletAccent}" BorderThickness="1">
                         <Border.Background>
                             <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                                <GradientStop Color="#162033" Offset="0" />
-                                <GradientStop Color="#0F1726" Offset="0.6" />
-                                <GradientStop Color="#11222C" Offset="1" />
+                                <GradientStop Color="#151928" Offset="0" />
+                                <GradientStop Color="#191933" Offset="0.55" />
+                                <GradientStop Color="#0E1D2A" Offset="1" />
                             </LinearGradientBrush>
                         </Border.Background>
                         <Grid>
@@ -109,11 +115,13 @@
                                     <TextBlock Text="{Binding ServerName}" FontSize="28" FontWeight="Bold" Foreground="{StaticResource GoldAccent}" />
                                     <TextBlock Text="{Binding Tagline}" FontSize="14" Foreground="{StaticResource TextSecondary}" Margin="0,4,0,10" />
                                     <StackPanel Orientation="Horizontal">
-                                        <Border Background="#1A2B3C" CornerRadius="4" Padding="8,4" Margin="0,0,8,0">
-                                            <TextBlock Text="{Binding UpdateBadgeText}" FontSize="12" Foreground="{StaticResource CyanAccent}" FontWeight="SemiBold" />
+                                        <Border Background="{Binding SelectedUpdateChannel, Converter={StaticResource ChannelToBadgeBg}}"
+                                                BorderBrush="{Binding SelectedUpdateChannel, Converter={StaticResource ChannelToBrush}}"
+                                                BorderThickness="1" CornerRadius="4" Padding="8,4" Margin="0,0,8,0">
+                                            <TextBlock Text="{Binding UpdateBadgeText}" FontSize="12" Foreground="{Binding SelectedUpdateChannel, Converter={StaticResource ChannelToBrush}}" FontWeight="SemiBold" />
                                         </Border>
-                                        <Border Background="#1A2334" CornerRadius="4" Padding="8,4">
-                                            <TextBlock Text="Ashita v4  •  Pivot  •  talents  •  crystalsocket  •  metrics  •  mobdb  •  kazenoeye" FontSize="12" Foreground="{StaticResource TextSecondary}" />
+                                        <Border Background="{StaticResource AbyssBrush}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="4" Padding="8,4">
+                                            <TextBlock Text="{Binding ManifestVersionText}" FontSize="12" Foreground="{StaticResource TextSecondary}" />
                                         </Border>
                                     </StackPanel>
                                 </StackPanel>
@@ -164,7 +172,7 @@
                                     <CheckBox Content="Enable Flintlock Dual Pistols DAT overlay (75% compact, COR Flintlock opt-in)" IsChecked="{Binding EnableFlintlockDualPistolsOverlay}" IsEnabled="{Binding EnablePivotOverlay}" />
                                     <CheckBox Content="Close launcher when game starts" IsChecked="{Binding AutoCloseOnLaunch}" />
 
-                                    <Border Background="#0E1420" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,12,0,0">
+                                    <Border Background="{StaticResource AbyssBrush}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,12,0,0">
                                         <TextBlock Text="First time joining? Leave Auto-login unchecked to create your account directly inside the xiloader console window."
                                                    FontSize="11.5" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" />
                                     </Border>
@@ -214,7 +222,7 @@
                                         <RowDefinition Height="*" />
                                     </Grid.RowDefinitions>
                                     <TextBlock Text="ACTIVITY LOG" FontSize="12" FontWeight="Bold" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,6" />
-                                    <ListBox Grid.Row="1" ItemsSource="{Binding ActivityLog}" Background="#0B0F17" Foreground="{StaticResource TextSecondary}"
+                                    <ListBox Grid.Row="1" ItemsSource="{Binding ActivityLog}" Background="{StaticResource AbyssBrush}" Foreground="{StaticResource TextSecondary}"
                                              BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" FontFamily="Consolas" FontSize="11.5" />
                                 </Grid>
                             </Border>
@@ -310,6 +318,15 @@
 
                                         <CheckBox Content="Check for SoulspireXI updates on startup" IsChecked="{Binding AutoCheckUpdatesOnStartup}" />
                                         <CheckBox Content="Auto-update SoulspireLauncher.exe on startup" IsChecked="{Binding AutoUpdateLauncher}" />
+
+                                        <Border Background="{StaticResource AbyssBrush}" BorderBrush="{Binding SelectedUpdateChannel, Converter={StaticResource ChannelToBrush}}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,12,0,0">
+                                            <StackPanel>
+                                                <TextBlock Text="UPDATE CHANNEL" FontSize="12" FontWeight="Bold" Foreground="{Binding SelectedUpdateChannel, Converter={StaticResource ChannelToBrush}}" Margin="0,0,0,6" />
+                                                <ComboBox ItemsSource="{Binding UpdateChannelOptions}" SelectedItem="{Binding SelectedUpdateChannel}" Margin="0,0,0,6" />
+                                                <TextBlock Text="{Binding ChannelDescriptionText}" FontSize="11.5" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" Margin="0,0,0,4" />
+                                                <TextBlock Text="{Binding ManifestVersionText}" FontSize="11.5" Foreground="{StaticResource CyanAccent}" TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                        </Border>
                                     </StackPanel>
                                 </Border>
 
@@ -369,7 +386,7 @@
                                             <ComboBox ItemsSource="{Binding FpsCapOptions}" SelectedItem="{Binding SelectedFpsCap}">
                                                 <ComboBox.ItemTemplate>
                                                     <DataTemplate>
-                                                        <TextBlock Text="{Binding Converter={StaticResource FpsLabel}}" Foreground="#0B0F17" />
+                                                        <TextBlock Text="{Binding Converter={StaticResource FpsLabel}}" Foreground="{StaticResource TextPrimary}" />
                                                     </DataTemplate>
                                                 </ComboBox.ItemTemplate>
                                             </ComboBox>
@@ -719,7 +736,8 @@
 
                                 <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                                     <Button Content="Force Re-Sync All SoulspireXI Files" Style="{StaticResource SecondaryButton}" Command="{Binding RepairFilesCommand}" Margin="0,0,10,0" />
-                                    <Button Content="Check Launcher Update" Style="{StaticResource SecondaryButton}" Command="{Binding CheckLauncherUpdateCommand}" />
+                                    <Button Content="Check Launcher Update" Style="{StaticResource SecondaryButton}" Command="{Binding CheckLauncherUpdateCommand}" Margin="0,0,10,0" />
+                                    <Button Content="Create Desktop Shortcut" Style="{StaticResource SecondaryButton}" Command="{Binding CreateDesktopShortcutCommand}" />
                                 </StackPanel>
                             </StackPanel>
                         </Border>
@@ -741,7 +759,7 @@
                                 <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextSecondary}" FontSize="13" Margin="0,0,0,12">
                                     All 207 player weaponskills are unlocked at level 1 and scale via 4-tier (56-point) bespoke job-themed talent trees and pickable skillchain augments.
                                 </TextBlock>
-                                <Border Background="#0E1420" CornerRadius="6" Padding="12" Margin="0,0,0,12">
+                                <Border Background="{StaticResource AbyssBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,12">
                                     <StackPanel>
                                         <TextBlock Text="/talents  (or /tal) — Open the Ashita v4 Talent Tree UI" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource CyanAccent}" Margin="0,0,0,4" />
                                         <TextBlock Text="/talents sync — Force resync points &amp; catalog from server" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4" />
@@ -753,7 +771,7 @@
                                 <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextSecondary}" FontSize="13" Margin="0,0,0,12">
                                     Call Eos summons a real faerie pet that maintains stackable Regen and removes debuffs (-na / Erase). Equip Orphic Egg for level-scaling Eos Refresh.
                                 </TextBlock>
-                                <Border Background="#0E1420" CornerRadius="6" Padding="12">
+                                <Border Background="{StaticResource AbyssBrush}" CornerRadius="6" Padding="12">
                                     <StackPanel>
                                         <TextBlock Text="!spec  /  !spec list — View available job specs" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource CyanAccent}" Margin="0,0,0,4" />
                                         <TextBlock Text="!spec set medic — AoE Cure/Regen + double Sublimation" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4" />
@@ -784,7 +802,7 @@
                                 </TextBlock>
 
                                 <TextBlock Text="QOL ADDONS &amp; COMMANDS" FontSize="14" FontWeight="Bold" Foreground="{StaticResource GoldAccent}" Margin="0,0,0,8" />
-                                <Border Background="#0E1420" CornerRadius="6" Padding="12">
+                                <Border Background="{StaticResource AbyssBrush}" CornerRadius="6" Padding="12">
                                     <StackPanel>
                                         <TextBlock Text="/check (checker) — Shows exact mob level, eva &amp; def" FontFamily="Consolas" FontSize="12" Foreground="{StaticResource CyanAccent}" Margin="0,0,0,4" />
                                         <TextBlock Text="/mobdb (or /md) — Configure target level &amp; aggro bar" FontFamily="Consolas" FontSize="12" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4" />
@@ -799,7 +817,7 @@
             </Grid>
 
             <!-- Bottom Status & Progress Footer -->
-            <Border Grid.Row="3" Background="#080B12" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,1,0,0" Padding="20,0">
+            <Border Grid.Row="3" Background="{StaticResource AbyssBrush}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="0,1,0,0" Padding="20,0">
                 <Grid VerticalAlignment="Center">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -808,7 +826,7 @@
 
                     <TextBlock Text="{Binding StatusMessage}" Foreground="{StaticResource TextSecondary}" FontSize="12.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                     <ProgressBar Grid.Column="1" Height="10" Minimum="0" Maximum="100" Value="{Binding ProgressPercent}"
-                                 Background="#161E2E" Foreground="{StaticResource CyanAccent}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" />
+                                 Background="{StaticResource MidnightBrush}" Foreground="{StaticResource CyanAccent}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" />
                 </Grid>
             </Border>
         </Grid>

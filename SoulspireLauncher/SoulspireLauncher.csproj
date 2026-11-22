@@ -8,12 +8,16 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>SoulspireLauncher</AssemblyName>
     <RootNamespace>SoulspireLauncher</RootNamespace>
-    <Version>2.0.1</Version>
+    <Version>2.1.0</Version>
+    <FileVersion>2.1.0.0</FileVersion>
+    <AssemblyVersion>2.1.0.0</AssemblyVersion>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <AssemblyTitle>SoulspireXI Launcher</AssemblyTitle>
     <Product>SoulspireXI Launcher</Product>
     <Company>SoulspireXI</Company>
-    <Description>Distributable Ashita v4 client launcher and auto-updater for SoulspireXI.</Description>
+    <Authors>SoulspireXI</Authors>
+    <Copyright>Copyright © SoulspireXI</Copyright>
+    <Description>Official Ashita v4 client launcher and auto-updater for SoulspireXI.</Description>
   </PropertyGroup>
 
   <ItemGroup>

@@ -7,6 +7,18 @@ public sealed class LauncherManifest
     [JsonPropertyName("schemaVersion")]
     public int SchemaVersion { get; set; } = 1;
 
+    [JsonPropertyName("channel")]
+    public string Channel { get; set; } = "stable";
+
+    [JsonPropertyName("manifestVersion")]
+    public string ManifestVersion { get; set; } = "2.1.0";
+
+    [JsonPropertyName("minLauncherVersion")]
+    public string? MinLauncherVersion { get; set; }
+
+    [JsonPropertyName("serverCompatibility")]
+    public ManifestServerCompatibility? ServerCompatibility { get; set; }
+
     [JsonPropertyName("serverName")]
     public string ServerName { get; set; } = "SoulspireXI";
 
@@ -106,8 +118,65 @@ public sealed class ManifestFileEntry
     [JsonPropertyName("size")]
     public long Size { get; set; }
 
+    [JsonPropertyName("downloadUrl")]
+    public string? DownloadUrl { get; set; }
+
     [JsonIgnore]
     public string? OverlayFolder { get; set; }
+}
+
+public sealed class ManifestServerCompatibility
+{
+    [JsonPropertyName("version")]
+    public string Version { get; set; } = string.Empty;
+
+    [JsonPropertyName("branch")]
+    public string Branch { get; set; } = string.Empty;
+
+    [JsonPropertyName("commit")]
+    public string Commit { get; set; } = string.Empty;
+
+    [JsonPropertyName("dockerImage")]
+    public string DockerImage { get; set; } = string.Empty;
+
+    [JsonPropertyName("crystalJobsHooks")]
+    public int? CrystalJobsHooks { get; set; }
+
+    [JsonPropertyName("notes")]
+    public string Notes { get; set; } = string.Empty;
+}
+
+public sealed class InstalledClientState
+{
+    [JsonPropertyName("channel")]
+    public string Channel { get; set; } = "stable";
+
+    [JsonPropertyName("manifestVersion")]
+    public string ManifestVersion { get; set; } = string.Empty;
+
+    [JsonPropertyName("serverVersion")]
+    public string ServerVersion { get; set; } = string.Empty;
+
+    [JsonPropertyName("lastSyncedUtc")]
+    public DateTimeOffset LastSyncedUtc { get; set; } = DateTimeOffset.UtcNow;
+
+    [JsonPropertyName("managedFiles")]
+    public List<InstalledManagedFile> ManagedFiles { get; set; } = [];
+}
+
+public sealed class InstalledManagedFile
+{
+    [JsonPropertyName("category")]
+    public string Category { get; set; } = string.Empty;
+
+    [JsonPropertyName("targetPath")]
+    public string TargetPath { get; set; } = string.Empty;
+
+    [JsonPropertyName("overlayFolder")]
+    public string? OverlayFolder { get; set; }
+
+    [JsonPropertyName("sha256")]
+    public string Sha256 { get; set; } = string.Empty;
 }
 
 public sealed class ManifestSoulGate

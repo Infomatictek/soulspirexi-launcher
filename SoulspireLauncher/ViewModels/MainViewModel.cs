@@ -22,6 +22,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly AshitaConfigGenerator _configGenerator;
     private readonly ServerStatusService _statusService;
     private readonly GameLaunchService _launchService;
+    private readonly ShortcutMigrationService _shortcutMigrationService;
 
     private LauncherSettings _settings;
     private LauncherManifest _manifest;
@@ -46,6 +47,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _configGenerator = new AshitaConfigGenerator();
         _statusService = new ServerStatusService();
         _launchService = new GameLaunchService();
+        _shortcutMigrationService = new ShortcutMigrationService();
 
         _manifest = _manifestService.LoadEmbeddedManifest();
         ManifestUpdateService.ApplyLocalOverride(_manifest, _settingsService.LoadLocalServerOverride());
@@ -81,6 +83,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ImportSystemSettingsCommand = new RelayCommand(ImportSystemSettings);
         ImportAshitaIniCommand = new RelayCommand(ImportFromAshitaIniDialog);
         LaunchFfxiConfigCommand = new RelayCommand(LaunchFfxiConfigTool);
+        CreateDesktopShortcutCommand = new RelayCommand(CreateDesktopShortcut);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -108,6 +111,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public ICommand ImportSystemSettingsCommand { get; }
     public ICommand ImportAshitaIniCommand { get; }
     public ICommand LaunchFfxiConfigCommand { get; }
+    public ICommand CreateDesktopShortcutCommand { get; }
 
     public string SelectedTab
     {
@@ -577,6 +581,54 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public string LauncherVersionText => $"v{LauncherSelfUpdateService.GetCurrentVersion()}";
 
+    public IReadOnlyList<UpdateChannel> UpdateChannelOptions { get; } =
+    [
+        UpdateChannel.Stable,
+        UpdateChannel.Testing
+    ];
+
+    public UpdateChannel SelectedUpdateChannel
+    {
+        get => _settings.UpdateChannel;
+        set
+        {
+            if (_settings.UpdateChannel != value)
+            {
+                _settings.UpdateChannel = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsTestingChannel));
+                OnPropertyChanged(nameof(ChannelBadgeText));
+                OnPropertyChanged(nameof(ChannelDescriptionText));
+                _settingsService.Save(_settings, PlainPassword);
+                Log($"Switched update channel to {value}. Checking manifest...");
+                _ = CheckUpdatesOnlyAsync();
+            }
+        }
+    }
+
+    public bool IsTestingChannel => _settings.UpdateChannel == UpdateChannel.Testing;
+
+    public string ChannelBadgeText => _settings.UpdateChannel == UpdateChannel.Testing
+        ? "TESTING CHANNEL"
+        : "STABLE";
+
+    public string ChannelDescriptionText => _settings.UpdateChannel == UpdateChannel.Testing
+        ? "Testing channel delivers verified preview DLLs, addons, and DAT overlays without affecting Stable players."
+        : "Stable channel delivers production-verified SoulspireXI client builds.";
+
+    public string ManifestVersionText
+    {
+        get
+        {
+            var version = string.IsNullOrWhiteSpace(_manifest.ManifestVersion) ? "1.0.0" : _manifest.ManifestVersion.Trim();
+            var channel = string.IsNullOrWhiteSpace(_manifest.Channel) ? "stable" : _manifest.Channel.Trim().ToUpperInvariant();
+            var serverInfo = _manifest.ServerCompatibility is { } sc && !string.IsNullOrWhiteSpace(sc.Version)
+                ? $" • Server: {sc.Version}"
+                : string.Empty;
+            return $"Manifest {version} ({channel}){serverInfo}";
+        }
+    }
+
     public bool IsLauncherUpdateAvailable => _availableLauncherUpdate?.UpdateAvailable == true;
 
     public string LauncherUpdateButtonText => IsLauncherUpdateAvailable
@@ -652,6 +704,23 @@ public sealed class MainViewModel : INotifyPropertyChanged
             .Any(arg => arg.Equals(LauncherSelfUpdateService.JustUpdatedArg, StringComparison.OrdinalIgnoreCase));
         LauncherSelfUpdateService.CleanupStagingDirectory();
 
+        // Only remove obsolete OverlordsLauncher.exe once SoulspireLauncher.exe itself is verified running.
+        var currentExePath = LauncherSelfUpdateService.GetCurrentExecutablePath();
+        if (LauncherSelfUpdateService.CleanupObsoleteLegacyLauncherBinary(currentExePath))
+        {
+            Log("Removed obsolete OverlordsLauncher.exe after verifying SoulspireLauncher.exe.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentExePath) &&
+            string.Equals(Path.GetFileName(currentExePath), LauncherSelfUpdateService.CanonicalLauncherExeName, StringComparison.OrdinalIgnoreCase))
+        {
+            var shortcutResult = _shortcutMigrationService.MigrateLegacyShortcuts(currentExePath);
+            if (shortcutResult.MigratedCount > 0)
+            {
+                Log($"Migrated {shortcutResult.MigratedCount} legacy shortcut(s) to SoulspireXI Launcher.");
+            }
+        }
+
         try
         {
             _settingsService.EnsureAshitaDirectory(_settings);
@@ -713,11 +782,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         try
         {
-            StatusMessage = "Checking SoulspireXI manifest...";
+            StatusMessage = $"Checking SoulspireXI {_settings.UpdateChannel} manifest...";
             var embedded = _manifestService.LoadEmbeddedManifest();
             var (manifest, fromRemote) = await _manifestService.FetchManifestAsync(
                 embedded,
-                _settingsService.LoadLocalServerOverride());
+                _settingsService.LoadLocalServerOverride(),
+                _settings.UpdateChannel);
 
             _manifest = manifest;
             ApplyManifest(manifest);
@@ -727,7 +797,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             RefreshDiagnostics();
 
             StatusMessage = fromRemote
-                ? (pending.Count == 0 ? "All SoulspireXI client files are up to date." : $"{pending.Count} update(s) available.")
+                ? (pending.Count == 0 ? $"All SoulspireXI ({_settings.UpdateChannel}) client files are up to date." : $"{pending.Count} update(s) available on {_settings.UpdateChannel}.")
                 : "Using bundled manifest (offline or GitHub unreachable).";
             Log(StatusMessage);
         }
@@ -743,6 +813,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _manifest = manifest;
         OnPropertyChanged(nameof(ServerName));
         OnPropertyChanged(nameof(Tagline));
+        OnPropertyChanged(nameof(ManifestVersionText));
         NotifyEffectiveServerChanged();
 
         NewsItems.Clear();
@@ -759,7 +830,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         try
         {
-            var result = await _selfUpdateService.CheckForUpdateAsync(_manifest);
+            var result = await _selfUpdateService.CheckForUpdateAsync(_manifest, _settings.UpdateChannel);
             _availableLauncherUpdate = result;
             OnPropertyChanged(nameof(IsLauncherUpdateAvailable));
             OnPropertyChanged(nameof(LauncherUpdateButtonText));
@@ -770,8 +841,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 if (showUpToDateDialog)
                 {
                     MessageBox.Show(
-                        $"SoulspireXI Launcher {LauncherVersionText} is already up to date.",
-                        "Launcher Up to Date",
+                        $"SoulspireXI Launcher {LauncherVersionText} ({_settings.UpdateChannel}) is already up to date.",
+                        "SoulspireXI Launcher — Up to Date",
                         MessageBoxButton.OK,
                         MessageBoxImage.Information);
                 }
@@ -779,7 +850,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 return false;
             }
 
-            Log($"Launcher update available: {result.LatestTag} (current {LauncherVersionText})");
+            Log($"Launcher update available ({_settings.UpdateChannel}): {result.LatestTag} (current {LauncherVersionText})");
 
             if (autoApply)
             {
@@ -801,7 +872,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                     : $"A new SoulspireXI Launcher release ({result.LatestTag}) is available.\nCurrent version: {LauncherVersionText}\n\nDownload and restart now?";
                 var choice = MessageBox.Show(
                     prompt,
-                    "Launcher Update Available",
+                    "SoulspireXI Launcher — Update Available",
                     MessageBoxButton.YesNo,
                     MessageBoxImage.Information);
                 if (choice == MessageBoxResult.Yes)
@@ -816,8 +887,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (showUpToDateDialog)
             {
                 MessageBox.Show(
-                    $"Could not check GitHub Releases for launcher updates:\n{ex.Message}",
-                    "Launcher Update Check Failed",
+                    $"Could not check GitHub Releases for SoulspireXI Launcher updates:\n{ex.Message}",
+                    "SoulspireXI Launcher — Update Check Failed",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
             }
@@ -887,7 +958,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             Log(StatusMessage);
             MessageBox.Show(
                 $"Could not update SoulspireLauncher.exe:\n{ex.Message}",
-                "Launcher Update Error",
+                "SoulspireXI Launcher — Update Error",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
             return false;
@@ -910,13 +981,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
             var embedded = _manifestService.LoadEmbeddedManifest();
             var (manifest, fromRemote) = await _manifestService.FetchManifestAsync(
                 embedded,
-                _settingsService.LoadLocalServerOverride());
+                _settingsService.LoadLocalServerOverride(),
+                _settings.UpdateChannel);
             ApplyManifest(manifest);
 
             if (!fromRemote)
             {
                 throw new InvalidOperationException(
-                    "Could not download the latest SoulspireXI manifest from GitHub. Please check your internet connection and try again.");
+                    $"Could not download the latest SoulspireXI ({_settings.UpdateChannel}) manifest from GitHub. Please check your internet connection and try again.");
             }
 
             var progress = new Progress<SyncProgress>(p =>
@@ -925,7 +997,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 ProgressPercent = p.Percent;
             });
 
-            var count = await _manifestService.SyncOverlordsFilesAsync(_manifest, _settings, forceAll, progress);
+            var count = await _manifestService.SyncSoulspireFilesAsync(_manifest, _settings, forceAll, progress);
             PendingUpdatesCount = _manifestService.GetOutdatedFiles(_manifest, _settings).Count;
             RefreshDiagnostics();
 
@@ -958,13 +1030,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
             var embedded = _manifestService.LoadEmbeddedManifest();
             var (manifest, fromRemote) = await _manifestService.FetchManifestAsync(
                 embedded,
-                _settingsService.LoadLocalServerOverride());
+                _settingsService.LoadLocalServerOverride(),
+                _settings.UpdateChannel);
             ApplyManifest(manifest);
 
             await _manifestService.EnsureAshitaAndToolsAsync(_manifest, _settings, progress);
             if (fromRemote)
             {
-                await _manifestService.SyncOverlordsFilesAsync(_manifest, _settings, forceAll: false, progress);
+                await _manifestService.SyncSoulspireFilesAsync(_manifest, _settings, forceAll: false, progress);
             }
             else
             {
@@ -1022,11 +1095,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 ProgressPercent = p.Percent;
             });
 
-            StatusMessage = "Checking latest SoulspireXI manifest...";
+            StatusMessage = $"Checking latest SoulspireXI ({_settings.UpdateChannel}) manifest...";
             var embedded = _manifestService.LoadEmbeddedManifest();
             var (manifest, fromRemote) = await _manifestService.FetchManifestAsync(
                 embedded,
-                _settingsService.LoadLocalServerOverride());
+                _settingsService.LoadLocalServerOverride(),
+                _settings.UpdateChannel);
             ApplyManifest(manifest);
 
             StatusMessage = "Checking Ashita v4 prerequisites...";
@@ -1034,8 +1108,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             if (fromRemote)
             {
-                StatusMessage = "Checking for SoulspireXI file updates...";
-                var updatedCount = await _manifestService.SyncOverlordsFilesAsync(_manifest, _settings, forceAll: false, progress);
+                StatusMessage = $"Checking for SoulspireXI ({_settings.UpdateChannel}) file updates...";
+                var updatedCount = await _manifestService.SyncSoulspireFilesAsync(_manifest, _settings, forceAll: false, progress);
                 PendingUpdatesCount = _manifestService.GetOutdatedFiles(_manifest, _settings).Count;
                 Log(updatedCount > 0
                     ? $"Updated {updatedCount} SoulspireXI client file(s) before launch."
@@ -1076,7 +1150,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             StatusMessage = $"Launch failed: {ex.Message}";
             Log(StatusMessage);
-            MessageBox.Show(ex.Message, "Launch Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(ex.Message, "SoulspireXI Launcher — Launch Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -1317,6 +1391,51 @@ public sealed class MainViewModel : INotifyPropertyChanged
             UseShellExecute = true
         });
         Log($"Opened {Path.GetFileName(exe)} — click 'Auto-Import Current Settings' after saving changes.");
+    }
+
+    private void CreateDesktopShortcut()
+    {
+        var currentExe = LauncherSelfUpdateService.GetCurrentExecutablePath();
+        if (string.IsNullOrWhiteSpace(currentExe))
+        {
+            MessageBox.Show(
+                "Desktop shortcut creation is available when running the packaged SoulspireLauncher.exe.",
+                "SoulspireXI Launcher — Shortcut",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        try
+        {
+            var canonicalExe = LauncherSelfUpdateService.ResolveCanonicalTargetExePath(currentExe);
+            if (_shortcutMigrationService.CreateDesktopShortcut(canonicalExe))
+            {
+                StatusMessage = "Created Desktop shortcut: SoulspireXI Launcher.";
+                Log(StatusMessage);
+                MessageBox.Show(
+                    "Created 'SoulspireXI Launcher' shortcut on your Desktop.",
+                    "SoulspireXI Launcher — Shortcut Created",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            else
+            {
+                MessageBox.Show(
+                    "Could not create the Desktop shortcut. Please check folder permissions.",
+                    "SoulspireXI Launcher — Shortcut",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Could not create Desktop shortcut:\n{ex.Message}",
+                "SoulspireXI Launcher — Shortcut Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
     }
 
     private void NotifyAllSettingsChanged()

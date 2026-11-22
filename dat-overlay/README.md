@@ -27,7 +27,7 @@ Server mapping:
 
 For your current custom DAT loader, copy the contents of this folder into:
 
-C:\DATs\Overlords
+C:\DATs\Soulspire
 
 If you also want to load it with Windower XIPivot, place this folder under:
 

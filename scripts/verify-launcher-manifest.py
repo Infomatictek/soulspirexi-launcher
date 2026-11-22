@@ -213,21 +213,29 @@ def verify_manifest(repo_root: Path, manifest_path: Path | None = None) -> list[
                     f"manifest=({sha256[:12]}..., {size}B) vs disk=({actual_sha[:12]}..., {actual_size}B){crlf_hint}"
                 )
 
-    # 5. Completeness check against client payload directories
+    # 5. Completeness check against client payload directories (strict for Stable; channel-aware for Testing)
+    declared_channel = str(manifest.get("channel") or "stable").strip().lower()
     expected = expected_client_files(repo_root)
-    for src, (cat, tgt) in sorted(expected.items()):
-        if src not in manifest_sources:
-            errors.append(f"Client file missing from manifest.json: {src} (category={cat}, targetPath={tgt})")
-        else:
-            m_cat, m_tgt = manifest_sources[src]
-            if (m_cat, m_tgt) != (cat, tgt):
-                errors.append(
-                    f"Manifest routing mismatch for {src}: manifest=({m_cat}, {m_tgt}) vs expected=({cat}, {tgt})"
-                )
+    if declared_channel == "testing":
+        for src, (cat, tgt) in sorted(manifest_sources.items()):
+            in_stable = src in expected
+            in_testing = src.startswith("channels/testing/payload/")
+            if not in_stable and not in_testing:
+                errors.append(f"Testing manifest entry points outside Stable or channels/testing/payload roots: {src}")
+    else:
+        for src, (cat, tgt) in sorted(expected.items()):
+            if src not in manifest_sources:
+                errors.append(f"Client file missing from manifest.json: {src} (category={cat}, targetPath={tgt})")
+            else:
+                m_cat, m_tgt = manifest_sources[src]
+                if (m_cat, m_tgt) != (cat, tgt):
+                    errors.append(
+                        f"Manifest routing mismatch for {src}: manifest=({m_cat}, {m_tgt}) vs expected=({cat}, {tgt})"
+                    )
 
-    for src in sorted(manifest_sources):
-        if src not in expected:
-            errors.append(f"Manifest entry points outside expected client payload roots: {src}")
+        for src in sorted(manifest_sources):
+            if src not in expected:
+                errors.append(f"Manifest entry points outside expected client payload roots: {src}")
 
     # 6. Optional DAT overlays verification (strictly read-only, zero conflicts with base dat-overlay)
     base_dat_targets = {

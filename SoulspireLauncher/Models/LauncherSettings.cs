@@ -9,8 +9,19 @@ public enum WindowModeOption
     Fullscreen = 0
 }
 
+public enum UpdateChannel
+{
+    Stable = 0,
+    Testing = 1
+}
+
 public sealed class LauncherSettings
 {
+    public const string DefaultCustomDatOverlayPath = @"C:\DATs\Soulspire";
+    public const string LegacyDefaultCustomDatOverlayPath = @"C:\DATs\Overlords";
+
+    public UpdateChannel UpdateChannel { get; set; } = UpdateChannel.Stable;
+
     public bool UseCustomServer { get; set; }
     public string CustomServerHost { get; set; } = "play.soulspirexi.com";
     public bool CustomUseHairpin { get; set; }
@@ -21,7 +32,7 @@ public sealed class LauncherSettings
     public string AshitaPath { get; set; } = string.Empty;
     public bool UseCustomAshitaPath { get; set; }
     public bool SyncToCustomDatFolder { get; set; }
-    public string CustomDatOverlayPath { get; set; } = @"C:\DATs\Overlords";
+    public string CustomDatOverlayPath { get; set; } = DefaultCustomDatOverlayPath;
 
     public string Username { get; set; } = string.Empty;
     public bool RememberPassword { get; set; }

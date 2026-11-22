@@ -1,5 +1,15 @@
 {
   "schemaVersion": 1,
+  "channel": "stable",
+  "manifestVersion": "2.1.0",
+  "minLauncherVersion": "2.0.0",
+  "serverCompatibility": {
+    "version": "main (24-hook CrystalJobs / weapon-config)",
+    "branch": "main",
+    "dockerImage": "soulspirexi/server:v2026.11.21-weapon-config",
+    "crystalJobsHooks": 24,
+    "notes": "Production Stable channel paired with live SoulspireXI main server."
+  },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
   "defaultHost": "play.soulspirexi.com",

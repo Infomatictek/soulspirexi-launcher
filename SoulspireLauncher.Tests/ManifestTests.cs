@@ -507,7 +507,7 @@ public sealed class ManifestTests
             Assert.Equal($"https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/{commitSha}", manifest.ResolvedRawBaseUrl);
 
             var settings = new LauncherSettings { AshitaPath = Path.Combine(tempRoot, "Ashita") };
-            var synced = await service.SyncOverlordsFilesAsync(manifest, settings, forceAll: false);
+            var synced = await service.SyncSoulspireFilesAsync(manifest, settings, forceAll: false);
 
             Assert.Equal(1, synced);
             Assert.Equal(2, fileAttempts);

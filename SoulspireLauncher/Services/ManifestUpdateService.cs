@@ -17,9 +17,14 @@ public sealed class SyncProgress
 
 public sealed class ManifestUpdateService
 {
+    public const string StableManifestRelativePath = "manifest.json";
+    public const string TestingManifestRelativePath = "channels/testing/manifest.json";
+    public const string InstalledStateFileName = ".soulspire-state.json";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        PropertyNameCaseInsensitive = true
+        PropertyNameCaseInsensitive = true,
+        WriteIndented = true
     };
 
     private readonly HttpClient _http;
@@ -29,13 +34,16 @@ public sealed class ManifestUpdateService
         _http = httpClient ?? CreateDefaultHttpClient();
     }
 
+    public static string GetManifestRelativePath(UpdateChannel channel) =>
+        channel == UpdateChannel.Testing ? TestingManifestRelativePath : StableManifestRelativePath;
+
     public static HttpClient CreateDefaultHttpClient()
     {
         var client = new HttpClient
         {
             Timeout = TimeSpan.FromSeconds(60)
         };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("SoulspireLauncher/1.0 (+https://github.com/Infomatictek/soulspirexi-launcher)");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("SoulspireLauncher/2.1 (+https://github.com/Infomatictek/soulspirexi-launcher)");
         client.DefaultRequestHeaders.CacheControl = new CacheControlHeaderValue
         {
             NoCache = true,
@@ -65,13 +73,21 @@ public sealed class ManifestUpdateService
         return JsonSerializer.Deserialize<LauncherManifest>(stream, JsonOptions) ?? new LauncherManifest();
     }
 
+    public Task<(LauncherManifest Manifest, bool FromRemote)> FetchManifestAsync(
+        LauncherManifest fallback,
+        LocalServerOverride? localOverride,
+        CancellationToken cancellationToken = default) =>
+        FetchManifestAsync(fallback, localOverride, UpdateChannel.Stable, cancellationToken);
+
     public async Task<(LauncherManifest Manifest, bool FromRemote)> FetchManifestAsync(
         LauncherManifest fallback,
         LocalServerOverride? localOverride,
+        UpdateChannel channel,
         CancellationToken cancellationToken = default)
     {
         var manifest = fallback;
         var fromRemote = false;
+        var manifestRelativePath = GetManifestRelativePath(channel);
 
         var rawBase = fallback.Repo.RawBaseUrl.TrimEnd('/');
         if (!string.IsNullOrWhiteSpace(rawBase))
@@ -95,11 +111,14 @@ public sealed class ManifestUpdateService
 
             if (!string.IsNullOrWhiteSpace(pinnedRawBase))
             {
-                var remote = await TryFetchManifestFromUrlAsync($"{pinnedRawBase}/manifest.json", cancellationToken)
+                var remote = await TryFetchManifestFromUrlAsync($"{pinnedRawBase}/{manifestRelativePath}", cancellationToken)
                     .ConfigureAwait(false);
-                if (remote is not null && remote.Files.Count > 0)
+                if (IsValidManifestForChannel(remote, channel))
                 {
-                    remote.ResolvedRawBaseUrl = pinnedRawBase;
+                    remote!.ResolvedRawBaseUrl = !string.IsNullOrWhiteSpace(remote.Repo.RawBaseUrl) &&
+                                                 !string.Equals(remote.Repo.RawBaseUrl.TrimEnd('/'), rawBase, StringComparison.OrdinalIgnoreCase)
+                        ? remote.Repo.RawBaseUrl.TrimEnd('/')
+                        : pinnedRawBase;
                     manifest = remote;
                     fromRemote = true;
                 }
@@ -107,11 +126,13 @@ public sealed class ManifestUpdateService
 
             if (!fromRemote)
             {
-                var url = $"{rawBase}/manifest.json?t={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
+                var url = $"{rawBase}/{manifestRelativePath}?t={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
                 var remote = await TryFetchManifestFromUrlAsync(url, cancellationToken).ConfigureAwait(false);
-                if (remote is not null && remote.Files.Count > 0)
+                if (IsValidManifestForChannel(remote, channel))
                 {
-                    remote.ResolvedRawBaseUrl = rawBase;
+                    remote!.ResolvedRawBaseUrl = !string.IsNullOrWhiteSpace(remote.Repo.RawBaseUrl)
+                        ? remote.Repo.RawBaseUrl.TrimEnd('/')
+                        : rawBase;
                     manifest = remote;
                     fromRemote = true;
                 }
@@ -120,6 +141,24 @@ public sealed class ManifestUpdateService
 
         ApplyLocalOverride(manifest, localOverride);
         return (manifest, fromRemote);
+    }
+
+    public static bool IsValidManifestForChannel(LauncherManifest? manifest, UpdateChannel requestedChannel)
+    {
+        if (manifest is null || manifest.Files.Count == 0)
+        {
+            return false;
+        }
+
+        var declared = (manifest.Channel ?? "stable").Trim();
+        if (requestedChannel == UpdateChannel.Stable &&
+            declared.Equals("testing", StringComparison.OrdinalIgnoreCase))
+        {
+            // Never allow a Testing manifest to be applied to Stable players.
+            return false;
+        }
+
+        return true;
     }
 
     public static bool IsGitHubRawBaseUrl(string rawBaseUrl) =>
@@ -209,28 +248,71 @@ public sealed class ManifestUpdateService
         }
     }
 
+    public static bool IsProtectedPlayerConfigPath(string category, string targetPath)
+    {
+        var normalized = targetPath.Replace('\\', '/').TrimStart('/').ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return true;
+        }
+
+        if (normalized.Equals("settings.json", StringComparison.Ordinal) ||
+            normalized.Equals("soulspire-server.json", StringComparison.Ordinal) ||
+            normalized.Equals("overlords-server.json", StringComparison.Ordinal) ||
+            normalized.StartsWith("config/addons/", StringComparison.Ordinal) ||
+            normalized.StartsWith("config/boot/", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (category.Equals("addon", StringComparison.OrdinalIgnoreCase) &&
+            (normalized.Contains("/settings/", StringComparison.Ordinal) ||
+             normalized.EndsWith("/settings.lua", StringComparison.Ordinal) ||
+             normalized.EndsWith("/settings.json", StringComparison.Ordinal)))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     public static string ResolveTargetFilePath(LauncherSettings settings, ManifestFileEntry entry)
     {
         var relative = entry.TargetPath.Replace('/', Path.DirectorySeparatorChar);
+        string candidate;
         if (entry.Category.Equals("dat-optional", StringComparison.OrdinalIgnoreCase))
         {
             var folder = string.IsNullOrWhiteSpace(entry.OverlayFolder)
                 ? AshitaConfigGenerator.FlintlockOverlayFolderName
                 : entry.OverlayFolder.Trim();
-            return Path.Combine(settings.AshitaPath, "polplugins", "DATs", folder, relative);
+            candidate = Path.Combine(settings.AshitaPath, "polplugins", "DATs", folder, relative);
         }
-
-        if (entry.Category.Equals("dat", StringComparison.OrdinalIgnoreCase))
+        else if (entry.Category.Equals("dat", StringComparison.OrdinalIgnoreCase))
         {
-            return Path.Combine(settings.AshitaPath, "polplugins", "DATs", AshitaConfigGenerator.OverlayFolderName, relative);
+            candidate = Path.Combine(settings.AshitaPath, "polplugins", "DATs", AshitaConfigGenerator.OverlayFolderName, relative);
         }
-
-        if (entry.Category.Equals("plugin", StringComparison.OrdinalIgnoreCase))
+        else if (entry.Category.Equals("plugin", StringComparison.OrdinalIgnoreCase))
         {
-            return Path.Combine(settings.AshitaPath, "plugins", relative);
+            candidate = Path.Combine(settings.AshitaPath, "plugins", relative);
+        }
+        else if (entry.Category.Equals("resource", StringComparison.OrdinalIgnoreCase))
+        {
+            candidate = Path.Combine(settings.AshitaPath, relative);
+        }
+        else
+        {
+            candidate = Path.Combine(settings.AshitaPath, "addons", relative);
         }
 
-        return Path.Combine(settings.AshitaPath, "addons", relative);
+        var fullRoot = Path.GetFullPath(settings.AshitaPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        var fullCandidate = Path.GetFullPath(candidate);
+        if (!fullCandidate.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Refusing unsafe manifest target path outside Ashita folder: {entry.TargetPath}");
+        }
+
+        return fullCandidate;
     }
 
     public static bool IsOptionalOverlayEnabled(LauncherSettings settings, ManifestOptionalOverlay overlay)
@@ -359,19 +441,126 @@ public sealed class ManifestUpdateService
         }
     }
 
-    public async Task<int> SyncOverlordsFilesAsync(
+    public static InstalledClientState? LoadInstalledState(string ashitaPath)
+    {
+        var statePath = Path.Combine(ashitaPath, InstalledStateFileName);
+        if (!File.Exists(statePath))
+        {
+            return null;
+        }
+
+        try
+        {
+            var json = File.ReadAllText(statePath);
+            return JsonSerializer.Deserialize<InstalledClientState>(json, JsonOptions);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public static void SaveInstalledState(string ashitaPath, LauncherManifest manifest, LauncherSettings settings)
+    {
+        var state = new InstalledClientState
+        {
+            Channel = string.IsNullOrWhiteSpace(manifest.Channel)
+                ? settings.UpdateChannel.ToString().ToLowerInvariant()
+                : manifest.Channel.Trim().ToLowerInvariant(),
+            ManifestVersion = manifest.ManifestVersion ?? string.Empty,
+            ServerVersion = manifest.ServerCompatibility?.Version ?? string.Empty,
+            LastSyncedUtc = DateTimeOffset.UtcNow,
+            ManagedFiles = EnumerateActiveFiles(manifest, settings)
+                .Select(e => new InstalledManagedFile
+                {
+                    Category = e.Category,
+                    TargetPath = e.TargetPath,
+                    OverlayFolder = e.OverlayFolder,
+                    Sha256 = e.Sha256
+                })
+                .ToList()
+        };
+
+        var statePath = Path.Combine(ashitaPath, InstalledStateFileName);
+        File.WriteAllText(statePath, JsonSerializer.Serialize(state, JsonOptions));
+    }
+
+    public static int ReconcileRemovedManagedFiles(
+        LauncherManifest activeManifest,
+        LauncherSettings settings,
+        InstalledClientState? previousState)
+    {
+        if (previousState is null || previousState.ManagedFiles.Count == 0)
+        {
+            return 0;
+        }
+
+        var activeTargets = new HashSet<string>(
+            EnumerateActiveFiles(activeManifest, settings)
+                .Select(e => ResolveTargetFilePath(settings, e)),
+            StringComparer.OrdinalIgnoreCase);
+
+        var removed = 0;
+        foreach (var prev in previousState.ManagedFiles)
+        {
+            if (IsProtectedPlayerConfigPath(prev.Category, prev.TargetPath))
+            {
+                continue;
+            }
+
+            try
+            {
+                var prevEntry = new ManifestFileEntry
+                {
+                    Category = prev.Category,
+                    TargetPath = prev.TargetPath,
+                    OverlayFolder = prev.OverlayFolder
+                };
+                var prevPath = ResolveTargetFilePath(settings, prevEntry);
+                if (!activeTargets.Contains(prevPath) && File.Exists(prevPath))
+                {
+                    File.Delete(prevPath);
+                    removed++;
+                }
+            }
+            catch
+            {
+                // Best-effort cleanup of retired managed files.
+            }
+        }
+
+        return removed;
+    }
+
+    [Obsolete("Use SyncSoulspireFilesAsync instead.")]
+    public Task<int> SyncOverlordsFilesAsync(
         LauncherManifest manifest,
         LauncherSettings settings,
         bool forceAll,
         IProgress<SyncProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        SyncSoulspireFilesAsync(manifest, settings, forceAll, progress, cancellationToken);
+
+    public async Task<int> SyncSoulspireFilesAsync(
+        LauncherManifest manifest,
+        LauncherSettings settings,
+        bool forceAll,
+        IProgress<SyncProgress>? progress = null,
+        CancellationToken cancellationToken = default,
+        Action<ManifestFileEntry, string>? beforeCommitFile = null)
     {
         Directory.CreateDirectory(settings.AshitaPath);
         RemoveRetiredAddons(settings);
 
-        var pending = GetOutdatedFiles(manifest, settings, forceAll);
+        var previousState = LoadInstalledState(settings.AshitaPath);
+        var pending = GetOutdatedFiles(manifest, settings, forceAll)
+            .Where(e => !IsProtectedPlayerConfigPath(e.Category, e.TargetPath))
+            .ToList();
+
         if (pending.Count == 0)
         {
+            ReconcileRemovedManagedFiles(manifest, settings, previousState);
+            SaveInstalledState(settings.AshitaPath, manifest, settings);
             progress?.Report(new SyncProgress { Message = "All SoulspireXI client files are up to date.", Percent = 100 });
             return 0;
         }
@@ -379,80 +568,198 @@ public sealed class ManifestUpdateService
         var rawBase = (!string.IsNullOrWhiteSpace(manifest.ResolvedRawBaseUrl)
             ? manifest.ResolvedRawBaseUrl
             : manifest.Repo.RawBaseUrl).TrimEnd('/');
-        var completed = 0;
 
-        foreach (var entry in pending)
+        var stageRoot = Path.Combine(Path.GetTempPath(), $"soulspire_stage_{Guid.NewGuid():N}");
+        var rollbackRoot = Path.Combine(Path.GetTempPath(), $"soulspire_rollback_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(stageRoot);
+        Directory.CreateDirectory(rollbackRoot);
+
+        var stagedFiles = new List<(ManifestFileEntry Entry, string StagedPath, string DestPath)>(pending.Count);
+        var appliedBackups = new List<(string DestPath, string? BackupPath)>();
+
+        try
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            var pct = (double)completed / pending.Count * 100.0;
-            progress?.Report(new SyncProgress
+            // Phase 1: Download & verify ALL pending files in staging before modifying any live file.
+            for (var i = 0; i < pending.Count; i++)
             {
-                Message = $"Downloading {entry.TargetPath} ({completed + 1}/{pending.Count})...",
-                Percent = pct
-            });
+                var entry = pending[i];
+                cancellationToken.ThrowIfCancellationRequested();
 
-            var destPath = ResolveTargetFilePath(settings, entry);
-            var destDir = Path.GetDirectoryName(destPath)!;
-            Directory.CreateDirectory(destDir);
-
-            var cacheBuster = !string.IsNullOrWhiteSpace(entry.Sha256)
-                ? $"sha={Uri.EscapeDataString(entry.Sha256)}"
-                : $"t={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
-            var sourcePath = entry.SourcePath.TrimStart('/');
-            var url = $"{rawBase}/{sourcePath}?{cacheBuster}";
-            var tempPath = destPath + ".download";
-
-            await DownloadFileAsync(url, tempPath, cancellationToken).ConfigureAwait(false);
-
-            if (!string.IsNullOrWhiteSpace(entry.Sha256))
-            {
-                var actualHash = ComputeSha256(tempPath);
-                if (!actualHash.Equals(entry.Sha256, StringComparison.OrdinalIgnoreCase))
+                var pct = (double)i / pending.Count * 75.0;
+                progress?.Report(new SyncProgress
                 {
-                    TryDeleteFile(tempPath);
-                    var retryUrl = $"{rawBase}/{sourcePath}?cb={Guid.NewGuid():N}";
-                    await DownloadFileAsync(retryUrl, tempPath, cancellationToken).ConfigureAwait(false);
-                    actualHash = ComputeSha256(tempPath);
-                    if (!actualHash.Equals(entry.Sha256, StringComparison.OrdinalIgnoreCase))
+                    Message = $"Downloading & verifying {entry.TargetPath} ({i + 1}/{pending.Count})...",
+                    Percent = pct
+                });
+
+                var destPath = ResolveTargetFilePath(settings, entry);
+                var stagedPath = Path.Combine(stageRoot, $"{i:D4}_{Path.GetFileName(destPath)}");
+
+                var cacheBuster = !string.IsNullOrWhiteSpace(entry.Sha256)
+                    ? $"sha={Uri.EscapeDataString(entry.Sha256)}"
+                    : $"t={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
+                var baseUrl = !string.IsNullOrWhiteSpace(entry.DownloadUrl)
+                    ? entry.DownloadUrl!.Trim()
+                    : $"{rawBase}/{entry.SourcePath.TrimStart('/')}";
+                var separator = baseUrl.Contains('?') ? "&" : "?";
+                var url = $"{baseUrl}{separator}{cacheBuster}";
+
+                await DownloadFileAsync(url, stagedPath, cancellationToken).ConfigureAwait(false);
+
+                if (!VerifyStagedFile(stagedPath, entry, out var verifyError))
+                {
+                    TryDeleteFile(stagedPath);
+                    var retryUrl = $"{baseUrl}{separator}cb={Guid.NewGuid():N}";
+                    await DownloadFileAsync(retryUrl, stagedPath, cancellationToken).ConfigureAwait(false);
+                    if (!VerifyStagedFile(stagedPath, entry, out verifyError))
                     {
-                        TryDeleteFile(tempPath);
-                        throw new InvalidDataException(
-                            $"Checksum mismatch for {entry.TargetPath}. Expected {entry.Sha256}, got {actualHash}.");
+                        TryDeleteFile(stagedPath);
+                        throw new InvalidDataException(verifyError);
                     }
+                }
+
+                stagedFiles.Add((entry, stagedPath, destPath));
+            }
+
+            // Phase 2: Back up existing files and swap staged files into place with full rollback on error.
+            var backupIndex = 0;
+            for (var i = 0; i < stagedFiles.Count; i++)
+            {
+                var (entry, stagedPath, destPath) = stagedFiles[i];
+                var pct = 75.0 + ((double)(i + 1) / stagedFiles.Count * 20.0);
+                progress?.Report(new SyncProgress
+                {
+                    Message = $"Applying {entry.TargetPath} ({i + 1}/{stagedFiles.Count})...",
+                    Percent = pct
+                });
+
+                Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
+
+                string? backupPath = null;
+                if (File.Exists(destPath))
+                {
+                    backupPath = Path.Combine(rollbackRoot, $"{backupIndex++:D4}_{Path.GetFileName(destPath)}.bak");
+                    File.Copy(destPath, backupPath, overwrite: true);
+                }
+
+                beforeCommitFile?.Invoke(entry, destPath);
+
+                try
+                {
+                    File.Move(stagedPath, destPath, overwrite: true);
+                    appliedBackups.Add((destPath, backupPath));
+                }
+                catch (IOException ex)
+                {
+                    throw new IOException(
+                        $"Could not update {entry.TargetPath} because it is currently in use. Close Ashita / FINAL FANTASY XI / PlayOnline and try again. All changes were rolled back. ({ex.Message})",
+                        ex);
                 }
             }
 
-            try
+            // Phase 3: Reconcile retired managed files, mirror custom DAT folder, and save installed state.
+            ReconcileRemovedManagedFiles(manifest, settings, previousState);
+
+            foreach (var (entry, _, destPath) in stagedFiles)
             {
-                File.Move(tempPath, destPath, overwrite: true);
-            }
-            catch (IOException ex)
-            {
-                TryDeleteFile(tempPath);
-                throw new IOException(
-                    $"Could not update {entry.TargetPath} because it is currently in use. Close Ashita / FINAL FANTASY XI / PlayOnline and try again. ({ex.Message})",
-                    ex);
+                if (entry.Category.Equals("dat", StringComparison.OrdinalIgnoreCase) &&
+                    settings.SyncToCustomDatFolder &&
+                    !string.IsNullOrWhiteSpace(settings.CustomDatOverlayPath))
+                {
+                    var customDest = Path.Combine(settings.CustomDatOverlayPath, entry.TargetPath.Replace('/', Path.DirectorySeparatorChar));
+                    Directory.CreateDirectory(Path.GetDirectoryName(customDest)!);
+                    File.Copy(destPath, customDest, overwrite: true);
+                }
             }
 
-            if (entry.Category.Equals("dat", StringComparison.OrdinalIgnoreCase) &&
-                settings.SyncToCustomDatFolder &&
-                !string.IsNullOrWhiteSpace(settings.CustomDatOverlayPath))
-            {
-                var customDest = Path.Combine(settings.CustomDatOverlayPath, entry.TargetPath.Replace('/', Path.DirectorySeparatorChar));
-                Directory.CreateDirectory(Path.GetDirectoryName(customDest)!);
-                File.Copy(destPath, customDest, overwrite: true);
-            }
+            SaveInstalledState(settings.AshitaPath, manifest, settings);
 
-            completed++;
+            progress?.Report(new SyncProgress
+            {
+                Message = $"Synced {stagedFiles.Count} SoulspireXI file(s).",
+                Percent = 100
+            });
+
+            return stagedFiles.Count;
+        }
+        catch
+        {
+            RollbackAppliedFiles(appliedBackups);
+            throw;
+        }
+        finally
+        {
+            TryDeleteDirectory(stageRoot);
+            TryDeleteDirectory(rollbackRoot);
+        }
+    }
+
+    private static bool VerifyStagedFile(string stagedPath, ManifestFileEntry entry, out string error)
+    {
+        var info = new FileInfo(stagedPath);
+        if (!info.Exists)
+        {
+            error = $"Staged file missing for {entry.TargetPath}.";
+            return false;
         }
 
-        progress?.Report(new SyncProgress
+        if (entry.Size > 0 && info.Length != entry.Size)
         {
-            Message = $"Synced {completed} SoulspireXI file(s).",
-            Percent = 100
-        });
+            error = $"Size mismatch for {entry.TargetPath}. Expected {entry.Size} bytes, got {info.Length} bytes.";
+            return false;
+        }
 
-        return completed;
+        if (!string.IsNullOrWhiteSpace(entry.Sha256))
+        {
+            var actualHash = ComputeSha256(stagedPath);
+            if (!actualHash.Equals(entry.Sha256, StringComparison.OrdinalIgnoreCase))
+            {
+                error = $"Checksum mismatch for {entry.TargetPath}. Expected {entry.Sha256}, got {actualHash}.";
+                return false;
+            }
+        }
+
+        error = string.Empty;
+        return true;
+    }
+
+    private static void RollbackAppliedFiles(List<(string DestPath, string? BackupPath)> appliedBackups)
+    {
+        for (var i = appliedBackups.Count - 1; i >= 0; i--)
+        {
+            var (destPath, backupPath) = appliedBackups[i];
+            try
+            {
+                if (!string.IsNullOrEmpty(backupPath) && File.Exists(backupPath))
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
+                    File.Copy(backupPath, destPath, overwrite: true);
+                }
+                else if (File.Exists(destPath))
+                {
+                    File.Delete(destPath);
+                }
+            }
+            catch
+            {
+                // Best-effort rollback of remaining files.
+            }
+        }
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        try
+        {
+            if (Directory.Exists(path))
+            {
+                Directory.Delete(path, recursive: true);
+            }
+        }
+        catch
+        {
+            // Ignore temp cleanup errors.
+        }
     }
 
     public async Task EnsureAshitaAndToolsAsync(
@@ -528,7 +835,7 @@ public sealed class ManifestUpdateService
 
     private async Task InstallAshitaAsync(string zipUrl, string ashitaDir, CancellationToken cancellationToken)
     {
-        var tempZip = Path.Combine(Path.GetTempPath(), $"overlords_ashita_{Guid.NewGuid():N}.zip");
+        var tempZip = Path.Combine(Path.GetTempPath(), $"soulspire_ashita_{Guid.NewGuid():N}.zip");
         try
         {
             await DownloadFileAsync(zipUrl, tempZip, cancellationToken).ConfigureAwait(false);
@@ -612,7 +919,7 @@ public sealed class ManifestUpdateService
 
         if (zipUrl is not null)
         {
-            var tempZip = Path.Combine(Path.GetTempPath(), $"overlords_xiloader_{Guid.NewGuid():N}.zip");
+            var tempZip = Path.Combine(Path.GetTempPath(), $"soulspire_xiloader_{Guid.NewGuid():N}.zip");
             try
             {
                 await DownloadFileAsync(zipUrl, tempZip, cancellationToken).ConfigureAwait(false);
@@ -673,7 +980,7 @@ public sealed class ManifestUpdateService
             throw new InvalidOperationException("Could not find Ashita v4 archive in latest XIPivot release.");
         }
 
-        var tempZip = Path.Combine(Path.GetTempPath(), $"overlords_xipivot_{Guid.NewGuid():N}.zip");
+        var tempZip = Path.Combine(Path.GetTempPath(), $"soulspire_xipivot_{Guid.NewGuid():N}.zip");
         try
         {
             await DownloadFileAsync(downloadUrl, tempZip, cancellationToken).ConfigureAwait(false);
@@ -750,7 +1057,7 @@ public sealed class ManifestUpdateService
             throw new InvalidOperationException($"Could not find {displayName} addon archive in latest GitHub release.");
         }
 
-        var tempZip = Path.Combine(Path.GetTempPath(), $"overlords_{addonFolderName}_{Guid.NewGuid():N}.zip");
+        var tempZip = Path.Combine(Path.GetTempPath(), $"soulspire_{addonFolderName}_{Guid.NewGuid():N}.zip");
         try
         {
             await DownloadFileAsync(addonZipUrl, tempZip, cancellationToken).ConfigureAwait(false);

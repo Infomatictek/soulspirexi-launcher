@@ -7,8 +7,6 @@ on:
     paths:
       - 'addons/ashita4/soulspire_soul_actions/data/soul_actions.tsv'
       - 'addons/ashita4/soulspire_soul_actions/data/visibility.tsv'
-      - 'addons/ashita4/overlords_soul_actions/data/soul_actions.tsv'
-      - 'addons/ashita4/overlords_soul_actions/data/visibility.tsv'
       - 'scripts/validate-soul-actions-tsv.py'
       - '.github/workflows/trigger-wiki-rebuild.yml'
   pull_request:
@@ -17,8 +15,6 @@ on:
     paths:
       - 'addons/ashita4/soulspire_soul_actions/data/soul_actions.tsv'
       - 'addons/ashita4/soulspire_soul_actions/data/visibility.tsv'
-      - 'addons/ashita4/overlords_soul_actions/data/soul_actions.tsv'
-      - 'addons/ashita4/overlords_soul_actions/data/visibility.tsv'
       - 'scripts/validate-soul-actions-tsv.py'
       - '.github/workflows/trigger-wiki-rebuild.yml'
   workflow_dispatch:
