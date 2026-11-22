@@ -364,8 +364,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/crystalsocket/crystalsocket.lua",
       "targetPath": "crystalsocket/crystalsocket.lua",
-      "sha256": "b3aca4a91c7706ed81dc867cb7f81655d97253929733e617dbd2cfc119a74d7d",
-      "size": 21201
+      "sha256": "e526e7ffe0a862701a334f33cb24aa294b4cfc6c64f0c14a7fbe4664d5479f6d",
+      "size": 22414
     },
     {
       "category": "addon",
@@ -390,6 +390,13 @@
     },
     {
       "category": "addon",
+      "sourcePath": "addons/ashita4/crystalsocket/soul_appearance.lua",
+      "targetPath": "crystalsocket/soul_appearance.lua",
+      "sha256": "2c49f5970d254d1e09e2df2fe07b48d6cb6e818c8a4f6ea05b041810a1ef2b3d",
+      "size": 8363
+    },
+    {
+      "category": "addon",
       "sourcePath": "addons/ashita4/crystalsocket/soul_identity.lua",
       "targetPath": "crystalsocket/soul_identity.lua",
       "sha256": "035a3e1ce7924efccc90f2303c2997755a3c9c6a2e9154f4c482d6cb740535ff",
@@ -401,6 +408,13 @@
       "targetPath": "crystalsocket/state.lua",
       "sha256": "0fdec7163f98558344908ddbf93bf3a00c87f7b6edb15b682362341dea7a5f7d",
       "size": 10853
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/ashita4/crystalsocket/tests/soul_appearance_test.lua",
+      "targetPath": "crystalsocket/tests/soul_appearance_test.lua",
+      "sha256": "1600e08eed929652df267a307d396e997f391fd8404e9983c82950edfa5cfa40",
+      "size": 7693
     },
     {
       "category": "addon",

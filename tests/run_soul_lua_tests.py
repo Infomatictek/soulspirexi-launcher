@@ -9,6 +9,7 @@ from lupa.luajit21 import LuaRuntime
 def main() -> int:
     repo_root = Path(__file__).resolve().parents[1]
     suites = [
+        (repo_root / "addons/ashita4/crystalsocket", "*_test.lua"),
         (repo_root / "addons/ashita4/soulspire_soul_actions", "*_test.lua"),
         (repo_root / "addons/ashita4/soulspire_flintlock", "*_spec.lua"),
     ]

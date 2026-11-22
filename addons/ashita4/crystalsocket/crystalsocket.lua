@@ -14,6 +14,7 @@ local Menu = require('menu')
 local labels = require('job_labels').new()
 local WeaponConfig = require('weapon_config')
 local native_weapon_rules = WeaponConfig.native_rules()
+local appearance = require('soul_appearance').new()
 
 local character_id = 0
 local ui, menu
@@ -32,8 +33,21 @@ local function now()
     return ashita.time.get_tick64() / 1000
 end
 
+local function inject_grap_list(packet)
+    if type(packet) ~= 'string' or #packet ~= 24 then return end
+    local pm = AshitaCore and AshitaCore:GetPacketManager()
+    if not pm or not pm.AddIncomingPacket then return end
+    local bytes = { packet:byte(1, #packet) }
+    pm:AddIncomingPacket(0x0051, bytes)
+end
+
+local function sync_appearance()
+    appearance:set_active_soul(state.current_job or 0, labels.branch or 0, inject_grap_list)
+end
+
 local function reset(reason)
     labels:clear_hud_hint()
+    appearance:reset()
     epoch = epoch + 1
     state:reset(reason, false)
     character_id = 0
@@ -94,6 +108,7 @@ local function context()
     character_id = id
     if changed and ui then ui:blur(); ui.feedback = nil end
     labels:sync(state:snapshot(), character_id, now())
+    sync_appearance()
 end
 
 local function send(packet)
@@ -304,12 +319,23 @@ ashita.events.register('load', 'crystalsocket_load', function()
 end)
 
 ashita.events.register('packet_in', 'crystalsocket_packet_in', function(e)
+    if e.id == 0x051 and not e.injected then
+        local mod = appearance:on_grap_list(e.data_modified or e.data)
+        if mod then e.data_modified = mod end
+        return
+    end
+    if e.id == 0x00D and not e.injected then
+        local mod = appearance:on_char_update(e.data_modified or e.data, character_id)
+        if mod then e.data_modified = mod end
+        return
+    end
     if e.id == 0x1FC then
         -- Reuse the already-authoritative HUD identity for native labels when the
         -- Crystal Socket catalog query has not finished; don't alter gameplay.
         context()
         if labels:observe_hud(e.data, state.current_job, character_id) then
             labels:sync(state:snapshot(), character_id, now())
+            sync_appearance()
         end
         return
     end
@@ -337,11 +363,16 @@ ashita.events.register('packet_in', 'crystalsocket_packet_in', function(e)
             transport.in_error = boundary_error
         end
         labels:sync(state:snapshot(), character_id, now())
+        sync_appearance()
         return
     end
     if e.id == 0x00A then
         transitioning = false
         reset('Zone changed; syncing soul crystals...')
+        if not e.injected then
+            local mod = appearance:on_zone_in(e.data_modified or e.data)
+            if mod then e.data_modified = mod end
+        end
     elseif e.id == 0x00B then
         transitioning = true
         reset('Changing zones...')
@@ -421,12 +452,14 @@ ashita.events.register('d3d_present', 'crystalsocket_present', function()
         ui:draw(anchor, ts, native and native.window or nil, native and native.cursor or nil)
     end
     labels:sync(state:snapshot(), character_id, ts)
+    sync_appearance()
     if not labels.weapon_rules_synced and not labels.weapon_rules_missing and labels.native then
         labels:sync_weapon_rules(native_weapon_rules)
     end
 end)
 
 ashita.events.register('unload', 'crystalsocket_unload', function()
+    appearance:restore(inject_grap_list)
     state:set_context(nil, nil, nil, nil)
     character_id = 0
     labels:sync(state:snapshot(), character_id, now())
