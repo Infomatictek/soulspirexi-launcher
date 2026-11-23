@@ -105,6 +105,13 @@
       "size": 328
     },
     {
+      "category": "plugin",
+      "sourcePath": "plugins/ashita4/soulspire_native.dll",
+      "targetPath": "soulspire_native.dll",
+      "sha256": "1111c4f2198ae71d3f6823061fb80b16c25ffa81033b208877d140bef566b85e",
+      "size": 176128
+    },
+    {
       "category": "addon",
       "sourcePath": "addons/ashita4/crystalsocket/assets/aegistemplar.png",
       "targetPath": "crystalsocket/assets/aegistemplar.png",
@@ -9972,7 +9979,7 @@
     "hash": "cf86aa59ff8d16c6",
     "idLockStatus": "locked",
     "nativeDllCompiledHash": "cf86aa59ff8d16c6",
-    "nativeDllSha256": "pending-ci-build",
+    "nativeDllSha256": "1111c4f2198ae71d3f6823061fb80b16c25ffa81033b208877d140bef566b85e",
     "nativeDllClientVerified": false,
     "nativeHooks": 27,
     "crystalJobsHooks": 27
