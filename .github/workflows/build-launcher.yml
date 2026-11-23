@@ -419,7 +419,7 @@ jobs:
             --server-commit "57dbdbe" \
             --server-image "soulspirexi/server:registry" \
             --crystaljobs-hooks 24 \
-            --testing-notes "24-hook Centralized Registry + immutable Search glyph bank candidate (pending Windows FFXI client verification)"
+            --notes "24-hook Centralized Registry + immutable Search glyph bank candidate (pending Windows FFXI client verification)"
 
           python scripts/verify-launcher-manifest.py --manifest channels/testing-registry-24hook/manifest.json
           git diff --exit-code manifest.json
