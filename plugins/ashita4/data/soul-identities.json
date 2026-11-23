@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "registryVersion": "2026.11.22-66-souls-approved",
-  "registryHash": "0e3278fac7296cb3",
-  "integrityFnv1a64": "afd47f9009ea34f0",
+  "registryHash": "f8abc95e3c88cce7",
+  "integrityFnv1a64": "f09c4e3815f6ce5e",
   "soulCount": 66,
   "souls": [
     {
@@ -33,13 +33,13 @@
       "jobId": 2,
       "branch": 2,
       "name": "Stillwater",
-      "abbr": "CWV"
+      "abbr": "STW"
     },
     {
       "jobId": 2,
       "branch": 3,
       "name": "Wayfarer",
-      "abbr": "BLK"
+      "abbr": "WAY"
     },
     {
       "jobId": 3,
@@ -51,19 +51,19 @@
       "jobId": 3,
       "branch": 2,
       "name": "Penitent",
-      "abbr": "ZEL"
+      "abbr": "PEN"
     },
     {
       "jobId": 3,
       "branch": 3,
       "name": "Intercessor",
-      "abbr": "VLK"
+      "abbr": "INC"
     },
     {
       "jobId": 4,
       "branch": 1,
       "name": "Goetist",
-      "abbr": "AST"
+      "abbr": "GOE"
     },
     {
       "jobId": 4,
@@ -81,19 +81,19 @@
       "jobId": 5,
       "branch": 1,
       "name": "Thornveil",
-      "abbr": "DLS"
+      "abbr": "THV"
     },
     {
       "jobId": 5,
       "branch": 2,
       "name": "Arbiter",
-      "abbr": "RYT"
+      "abbr": "ARB"
     },
     {
       "jobId": 5,
       "branch": 3,
       "name": "Conflux",
-      "abbr": "SCW"
+      "abbr": "CFX"
     },
     {
       "jobId": 6,
@@ -105,7 +105,7 @@
       "jobId": 6,
       "branch": 2,
       "name": "Opportunist",
-      "abbr": "BND"
+      "abbr": "OPP"
     },
     {
       "jobId": 6,
@@ -117,13 +117,13 @@
       "jobId": 7,
       "branch": 1,
       "name": "Lightkeeper",
-      "abbr": "TMP"
+      "abbr": "LTK"
     },
     {
       "jobId": 7,
       "branch": 2,
       "name": "Martyr",
-      "abbr": "DFN"
+      "abbr": "MRT"
     },
     {
       "jobId": 7,
@@ -135,7 +135,7 @@
       "jobId": 8,
       "branch": 1,
       "name": "Harbinger",
-      "abbr": "RPR"
+      "abbr": "HRB"
     },
     {
       "jobId": 8,
@@ -147,13 +147,13 @@
       "jobId": 8,
       "branch": 3,
       "name": "Maleficar",
-      "abbr": "SCR"
+      "abbr": "MLF"
     },
     {
       "jobId": 9,
       "branch": 1,
       "name": "Packmate",
-      "abbr": "UNT"
+      "abbr": "PKM"
     },
     {
       "jobId": 9,
@@ -165,25 +165,25 @@
       "jobId": 9,
       "branch": 3,
       "name": "Wildsavant",
-      "abbr": "BSP"
+      "abbr": "WSV"
     },
     {
       "jobId": 10,
       "branch": 1,
       "name": "Skald",
-      "abbr": "ADV"
+      "abbr": "SKL"
     },
     {
       "jobId": 10,
       "branch": 2,
       "name": "Cantor",
-      "abbr": "MUS"
+      "abbr": "CNT"
     },
     {
       "jobId": 10,
       "branch": 3,
       "name": "Provocateur",
-      "abbr": "MIN"
+      "abbr": "PRV"
     },
     {
       "jobId": 11,
@@ -195,13 +195,13 @@
       "jobId": 11,
       "branch": 2,
       "name": "Fangbound",
-      "abbr": "HNT"
+      "abbr": "FGB"
     },
     {
       "jobId": 11,
       "branch": 3,
       "name": "Spellfletcher",
-      "abbr": "ACA"
+      "abbr": "SFL"
     },
     {
       "jobId": 12,
@@ -213,19 +213,19 @@
       "jobId": 12,
       "branch": 2,
       "name": "Amatsu",
-      "abbr": "IMP"
+      "abbr": "AMT"
     },
     {
       "jobId": 12,
       "branch": 3,
       "name": "Kensei",
-      "abbr": "WRL"
+      "abbr": "KEN"
     },
     {
       "jobId": 13,
       "branch": 1,
       "name": "Shinobi",
-      "abbr": "KRG"
+      "abbr": "SHN"
     },
     {
       "jobId": 13,
@@ -237,19 +237,19 @@
       "jobId": 13,
       "branch": 3,
       "name": "Fuin",
-      "abbr": "NGB"
+      "abbr": "FUI"
     },
     {
       "jobId": 14,
       "branch": 1,
       "name": "Highlancer",
-      "abbr": "LNC"
+      "abbr": "HLC"
     },
     {
       "jobId": 14,
       "branch": 2,
       "name": "Drachenward",
-      "abbr": "SKY"
+      "abbr": "DRW"
     },
     {
       "jobId": 14,
@@ -261,7 +261,7 @@
       "jobId": 15,
       "branch": 1,
       "name": "Eidolarch",
-      "abbr": "PRM"
+      "abbr": "EID"
     },
     {
       "jobId": 15,
@@ -273,13 +273,13 @@
       "jobId": 15,
       "branch": 3,
       "name": "Accordant",
-      "abbr": "HLD"
+      "abbr": "ACD"
     },
     {
       "jobId": 16,
       "branch": 1,
       "name": "Assimilator",
-      "abbr": "WMG"
+      "abbr": "ASM"
     },
     {
       "jobId": 16,
@@ -291,7 +291,7 @@
       "jobId": 16,
       "branch": 3,
       "name": "Chrysalis",
-      "abbr": "AZB"
+      "abbr": "CHY"
     },
     {
       "jobId": 17,
@@ -309,31 +309,31 @@
       "jobId": 17,
       "branch": 3,
       "name": "Blackwake",
-      "abbr": "BUC"
+      "abbr": "BKW"
     },
     {
       "jobId": 18,
       "branch": 1,
       "name": "Ironlink",
-      "abbr": "VNG"
+      "abbr": "IRN"
     },
     {
       "jobId": 18,
       "branch": 2,
       "name": "Patchwork",
-      "abbr": "ANM"
+      "abbr": "PTW"
     },
     {
       "jobId": 18,
       "branch": 3,
       "name": "Tandem",
-      "abbr": "PGL"
+      "abbr": "TDM"
     },
     {
       "jobId": 19,
       "branch": 1,
       "name": "Revel",
-      "abbr": "VMP"
+      "abbr": "RVL"
     },
     {
       "jobId": 19,
@@ -345,19 +345,19 @@
       "jobId": 19,
       "branch": 3,
       "name": "Dervish",
-      "abbr": "MRS"
+      "abbr": "DRV"
     },
     {
       "jobId": 20,
       "branch": 1,
       "name": "Chirurgeon",
-      "abbr": "MDC"
+      "abbr": "CHG"
     },
     {
       "jobId": 20,
       "branch": 2,
       "name": "Heliarch",
-      "abbr": "SAG"
+      "abbr": "HEL"
     },
     {
       "jobId": 20,
@@ -369,7 +369,7 @@
       "jobId": 21,
       "branch": 1,
       "name": "Meridian",
-      "abbr": "DIV"
+      "abbr": "MRD"
     },
     {
       "jobId": 21,
@@ -381,7 +381,7 @@
       "jobId": 21,
       "branch": 3,
       "name": "Seismancer",
-      "abbr": "TRM"
+      "abbr": "SEI"
     },
     {
       "jobId": 22,
@@ -399,7 +399,7 @@
       "jobId": 22,
       "branch": 3,
       "name": "Runeweft",
-      "abbr": "INQ"
+      "abbr": "RNW"
     }
   ]
 }

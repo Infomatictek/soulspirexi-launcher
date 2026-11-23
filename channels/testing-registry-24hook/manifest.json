@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.1.7-testing.runtime-identity",
+  "manifestVersion": "2.1.8-testing.runtime-identity",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
-    "version": "feat/runtime-soul-identity-and-spacing (1938472)",
+    "version": "feat/runtime-soul-identity-and-spacing (hash f8abc95e3c88cce7)",
     "branch": "feat/runtime-soul-identity-and-spacing",
-    "commit": "1938472",
+    "commit": "f8abc95e3c88cce7",
     "dockerImage": "soulspirexi/server:registry",
     "crystalJobsHooks": 24,
-    "notes": "Runtime Soul Identity Loader (data/soul-identities.json) + Configurable menu2fon Glyph Spacing (data/crystaljobs-presentation.json, trackingPx=-1) + SoA tile+0xC0 fix"
+    "notes": "Data-only 66-Soul approved abbreviation update (hash f8abc95e3c88cce7; GOE, THV, KEN, IRN, SEI, etc.) \u2014 ZERO native DLL rebuild (crystaljobs.dll SHA-256 unchanged)"
   },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
@@ -109,7 +109,7 @@
       "category": "plugin",
       "sourcePath": "plugins/ashita4/data/soul-identities.json",
       "targetPath": "data/soul-identities.json",
-      "sha256": "a49c665c0c35e0b0208c4ecb6c7527f4ed1979191cefa22f309ca566105933ca",
+      "sha256": "def9274a2e4f15d164a716c7b58d2ed5234508e73b51e2eafb4db3380820e4bb",
       "size": 6600
     },
     {
@@ -431,7 +431,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/crystalsocket/soul_registry_generated.lua",
       "targetPath": "crystalsocket/soul_registry_generated.lua",
-      "sha256": "3f9534c12a9be7a16381a082bb2a4beddb69475938b58f434c766ef4c72350be",
+      "sha256": "e62113f876e6c7ad406ad746481f3e8d03bc3d0f4b23934b99dcd9e0467e1080",
       "size": 18834
     },
     {
@@ -6017,7 +6017,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/soul_registry_generated.lua",
       "targetPath": "soulspire_core/core/soul_registry_generated.lua",
-      "sha256": "3f9534c12a9be7a16381a082bb2a4beddb69475938b58f434c766ef4c72350be",
+      "sha256": "e62113f876e6c7ad406ad746481f3e8d03bc3d0f4b23934b99dcd9e0467e1080",
       "size": 18834
     },
     {
@@ -6311,7 +6311,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_soul_actions/soul_registry_generated.lua",
       "targetPath": "soulspire_soul_actions/soul_registry_generated.lua",
-      "sha256": "3f9534c12a9be7a16381a082bb2a4beddb69475938b58f434c766ef4c72350be",
+      "sha256": "e62113f876e6c7ad406ad746481f3e8d03bc3d0f4b23934b99dcd9e0467e1080",
       "size": 18834
     },
     {
@@ -7592,7 +7592,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_soulhud/soulhud_roster_generated.lua",
       "targetPath": "soulspire_soulhud/soulhud_roster_generated.lua",
-      "sha256": "11995e2b0f7345ff60ada6936cdc70c77b1b9123fd246890b26641d963e14f10",
+      "sha256": "dd87fdc1eb661b66badafd8197d7ad2e86559b6bb62a27c7a4cfcf3b38fa738f",
       "size": 15491
     },
     {
@@ -7956,7 +7956,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_talents/soul_registry_generated.lua",
       "targetPath": "soulspire_talents/soul_registry_generated.lua",
-      "sha256": "3f9534c12a9be7a16381a082bb2a4beddb69475938b58f434c766ef4c72350be",
+      "sha256": "e62113f876e6c7ad406ad746481f3e8d03bc3d0f4b23934b99dcd9e0467e1080",
       "size": 18834
     },
     {
@@ -9970,7 +9970,7 @@
   ],
   "registry": {
     "version": "2026.11.22-66-souls-approved",
-    "hash": "0e3278fac7296cb3",
+    "hash": "f8abc95e3c88cce7",
     "idLockStatus": "locked",
     "nativeDllCompiledHash": "0e3278fac7296cb3",
     "nativeDllSha256": "d194439a672dc837c065cd131229bf553c25942dbbdce8f425ef40859d50691a",
