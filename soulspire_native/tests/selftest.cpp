@@ -815,7 +815,10 @@ static uint8_t __fastcall fake_can_equip_in_slot_fn(void*, void*, const uint8_t*
 
 static uint32_t sub_weapon_resume_result = 0;
 static __declspec(naked) void fake_sub_weapon_allow_resume() {
-    __asm { mov sub_weapon_resume_result, 1; ret }
+    __asm {
+        mov sub_weapon_resume_result, 1
+        ret
+    }
 }
 static __declspec(naked) void fake_sub_weapon_deny_resume() {
     __asm {
@@ -876,7 +879,10 @@ static __declspec(naked) uint32_t __cdecl sub_weapon_abi(const uint8_t*, uint32_
 
 static uint32_t sub_2h_resume_result = 0;
 static __declspec(naked) void fake_sub_2h_allow_resume() {
-    __asm { mov sub_2h_resume_result, 1; ret }
+    __asm {
+        mov sub_2h_resume_result, 1
+        ret
+    }
 }
 static __declspec(naked) void fake_sub_2h_deny_resume() {
     __asm {
