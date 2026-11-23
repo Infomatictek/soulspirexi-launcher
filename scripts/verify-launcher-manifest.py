@@ -404,21 +404,34 @@ def verify_manifest(repo_root: Path, manifest_path: Path | None = None) -> list[
             )
         if declared_channel == "testing" and str(manifest.get("candidateId") or "").strip() in ("registry-24hook", "search-legacy-text", "search-aligned-text"):
             prov_path = (manifest_path or (repo_root / "manifest.json")).parent / "crystaljobs-provenance.json"
+            runtime_loader = False
             if prov_path.is_file():
                 prov_data = json.loads(prov_path.read_text(encoding="utf-8-sig"))
-                if reg_meta.get("nativeDllCompiledHash") != prov_data.get("compiledRegistryHash"):
+                runtime_loader = bool(prov_data.get("runtimeIdentityLoader")) and prov_data.get("identitySchemaVersion") == 1
+                if not runtime_loader and reg_meta.get("nativeDllCompiledHash") != prov_data.get("compiledRegistryHash"):
                     errors.append(
                         f"testing candidate registry.nativeDllCompiledHash ({reg_meta.get('nativeDllCompiledHash')!r}) != crystaljobs-provenance.json ({prov_data.get('compiledRegistryHash')!r})"
                     )
             if reg_sync_path.is_file():
                 reg_sync = json.loads(reg_sync_path.read_text(encoding="utf-8"))
-                if reg_meta.get("nativeDllCompiledHash") != reg_sync.get("registryHash"):
+                if runtime_loader:
+                    ident_path = repo_root / "plugins" / "ashita4" / "data" / "soul-identities.json"
+                    if not ident_path.is_file():
+                        errors.append("runtimeIdentityLoader enabled but plugins/ashita4/data/soul-identities.json is missing")
+                    else:
+                        ident_doc = json.loads(ident_path.read_text(encoding="utf-8"))
+                        if ident_doc.get("schemaVersion") != 1 or ident_doc.get("registryHash") != reg_sync.get("registryHash"):
+                            errors.append(
+                                f"soul-identities.json ({ident_doc.get('registryHash')!r}) != registry_sync.json ({reg_sync.get('registryHash')!r})"
+                            )
+                elif reg_meta.get("nativeDllCompiledHash") != reg_sync.get("registryHash"):
                     errors.append(
                         f"testing candidate registry.nativeDllCompiledHash ({reg_meta.get('nativeDllCompiledHash')!r}) != registry_sync.json ({reg_sync.get('registryHash')!r})"
                     )
         elif dll_state_path.is_file():
             dll_state = json.loads(dll_state_path.read_text(encoding="utf-8"))
-            if reg_meta.get("nativeDllCompiledHash") != dll_state.get("compiledRegistryHash"):
+            runtime_loader = bool(dll_state.get("runtimeIdentityLoader")) and dll_state.get("identitySchemaVersion") == 1
+            if not runtime_loader and reg_meta.get("nativeDllCompiledHash") != dll_state.get("compiledRegistryHash"):
                 errors.append(
                     f"manifest.json registry.nativeDllCompiledHash ({reg_meta.get('nativeDllCompiledHash')!r}) != dll_sync_state.json ({dll_state.get('compiledRegistryHash')!r})"
                 )

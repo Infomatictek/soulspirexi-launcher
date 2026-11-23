@@ -258,6 +258,8 @@ jobs:
               dllSha256            = $dllInfo.Sha256
               dllSize              = $dllInfo.Size
               compiledRegistryHash = $regHash
+              runtimeIdentityLoader = $true
+              identitySchemaVersion = 1
               searchRenderMode     = $modeLabel
               sourceCommit         = "${{ github.sha }}"
               branch               = "${{ github.ref_name }}"
@@ -392,7 +394,7 @@ jobs:
 
   publish-registry-24hook-candidate:
     needs: [verify-manifest, build-crystaljobs, build-and-test]
-    if: github.ref == 'refs/heads/feat/soul-identity-registry-integration' && !startsWith(github.event.head_commit.message, 'chore(testing-candidate):')
+    if: (github.ref == 'refs/heads/feat/soul-identity-registry-integration' || github.ref == 'refs/heads/feat/runtime-soul-identity-and-spacing') && !startsWith(github.event.head_commit.message, 'chore(testing-candidate):')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -400,7 +402,7 @@ jobs:
       - name: Checkout feature branch
         uses: actions/checkout@v7
         with:
-          ref: feat/soul-identity-registry-integration
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
 
       - name: Setup Python
@@ -450,42 +452,42 @@ jobs:
             --crystaljobs-dll ci-crystaljobs/ci-builds/search-legacy-text/crystaljobs.dll \
             --build-info ci-crystaljobs/ci-builds/search-legacy-text/crystaljobs-build-info.txt \
             --provenance-json ci-crystaljobs/ci-builds/search-legacy-text/crystaljobs-provenance.json \
-            --repo-branch feat/soul-identity-registry-integration \
-            --manifest-version "2.1.5-testing.search-legacy-text" \
-            --server-version "feat/soul-identity-registry-integration (6e4311c)" \
-            --server-branch "feat/soul-identity-registry-integration" \
-            --server-commit "6e4311c" \
+            --repo-branch "${{ github.ref_name }}" \
+            --manifest-version "2.1.7-testing.search-legacy-text" \
+            --server-version "feat/runtime-soul-identity-and-spacing (1938472)" \
+            --server-branch "feat/runtime-soul-identity-and-spacing" \
+            --server-commit "1938472" \
             --server-image "soulspirexi/server:registry" \
             --crystaljobs-hooks 24 \
-            --notes "Candidate A (Historical 4f0fdb3): 24-hook Approved 66-Soul Registry (0e3278fac7296cb3) with legacy single-call 0.75x native_text Search labels (zero menu2fon sprite mutation)"
+            --notes "Candidate A (Historical 4f0fdb3): 24-hook runtime identity loader + legacy 0.75x native_text fallback"
 
           python scripts/publish-testing-channel.py \
             --candidate registry-24hook \
             --crystaljobs-dll ci-crystaljobs/ci-builds/registry-24hook/crystaljobs.dll \
             --build-info ci-crystaljobs/ci-builds/registry-24hook/crystaljobs-build-info.txt \
             --provenance-json ci-crystaljobs/ci-builds/registry-24hook/crystaljobs-provenance.json \
-            --repo-branch feat/soul-identity-registry-integration \
-            --manifest-version "2.1.6-testing.registry24" \
-            --server-version "feat/soul-identity-registry-integration (6e4311c)" \
-            --server-branch "feat/soul-identity-registry-integration" \
-            --server-commit "6e4311c" \
+            --repo-branch "${{ github.ref_name }}" \
+            --manifest-version "2.1.7-testing.runtime-identity" \
+            --server-version "feat/runtime-soul-identity-and-spacing (1938472)" \
+            --server-branch "feat/runtime-soul-identity-and-spacing" \
+            --server-commit "1938472" \
             --server-image "soulspirexi/server:registry" \
             --crystaljobs-hooks 24 \
-            --notes "Candidate B (Fixed native menu2fon): 24-hook Approved 66-Soul Registry (0e3278fac7296cb3) with SoA quad corners {x0,x1,x0,x1,-1,-1,9,9} at tile+0xC0 + immutable glyph banks"
+            --notes "Runtime Soul Identity Loader (data/soul-identities.json) + Configurable menu2fon Glyph Spacing (data/crystaljobs-presentation.json, trackingPx=-1) + SoA tile+0xC0 fix"
 
           python scripts/publish-testing-channel.py \
             --candidate search-aligned-text \
             --crystaljobs-dll ci-crystaljobs/ci-builds/search-aligned-text/crystaljobs.dll \
             --build-info ci-crystaljobs/ci-builds/search-aligned-text/crystaljobs-build-info.txt \
             --provenance-json ci-crystaljobs/ci-builds/search-aligned-text/crystaljobs-provenance.json \
-            --repo-branch feat/soul-identity-registry-integration \
-            --manifest-version "2.1.5-testing.search-aligned-text" \
-            --server-version "feat/soul-identity-registry-integration (6e4311c)" \
-            --server-branch "feat/soul-identity-registry-integration" \
-            --server-commit "6e4311c" \
+            --repo-branch "${{ github.ref_name }}" \
+            --manifest-version "2.1.7-testing.search-aligned-text" \
+            --server-version "feat/runtime-soul-identity-and-spacing (1938472)" \
+            --server-branch "feat/runtime-soul-identity-and-spacing" \
+            --server-commit "1938472" \
             --server-image "soulspirexi/server:registry" \
             --crystaljobs-hooks 24 \
-            --notes "Candidate C (Fallback): 24-hook Approved 66-Soul Registry (0e3278fac7296cb3) with fixed-column aligned native_text Search labels (readable first, zero menu2fon sprite mutation)"
+            --notes "Candidate C (Fallback): 24-hook runtime identity loader + fixed-column aligned native_text"
 
           python scripts/verify-launcher-manifest.py --manifest channels/testing-search-legacy-text/manifest.json
           python scripts/verify-launcher-manifest.py --manifest channels/testing-search-aligned-text/manifest.json
@@ -503,8 +505,8 @@ jobs:
             echo "No changes to Search testing candidates."
             exit 0
           fi
-          git commit -m "chore(testing-candidate): publish fixed menu2fon Testing B (2.1.6-testing.registry24) and A/C crystaljobs.dll"
-          git push origin HEAD:feat/soul-identity-registry-integration
+          git commit -m "chore(testing-candidate): publish runtime-identity + spacing crystaljobs.dll (2.1.7-testing.runtime-identity)"
+          git push origin "HEAD:${{ github.ref_name }}"
 
   publish-release:
     needs: [build-and-test, build-crystaljobs]

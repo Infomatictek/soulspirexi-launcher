@@ -8,6 +8,7 @@
 #include "layout.h"
 #include <atomic>
 #include <cstdio>
+#include <cwchar>
 #include <new>
 
 using namespace crystaljobs;
@@ -150,10 +151,10 @@ static_assert(sizeof(SimpleSpriteArgs) == 20);
 
 // Search 3-letter job badge rendering mode (compile-time selectable for isolated Testing candidates):
 //   0 = Legacy historical native_text (4f0fdb3 baseline: single-call 0.75x native_text; zero sprite mutation)
-//   1 = Experimental menu2fon immutable bank sprite renderer (d74fef7; failed live Windows visual check)
-//   2 = Safe aligned native_text (per-character fixed-column 0x1CAD80 native_text; zero sprite mutation)
+//   1 = Verified native menu2fon sprite renderer (SoA x[4]/y[4] quad corners at tile+0xC0 + configurable tracking)
+//   2 = Aligned native_text fallback (per-character fixed-column 0x1CAD80 native_text; zero sprite mutation)
 #ifndef CRYSTALJOBS_SEARCH_RENDER_MODE
-#define CRYSTALJOBS_SEARCH_RENDER_MODE 2
+#define CRYSTALJOBS_SEARCH_RENDER_MODE 1
 #endif
 
 #if CRYSTALJOBS_SEARCH_RENDER_MODE == 1
@@ -210,22 +211,56 @@ struct Menu2fonTemplateKey {
 struct Menu2fonBank {
     bool active;
     Menu2fonTemplateKey key;
-    bool initialized[3][26];
-    GlyphSlot slots[3][26];
+    bool initialized[kGlyphX0Span][26];
+    GlyphSlot slots[kGlyphX0Span][26];
 };
 
 // Because FFXI's sprite renderer (0x121110) may queue raw sprite/node/tile pointers for
 // deferred submission and we cannot assume when a queued pointer is retired, a GlyphSlot
-// must NEVER be mutated once handed to draw_sprite. Every GlyphSlot depends solely on the
-// loaded (*sheet)[1] template, character position (0..2), and letter ('A'..'Z') — at most
-// 3 x 26 = 78 immutable slots per sheet generation, regardless of Search row count or frame
-// count. Multiple immutable banks handle menu2fon reloads without overwriting live slots;
-// if all banks are exhausted, draw_menu2fon_label returns false so draw_branch safely falls
-// back to native_text.
-static constexpr size_t kMaxMenu2fonBanks = 8;
+// must NEVER be mutated once handed to draw_sprite. Indexing by (x0 - kMinGlyphX0, letter)
+// across bounded x0 in [-2, 21] (24 x 26 slots) guarantees every glyph quad for ANY valid
+// trackingPx / offsetXPx / useGlyphWidths layout is immutable once initialized, with zero
+// aliasing across different letter-width combinations (e.g., AST vs FLT vs WAR).
+static constexpr size_t kMaxMenu2fonBanks = 4;
 static SRWLOCK menu2fon_lock = SRWLOCK_INIT;
 static Menu2fonBank g_menu2fon_banks[kMaxMenu2fonBanks]{};
 static size_t g_last_menu2fon_bank = 0;
+
+static void compute_search_glyph_positions(
+    const uint8_t widths[3],
+    const SearchPresentationConfig& cfg,
+    int16_t out_x0[3]) noexcept {
+    const int32_t tracking = (cfg.tracking_px < kMinTrackingPx) ? kMinTrackingPx
+                           : (cfg.tracking_px > kMaxTrackingPx) ? kMaxTrackingPx : cfg.tracking_px;
+    const int32_t offset_x = (cfg.offset_x_px < kMinOffsetXPx) ? kMinOffsetXPx
+                           : (cfg.offset_x_px > kMaxOffsetXPx) ? kMaxOffsetXPx : cfg.offset_x_px;
+    int32_t x[3];
+    x[0] = offset_x;
+    for (int i = 0; i < 2; ++i) {
+        const int32_t base_w = cfg.use_glyph_widths ? static_cast<int32_t>(widths[i]) : 8;
+        int32_t step = base_w + tracking;
+        if (step < 4) step = 4; // Prevent glyph collapse/overlap
+        x[i + 1] = x[i] + step;
+    }
+    // Keep right edge strictly within the 23px Search job column (clear of level digits at +23).
+    const int32_t right_edge = x[2] + static_cast<int32_t>(widths[2]);
+    if (right_edge > 23) {
+        int32_t shift = right_edge - 23;
+        if (x[0] - shift < kMinGlyphX0) {
+            shift = x[0] - kMinGlyphX0;
+        }
+        if (shift > 0) {
+            x[0] -= shift;
+            x[1] -= shift;
+            x[2] -= shift;
+        }
+    }
+    for (int i = 0; i < 3; ++i) {
+        if (x[i] < kMinGlyphX0) x[i] = kMinGlyphX0;
+        if (x[i] > kMaxGlyphX0) x[i] = kMaxGlyphX0;
+        out_x0[i] = static_cast<int16_t>(x[i]);
+    }
+}
 
 static bool menu2fon_key_matches(
     const Menu2fonTemplateKey& key,
@@ -245,7 +280,7 @@ static void init_glyph_slot(
     const uint8_t* src_sprite,
     const uint8_t* src_node,
     const uint8_t* src_tile,
-    int pos,
+    int16_t x0,
     size_t letter) noexcept {
     std::memcpy(slot.sprite, src_sprite, sizeof(slot.sprite));
     std::memcpy(slot.node, src_node, sizeof(slot.node));
@@ -266,12 +301,10 @@ static void init_glyph_slot(
     std::memcpy(slot.node + 0x10, &tile_ptr, sizeof(tile_ptr));
 
     const MenuGlyph g = menu_glyphs[letter];
-    const int16_t x0 = static_cast<int16_t>(pos * 8);
     const int16_t x1 = static_cast<int16_t>(x0 + g.w);
     // FFXI CXiSpriteTile stores quad corners at +0xC0 as Structure-of-Arrays:
     //   +0xC0: int16_t x[4] = { x0, x1, x0, x1 } (TL, TR, BL, BR)
     //   +0xC8: int16_t y[4] = { -1, -1,  9,  9 } (TL, TR, BL, BR)
-    // Previously interleaved {x0, -1, x1, -1, x0, 9, x1, 9} collapsed every glyph into a 45-degree wedge.
     const int16_t corners[8] = {x0, x1, x0, x1, -1, -1, 9, 9};
     const float u0 = static_cast<float>(g.u) * (1.0f / 256.0f);
     const float u1 = static_cast<float>(g.u + g.w) * (1.0f / 256.0f);
@@ -347,13 +380,23 @@ static bool draw_menu2fon_label(const char* custom, const SpriteArgs* args) noex
         ReleaseSRWLockExclusive(&menu2fon_lock);
         return false; // Safe capacity exhausted: never recycle live slots; caller falls back to native_text.
     }
+    const SearchPresentationConfig& pres = active_search_presentation();
+    const uint8_t widths[3] = {
+        menu_glyphs[static_cast<size_t>(custom[0] - 'A')].w,
+        menu_glyphs[static_cast<size_t>(custom[1] - 'A')].w,
+        menu_glyphs[static_cast<size_t>(custom[2] - 'A')].w,
+    };
+    int16_t x0s[3]{};
+    compute_search_glyph_positions(widths, pres, x0s);
+
     for (int i = 0; i < 3; ++i) {
         const size_t letter = static_cast<size_t>(custom[i] - 'A');
-        if (!bank->initialized[i][letter]) {
-            init_glyph_slot(bank->slots[i][letter], src_sprite, src_node, src_tile, i, letter);
-            bank->initialized[i][letter] = true;
+        const size_t x_idx = static_cast<size_t>(x0s[i] - kMinGlyphX0);
+        if (!bank->initialized[x_idx][letter]) {
+            init_glyph_slot(bank->slots[x_idx][letter], src_sprite, src_node, src_tile, x0s[i], letter);
+            bank->initialized[x_idx][letter] = true;
         }
-        slots[i] = &bank->slots[i][letter];
+        slots[i] = &bank->slots[x_idx][letter];
     }
     ReleaseSRWLockExclusive(&menu2fon_lock);
 
@@ -1487,6 +1530,101 @@ extern "C" uint32_t __stdcall CrystalJobsShutdown() {
     return failure;
 }
 
+static bool read_bounded_file_w(const wchar_t* path, char* buf, size_t max_bytes, size_t& out_len) noexcept {
+    out_len = 0;
+    if (path == nullptr || buf == nullptr || max_bytes == 0) return false;
+    HANDLE h = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    LARGE_INTEGER sz{};
+    const BOOL got_size = GetFileSizeEx(h, &sz);
+    if (!got_size || sz.QuadPart <= 0 || static_cast<uint64_t>(sz.QuadPart) > max_bytes) {
+        CloseHandle(h);
+        return false;
+    }
+    DWORD total_read = 0;
+    const DWORD expected = static_cast<DWORD>(sz.QuadPart);
+    while (total_read < expected) {
+        DWORD chunk = 0;
+        if (!ReadFile(h, buf + total_read, expected - total_read, &chunk, nullptr) || chunk == 0) {
+            CloseHandle(h);
+            return false;
+        }
+        total_read += chunk;
+    }
+    CloseHandle(h);
+    out_len = static_cast<size_t>(total_read);
+    return true;
+}
+
+static bool build_trusted_data_path(HMODULE mod, const wchar_t* filename, wchar_t* out, size_t out_cap) noexcept {
+    if (mod == nullptr || filename == nullptr || out == nullptr || out_cap < 32) return false;
+    wchar_t mod_path[MAX_PATH]{};
+    const DWORD n = GetModuleFileNameW(mod, mod_path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return false;
+    wchar_t* slash = nullptr;
+    for (wchar_t* p = mod_path; *p != L'\0'; ++p) {
+        if (*p == L'\\' || *p == L'/') slash = p;
+    }
+    if (slash == nullptr) return false;
+    *(slash + 1) = L'\0';
+    const int written = std::swprintf(out, out_cap, L"%lsdata\\%ls", mod_path, filename);
+    if (written <= 0 || static_cast<size_t>(written) >= out_cap) return false;
+    // Reject any relative traversal sequences.
+    if (std::wcsstr(out, L"..") != nullptr) return false;
+    return true;
+}
+
+static void load_runtime_identity_and_presentation(HMODULE mod) noexcept {
+    wchar_t ident_path[MAX_PATH]{};
+    static char file_buf[kMaxIdentityFileBytes + 1]{};
+    size_t file_len = 0;
+    if (build_trusted_data_path(mod, L"soul-identities.json", ident_path, MAX_PATH) &&
+        read_bounded_file_w(ident_path, file_buf, kMaxIdentityFileBytes, file_len)) {
+        static RuntimeIdentityTable parsed_table{};
+        if (parse_runtime_identity_json(file_buf, file_len, parsed_table)) {
+            publish_runtime_identity_snapshot(parsed_table);
+            char msg[160]{};
+            std::snprintf(msg, sizeof(msg), "[crystaljobs] Loaded runtime soul-identities.json (66 souls, hash=%s)\n",
+                parsed_table.registry_hash);
+            OutputDebugStringA(msg);
+        } else {
+            clear_runtime_identity_snapshot(parsed_table.status, parsed_table.warning);
+            char msg[192]{};
+            std::snprintf(msg, sizeof(msg), "[crystaljobs] WARNING: Invalid soul-identities.json (%s); using compiled fallback (%s)\n",
+                parsed_table.warning, kRegistryHash);
+            OutputDebugStringA(msg);
+        }
+    } else {
+        clear_runtime_identity_snapshot(IDENTITY_STATUS_FILE_MISSING, "soul-identities.json missing or unreadable; using compiled fallback");
+        char msg[192]{};
+        std::snprintf(msg, sizeof(msg), "[crystaljobs] WARNING: data\\soul-identities.json not found; using compiled fallback (%s)\n",
+            kRegistryHash);
+        OutputDebugStringA(msg);
+    }
+
+    wchar_t pres_path[MAX_PATH]{};
+    size_t pres_len = 0;
+    if (build_trusted_data_path(mod, L"crystaljobs-presentation.json", pres_path, MAX_PATH) &&
+        read_bounded_file_w(pres_path, file_buf, kMaxPresentationFileBytes, pres_len)) {
+        SearchPresentationConfig cfg{};
+        if (parse_presentation_config_json(file_buf, pres_len, cfg)) {
+            publish_search_presentation(cfg);
+            char msg[160]{};
+            std::snprintf(msg, sizeof(msg), "[crystaljobs] Loaded crystaljobs-presentation.json (tracking=%d, offsetX=%d, widths=%u)\n",
+                cfg.tracking_px, cfg.offset_x_px, cfg.use_glyph_widths ? 1u : 0u);
+            OutputDebugStringA(msg);
+        } else {
+            publish_search_presentation(cfg);
+            char msg[192]{};
+            std::snprintf(msg, sizeof(msg), "[crystaljobs] WARNING: Invalid crystaljobs-presentation.json (%s); using default spacing\n",
+                cfg.warning);
+            OutputDebugStringA(msg);
+        }
+    } else {
+        publish_search_presentation(default_presentation_config());
+    }
+}
+
 extern "C" uint32_t __stdcall CrystalJobsInitialize() {
     AcquireSRWLockExclusive(&lifecycle_lock);
     if (enabled.load()) { ReleaseSRWLockExclusive(&lifecycle_lock); return 0; }
@@ -1524,6 +1662,7 @@ extern "C" uint32_t __stdcall CrystalJobsInitialize() {
         hook_diag.init_stage = CRYSTALJOBS_INIT_PIN_FAIL;
         last_error.store(2); ReleaseSRWLockExclusive(&lifecycle_lock); return 2;
     }
+    load_runtime_identity_and_presentation(pinned);
     for (uint32_t i = 0; i < kPatchCount; ++i) {
         auto& patch = patches[i];
         if (!patch.install(base)) {
@@ -1700,6 +1839,37 @@ extern "C" uint32_t __stdcall CrystalJobsGetStatus(CrystalJobsStatus* output, ui
     ReleaseSRWLockShared(&state_lock);
     status.decoded_rows = decoded_rows.load(); status.item_labels = item_lookups.load(); status.search_labels = short_draws.load(); status.full_labels = full_lookups.load();
     *output = status;
+    return 0;
+}
+
+extern "C" uint32_t __stdcall CrystalJobsGetIdentityDiagnostics(CrystalJobsIdentityDiagnostics* output, uint32_t size) {
+    if (output == nullptr || size < sizeof(CrystalJobsIdentityDiagnostics)) return 1;
+    CrystalJobsIdentityDiagnostics diag{};
+    diag.size = sizeof(CrystalJobsIdentityDiagnostics);
+    diag.version = 1;
+    const auto* snap = g_active_runtime_identity.load(std::memory_order_acquire);
+    if (snap != nullptr && snap->active) {
+        diag.source = 1;
+        diag.status = snap->status;
+        diag.schema_version = snap->schema_version;
+        diag.soul_count = snap->soul_count;
+        std::snprintf(diag.active_registry_hash, sizeof(diag.active_registry_hash), "%s", snap->registry_hash);
+        std::snprintf(diag.warning, sizeof(diag.warning), "%s", snap->warning);
+    } else {
+        diag.source = 0;
+        diag.status = g_last_identity_status;
+        diag.schema_version = kIdentitySchemaVersion;
+        diag.soul_count = 66;
+        std::snprintf(diag.active_registry_hash, sizeof(diag.active_registry_hash), "%s", kRegistryHash);
+        std::snprintf(diag.warning, sizeof(diag.warning), "%s", g_last_identity_warning);
+    }
+    std::snprintf(diag.compiled_registry_hash, sizeof(diag.compiled_registry_hash), "%s", kRegistryHash);
+    const SearchPresentationConfig& pres = active_search_presentation();
+    diag.tracking_px = pres.tracking_px;
+    diag.offset_x_px = pres.offset_x_px;
+    diag.use_glyph_widths = pres.use_glyph_widths ? 1u : 0u;
+    diag.presentation_from_file = pres.from_file ? 1u : 0u;
+    *output = diag;
     return 0;
 }
 static_assert(sizeof(CrystalJobsStatus) == 68);

@@ -98,6 +98,20 @@
       "size": 130048
     },
     {
+      "category": "plugin",
+      "sourcePath": "plugins/ashita4/data/crystaljobs-presentation.json",
+      "targetPath": "data/crystaljobs-presentation.json",
+      "sha256": "f41f03a5a48da595f0c3534cff67ffa5e49390175178e6d3ccff8e045ec18e7f",
+      "size": 118
+    },
+    {
+      "category": "plugin",
+      "sourcePath": "plugins/ashita4/data/soul-identities.json",
+      "targetPath": "data/soul-identities.json",
+      "sha256": "a49c665c0c35e0b0208c4ecb6c7527f4ed1979191cefa22f309ca566105933ca",
+      "size": 6600
+    },
+    {
       "category": "addon",
       "sourcePath": "addons/ashita4/crystalsocket/assets/aegistemplar.png",
       "targetPath": "crystalsocket/assets/aegistemplar.png",

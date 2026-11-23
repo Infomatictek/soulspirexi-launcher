@@ -507,6 +507,13 @@ static void multi_job_checks() {
 #endif
 
 #if CRYSTALJOBS_SEARCH_RENDER_MODE == 1
+    // Set legacy pos*8 presentation for the 594-draw deferred regression check.
+    SearchPresentationConfig legacy_pres = default_presentation_config();
+    legacy_pres.tracking_px = 0;
+    legacy_pres.offset_x_px = 0;
+    legacy_pres.use_glyph_widths = false;
+    publish_search_presentation(legacy_pres);
+
     // Deferred multi-frame, multi-row Search regression exceeding old 192-slot capacity:
     // Queue 3 consecutive frames x 66 Souls x 3 glyphs = 594 deferred draws, then verify
     // EVERY queued sprite* pointer from Frame 1..3 remains intact, immutable, and non-aliasing.
@@ -664,6 +671,7 @@ static void multi_job_checks() {
     assert(sprite_abi(reinterpret_cast<void*>(&normal_sprite_hook), row_a));
     assert(sprite_calls == 3 && text_calls == 0);
     std::memcpy(mock_tile, orig_tile_copy, sizeof(orig_tile_copy));
+    publish_search_presentation(default_presentation_config());
 #endif // CRYSTALJOBS_SEARCH_RENDER_MODE == 1
     pname_sheet_slot = nullptr;
 
@@ -1309,7 +1317,107 @@ static void weapon_rule_checks() {
     selftest_alive = false;
 }
 
+static void runtime_identity_and_spacing_checks() {
+    // 1. Load real generated plugins/ashita4/data/soul-identities.json and verify all 66 Souls.
+    static char raw_buf[kMaxIdentityFileBytes + 1]{};
+    size_t raw_len = 0;
+    assert(read_bounded_file_w(L"..\\..\\plugins\\ashita4\\data\\soul-identities.json", raw_buf, kMaxIdentityFileBytes, raw_len));
+    static RuntimeIdentityTable t1{};
+    assert(parse_runtime_identity_json(raw_buf, raw_len, t1));
+    assert(t1.active && t1.soul_count == 66 && t1.schema_version == 1);
+    assert(std::strcmp(t1.registry_hash, kRegistryHash) == 0);
+    publish_runtime_identity_snapshot(t1);
+    assert(std::strcmp(label_for(4, 1, false), "AST") == 0);
+    assert(std::strcmp(label_for(4, 1, true), "Goetist") == 0);
+    assert(std::strcmp(label_for(13, 3, true), "Fuin") == 0);
+
+    CrystalJobsIdentityDiagnostics idiag{};
+    assert(CrystalJobsGetIdentityDiagnostics(&idiag, sizeof(idiag)) == 0);
+    assert(idiag.source == 1 && idiag.soul_count == 66 && std::strcmp(idiag.active_registry_hash, kRegistryHash) == 0);
+
+    // 2. Same binary, second valid 66-Soul fixture renaming BLM branch 1 (AST -> GOE) without DLL rebuild!
+    static RuntimeIdentityTable t2 = t1;
+    std::snprintf(t2.entries[4][1].abbr, sizeof(t2.entries[4][1].abbr), "GOE");
+    const uint64_t t2_fnv = detail::compute_table_fnv1a64(t2);
+    static char renamed_json[kMaxIdentityFileBytes]{};
+    int pos = std::snprintf(renamed_json, sizeof(renamed_json),
+        "{\"schemaVersion\":1,\"registryVersion\":\"test-rename\",\"registryHash\":\"1122334455667788\","
+        "\"integrityFnv1a64\":\"%016llx\",\"soulCount\":66,\"souls\":[",
+        static_cast<unsigned long long>(t2_fnv));
+    assert(pos > 0);
+    bool first = true;
+    for (uint8_t j = 1; j <= 22; ++j) {
+        for (uint8_t b = 1; b <= 3; ++b) {
+            const auto& e = t2.entries[j][b];
+            const int n = std::snprintf(renamed_json + pos, sizeof(renamed_json) - static_cast<size_t>(pos),
+                "%s{\"jobId\":%u,\"branch\":%u,\"name\":\"%s\",\"abbr\":\"%s\"}",
+                first ? "" : ",", static_cast<unsigned>(j), static_cast<unsigned>(b), e.name, e.abbr);
+            assert(n > 0);
+            pos += n;
+            first = false;
+        }
+    }
+    pos += std::snprintf(renamed_json + pos, sizeof(renamed_json) - static_cast<size_t>(pos), "]}");
+    static RuntimeIdentityTable parsed_t2{};
+    assert(parse_runtime_identity_json(renamed_json, static_cast<size_t>(pos), parsed_t2));
+    publish_runtime_identity_snapshot(parsed_t2);
+    assert(std::strcmp(label_for(4, 1, false), "GOE") == 0);
+    assert(CrystalJobsGetIdentityDiagnostics(&idiag, sizeof(idiag)) == 0);
+    assert(idiag.source == 1 && std::strcmp(idiag.active_registry_hash, "1122334455667788") == 0);
+
+    // 3. Reject corrupted / tampered / bad-schema / duplicate / overlong identity payloads & verify safe fallback.
+    static RuntimeIdentityTable bad{};
+    assert(!parse_runtime_identity_json("", 0, bad) && bad.status == IDENTITY_STATUS_FILE_MISSING);
+    const char* bad_schema = "{\"schemaVersion\":99,\"registryHash\":\"0e3278fac7296cb3\",\"integrityFnv1a64\":\"0000000000000000\",\"soulCount\":66,\"souls\":[]}";
+    assert(!parse_runtime_identity_json(bad_schema, std::strlen(bad_schema), bad) && bad.status == IDENTITY_STATUS_BAD_SCHEMA);
+    // Tamper 1 byte in renamed_json integrity hash
+    renamed_json[std::strstr(renamed_json, "integrityFnv1a64") - renamed_json + 19] ^= 1;
+    assert(!parse_runtime_identity_json(renamed_json, static_cast<size_t>(pos), bad) && bad.status == IDENTITY_STATUS_BAD_INTEGRITY);
+
+    clear_runtime_identity_snapshot(IDENTITY_STATUS_BAD_INTEGRITY, "tampered fixture");
+    assert(std::strcmp(label_for(4, 1, false), "AST") == 0); // Safe compiled fallback
+    assert(CrystalJobsGetIdentityDiagnostics(&idiag, sizeof(idiag)) == 0);
+    assert(idiag.source == 0 && idiag.status == IDENTITY_STATUS_BAD_INTEGRITY && idiag.warning[0] != '\0');
+
+    // 4. Presentation config parsing, bounds validation, and glyph spacing algorithm.
+    SearchPresentationConfig pres{};
+    size_t pres_len = 0;
+    assert(read_bounded_file_w(L"..\\..\\plugins\\ashita4\\data\\crystaljobs-presentation.json", raw_buf, kMaxPresentationFileBytes, pres_len));
+    assert(parse_presentation_config_json(raw_buf, pres_len, pres));
+    assert(pres.from_file && pres.tracking_px == -1 && pres.offset_x_px == 0 && pres.use_glyph_widths);
+
+    const char* bad_pres = "{\"schemaVersion\":1,\"searchBadge\":{\"trackingPx\":-9,\"offsetXPx\":0,\"useGlyphWidths\":true}}";
+    SearchPresentationConfig bad_p{};
+    assert(!parse_presentation_config_json(bad_pres, std::strlen(bad_pres), bad_p));
+    assert(!bad_p.from_file && bad_p.tracking_px == -1);
+
+#if CRYSTALJOBS_SEARCH_RENDER_MODE == 1
+    // AST widths: A=7, S=8, T=7. Default tracking=-1 -> x0 = {0, 6, 13}, right edge = 20 <= 23.
+    const uint8_t ast_w[3] = {menu_glyphs['A' - 'A'].w, menu_glyphs['S' - 'A'].w, menu_glyphs['T' - 'A'].w};
+    int16_t ast_x[3]{};
+    compute_search_glyph_positions(ast_w, pres, ast_x);
+    assert(ast_x[0] == 0 && ast_x[1] == 6 && ast_x[2] == 13 && (ast_x[2] + ast_w[2]) == 20);
+
+    // Legacy spacing mode without recompiling: tracking=0, offsetX=0, useGlyphWidths=false -> {0, 8, 16}.
+    SearchPresentationConfig leg = default_presentation_config();
+    leg.tracking_px = 0; leg.offset_x_px = 0; leg.use_glyph_widths = false;
+    compute_search_glyph_positions(ast_w, leg, ast_x);
+    assert(ast_x[0] == 0 && ast_x[1] == 8 && ast_x[2] == 16);
+
+    // Max-width WWW (8,8,8) with max tracking=+2 and max offsetX=+3 still stays <= 23px (clear of level digits).
+    const uint8_t www_w[3] = {8, 8, 8};
+    SearchPresentationConfig wide = default_presentation_config();
+    wide.tracking_px = 2; wide.offset_x_px = 3; wide.use_glyph_widths = true;
+    int16_t www_x[3]{};
+    compute_search_glyph_positions(www_w, wide, www_x);
+    assert(www_x[0] >= kMinGlyphX0 && (www_x[2] + www_w[2]) <= 23);
+#endif
+    publish_runtime_identity_snapshot(t1);
+    publish_search_presentation(pres);
+}
+
 int main() {
+    runtime_identity_and_spacing_checks();
     uint8_t event[8] = {1, 1, 1, 2, 100, 0, 0, 0};
     state.update(event, 8, 0xffffff00);
     assert(state.alive(0xffffff10, 100, 1));
@@ -1462,6 +1570,10 @@ int main() {
     const auto get_diag = reinterpret_cast<uint32_t(__stdcall*)(CrystalJobsHookDiagnostics*, uint32_t)>(GetProcAddress(dll, "CrystalJobsGetHookDiagnostics"));
     assert(get_diag != nullptr);
     CrystalJobsHookDiagnostics dll_diag{};
+    const auto get_id_diag = reinterpret_cast<uint32_t(__stdcall*)(CrystalJobsIdentityDiagnostics*, uint32_t)>(GetProcAddress(dll, "CrystalJobsGetIdentityDiagnostics"));
+    assert(get_id_diag != nullptr);
+    CrystalJobsIdentityDiagnostics dll_id_diag{};
+    assert(get_id_diag(&dll_id_diag, sizeof(dll_id_diag)) == 0 && dll_id_diag.version == 1 && dll_id_diag.soul_count == 66);
     assert(get_diag(&dll_diag, sizeof(dll_diag)) == 0 && dll_diag.size == 60 && dll_diag.version == 1 &&
            dll_diag.expected_hooks == 24 && dll_diag.total_hooks == 0 && dll_diag.init_stage == CRYSTALJOBS_INIT_NOT_RUN);
     const auto get_vis_st = reinterpret_cast<uint32_t(__stdcall*)(CrystalJobsVisibilityStatus*, uint32_t)>(GetProcAddress(dll, "CrystalJobsGetVisibilityStatus"));
