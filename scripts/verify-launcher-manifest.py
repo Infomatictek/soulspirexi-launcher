@@ -402,7 +402,7 @@ def verify_manifest(repo_root: Path, manifest_path: Path | None = None) -> list[
             errors.append(
                 f"manifest.json registry.nativeDllSha256 ({reg_meta.get('nativeDllSha256')}) != crystaljobs.dll sha256 ({dll_entry.get('sha256')})"
             )
-        if declared_channel == "testing" and str(manifest.get("candidateId") or "").strip() == "registry-24hook":
+        if declared_channel == "testing" and str(manifest.get("candidateId") or "").strip() in ("registry-24hook", "search-legacy-text", "search-aligned-text"):
             prov_path = (manifest_path or (repo_root / "manifest.json")).parent / "crystaljobs-provenance.json"
             if prov_path.is_file():
                 prov_data = json.loads(prov_path.read_text(encoding="utf-8-sig"))
