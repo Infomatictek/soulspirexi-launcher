@@ -191,7 +191,11 @@ struct Menu2fonTemplateKey {
     const uint8_t* src_tile;
     uint8_t sprite_bytes[0x30];
     uint8_t node_bytes[0x20];
-    uint8_t tile_bytes[0xE0];
+    // Compare only the static tile header/texture prefix [0x00..0x4F].
+    // [0x50..0xBF] holds FFXI's per-draw D3D8 TLVERTEX screen-position/diffuse buffer
+    // (4 x 28-byte vertices with UVs at 0x64, 0x80, 0x9C, 0xB8), which FFXI's 0x121110
+    // mutates on every vanilla WAR draw at a different screen Y or highlight color.
+    uint8_t tile_header_bytes[0x50];
 };
 
 struct Menu2fonBank {
@@ -224,7 +228,7 @@ static bool menu2fon_key_matches(
            key.src_tile == src_tile &&
            std::memcmp(key.sprite_bytes, src_sprite, sizeof(key.sprite_bytes)) == 0 &&
            std::memcmp(key.node_bytes, src_node, sizeof(key.node_bytes)) == 0 &&
-           std::memcmp(key.tile_bytes, src_tile, sizeof(key.tile_bytes)) == 0;
+           std::memcmp(key.tile_header_bytes, src_tile, sizeof(key.tile_header_bytes)) == 0;
 }
 
 static void init_glyph_slot(
@@ -240,7 +244,16 @@ static void init_glyph_slot(
 
     uint8_t* node_ptr = slot.node;
     uint8_t* tile_ptr = slot.tile;
+    // Repoint CYyList head (+0x04) and any matching tail/cursor (+0x08, +0x0C) so
+    // list traversal inside FFXI 0x121110 never leaks back to WAR's shared src_node.
     std::memcpy(slot.sprite + 0x04, &node_ptr, sizeof(node_ptr));
+    for (size_t off : {size_t{0x08}, size_t{0x0C}}) {
+        const uint8_t* existing = nullptr;
+        std::memcpy(&existing, slot.sprite + off, sizeof(existing));
+        if (existing == src_node) {
+            std::memcpy(slot.sprite + off, &node_ptr, sizeof(node_ptr));
+        }
+    }
     std::memcpy(slot.node + 0x10, &tile_ptr, sizeof(tile_ptr));
 
     const MenuGlyph g = menu_glyphs[letter];
@@ -309,7 +322,7 @@ static bool draw_menu2fon_label(const char* custom, const SpriteArgs* args) noex
                     bank->key.src_tile = src_tile;
                     std::memcpy(bank->key.sprite_bytes, src_sprite, sizeof(bank->key.sprite_bytes));
                     std::memcpy(bank->key.node_bytes, src_node, sizeof(bank->key.node_bytes));
-                    std::memcpy(bank->key.tile_bytes, src_tile, sizeof(bank->key.tile_bytes));
+                    std::memcpy(bank->key.tile_header_bytes, src_tile, sizeof(bank->key.tile_header_bytes));
                     std::memset(bank->initialized, 0, sizeof(bank->initialized));
                     g_last_menu2fon_bank = bi;
                     break;

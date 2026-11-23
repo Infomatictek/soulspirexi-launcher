@@ -575,6 +575,83 @@ public sealed class ManagedUpdateAndChannelTests
         Assert.NotNull(result.Manifest);
         Assert.Equal("registry-24hook", result.Manifest!.CandidateId);
         Assert.Equal("de6314e97385e328", result.Manifest.Registry?.Hash);
-        Assert.Contains(requestedUrls, u => u.Contains("fix/native-search-label-and-testing-candidate/channels/testing-registry-24hook/manifest.json"));
+        Assert.Contains(requestedUrls, u => u.Contains($"{ManifestUpdateService.TestingRegistry24HookBranch}/channels/testing-registry-24hook/manifest.json"));
+    }
+
+    [Fact]
+    public void PopulateNativeDllDiagnostics_ReportsPassFailUnknownWithoutModifyingDll()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"soulspire_diag_{Guid.NewGuid():N}");
+        try
+        {
+            var ashitaDir = Path.Combine(tempRoot, "Ashita");
+            var pluginDir = Path.Combine(ashitaDir, "plugins");
+            Directory.CreateDirectory(pluginDir);
+
+            // Synthetic minimal PE32 x86 (MZ + e_lfanew=0x40 + PE\0\0 + Machine=0x014C)
+            var peBytes = new byte[128];
+            peBytes[0] = 0x4D; peBytes[1] = 0x5A; // MZ
+            BitConverter.GetBytes(0x40).CopyTo(peBytes, 0x3C);
+            peBytes[0x40] = (byte)'P'; peBytes[0x41] = (byte)'E';
+            BitConverter.GetBytes((ushort)0x014C).CopyTo(peBytes, 0x44); // x86
+
+            var dllPath = Path.Combine(pluginDir, "crystaljobs.dll");
+            File.WriteAllBytes(dllPath, peBytes);
+            var peSha = Sha256(peBytes);
+
+            var settings = new LauncherSettings
+            {
+                AshitaPath = ashitaDir,
+                UpdateChannel = UpdateChannel.TestingRegistry24Hook
+            };
+            var manifest = new LauncherManifest
+            {
+                Channel = "testing",
+                CandidateId = "registry-24hook",
+                Registry = new ManifestRegistryMetadata
+                {
+                    Hash = "de6314e97385e328",
+                    NativeDllCompiledHash = "de6314e97385e328",
+                    NativeDllSha256 = peSha,
+                    CrystalJobsHooks = 24
+                },
+                Files =
+                [
+                    new ManifestFileEntry
+                    {
+                        Category = "plugin",
+                        SourcePath = "channels/testing-registry-24hook/payload/plugins/ashita4/crystaljobs.dll",
+                        TargetPath = "crystaljobs.dll",
+                        Sha256 = peSha
+                    }
+                ]
+            };
+
+            // PASS case (matching SHA-256 + PE32 x86, process inspection skipped -> UNKNOWN)
+            var diagPass = new InstallDiagnostics();
+            FfxiInstallDetector.PopulateNativeDllDiagnostics(diagPass, settings, manifest, inspectRunningProcess: false);
+            Assert.Equal("PASS", diagPass.NativeDllSha256Status);
+            Assert.Equal("PASS", diagPass.NativeDllArchitectureStatus);
+            Assert.Equal("de6314e97385e328", diagPass.NativeRegistryCompiledHash);
+            Assert.Equal("24", diagPass.NativeHookCount);
+            Assert.Equal("UNKNOWN", diagPass.NativeLoadedModuleStatus);
+            Assert.Equal(peBytes, File.ReadAllBytes(dllPath)); // Strictly read-only
+
+            // FAIL case (mismatched expected SHA-256)
+            manifest.Files[0].Sha256 = new string('f', 64);
+            var diagFail = new InstallDiagnostics();
+            FfxiInstallDetector.PopulateNativeDllDiagnostics(diagFail, settings, manifest, inspectRunningProcess: false);
+            Assert.Equal("FAIL", diagFail.NativeDllSha256Status);
+
+            // UNKNOWN expected SHA case
+            var diagUnknown = new InstallDiagnostics();
+            FfxiInstallDetector.PopulateNativeDllDiagnostics(diagUnknown, settings, manifest: null, inspectRunningProcess: false);
+            Assert.Equal("UNKNOWN", diagUnknown.NativeDllSha256Status);
+            Assert.Equal("UNKNOWN", diagUnknown.NativeExpectedDllSha256);
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, recursive: true);
+        }
     }
 }
