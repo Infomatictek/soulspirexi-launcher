@@ -27,8 +27,8 @@ local DEFAULT_SECTIONS = {
         short_key = 'talents',
         badge = 'PLACEHOLDER',
         accent = 'cyan',
-        summary = 'Browse and allocate Weapon Skill evolution and talent trees.',
-        details = 'Phase 1A placeholder. Existing soulspire_talents addon remains active and untouched until the dedicated migration milestone.',
+        summary = 'Browse and allocate Weapon Skill evolution and talent trees in The Soulforge.',
+        details = 'Powered by SoulspireXI Core UI Foundations (core/foundations.lua). Open The Soulforge directly via /talents or /tal.',
         existing_addon = 'soulspire_talents',
     },
     {
@@ -37,8 +37,8 @@ local DEFAULT_SECTIONS = {
         short_key = 'mastery',
         badge = 'PLACEHOLDER',
         accent = 'gold',
-        summary = 'Review Soul progression, active Soul Actions, and mastery milestones.',
-        details = 'Phase 1A placeholder. Existing soulspire_soulhud and soulspire_soul_actions addons remain active with full native action visibility and naming.',
+        summary = 'Review Soul progression, active Soul Actions, and Universal Soul HUD trackers.',
+        details = 'Universal Soul HUD (/soulhud) shares SoulspireXI Core UI Foundations with Minimal, Standard, and Expanded combat display modes.',
         existing_addon = 'soulspire_soul_actions',
     },
     {
