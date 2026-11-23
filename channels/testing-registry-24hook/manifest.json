@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.1.1-testing.registry24",
+  "manifestVersion": "2.1.4-testing.registry24",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
-    "version": "feat/centralized-game-registry-phase5c (57dbdbe)",
-    "branch": "feat/centralized-game-registry-phase5c",
-    "commit": "57dbdbe",
+    "version": "feat/soul-identity-registry-integration (6e4311c)",
+    "branch": "feat/soul-identity-registry-integration",
+    "commit": "6e4311c",
     "dockerImage": "soulspirexi/server:registry",
     "crystalJobsHooks": 24,
-    "notes": "24-hook Centralized Registry + immutable Search glyph bank candidate (pending Windows FFXI client verification)"
+    "notes": "24-hook Approved 66-Soul Identity Registry (0e3278fac7296cb3) + Flintlock/TLVERTEX Search glyph bank fix + Native DLL Diagnostics (pending Windows FFXI client verification)"
   },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
@@ -23,8 +23,8 @@
   "repo": {
     "owner": "Infomatictek",
     "name": "soulspirexi-launcher",
-    "branch": "fix/native-search-label-and-testing-candidate",
-    "rawBaseUrl": "https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/fix/native-search-label-and-testing-candidate"
+    "branch": "feat/soul-identity-registry-integration",
+    "rawBaseUrl": "https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/feat/soul-identity-registry-integration"
   },
   "bootstrap": {
     "ashitaZipUrl": "https://github.com/AshitaXI/Ashita-v4beta/archive/refs/heads/main.zip",
@@ -95,7 +95,7 @@
       "category": "plugin",
       "sourcePath": "channels/testing-registry-24hook/payload/plugins/ashita4/crystaljobs.dll",
       "targetPath": "crystaljobs.dll",
-      "sha256": "8467d286ea52b14913dcbe2f5dd2dc4c6de3ba73abdd504aff6b0e1e5b1b9cbd",
+      "sha256": "24d409462d8b23d053968b89c702594fe236bd906f737668fc2c59433d248a9b",
       "size": 130560
     },
     {
@@ -417,8 +417,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/crystalsocket/soul_registry_generated.lua",
       "targetPath": "crystalsocket/soul_registry_generated.lua",
-      "sha256": "ea0c5970d73647ccbee7dd33faf0ad134e85cb996cb3492b20b02244e24b268b",
-      "size": 18852
+      "sha256": "3f9534c12a9be7a16381a082bb2a4beddb69475938b58f434c766ef4c72350be",
+      "size": 18834
     },
     {
       "category": "addon",
@@ -6003,8 +6003,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/soul_registry_generated.lua",
       "targetPath": "soulspire_core/core/soul_registry_generated.lua",
-      "sha256": "ea0c5970d73647ccbee7dd33faf0ad134e85cb996cb3492b20b02244e24b268b",
-      "size": 18852
+      "sha256": "3f9534c12a9be7a16381a082bb2a4beddb69475938b58f434c766ef4c72350be",
+      "size": 18834
     },
     {
       "category": "addon",
@@ -6297,8 +6297,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_soul_actions/soul_registry_generated.lua",
       "targetPath": "soulspire_soul_actions/soul_registry_generated.lua",
-      "sha256": "ea0c5970d73647ccbee7dd33faf0ad134e85cb996cb3492b20b02244e24b268b",
-      "size": 18852
+      "sha256": "3f9534c12a9be7a16381a082bb2a4beddb69475938b58f434c766ef4c72350be",
+      "size": 18834
     },
     {
       "category": "addon",
@@ -7578,8 +7578,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_soulhud/soulhud_roster_generated.lua",
       "targetPath": "soulspire_soulhud/soulhud_roster_generated.lua",
-      "sha256": "974990d657fa738453e3d85eefcf1edac044fcc20b29be35ef13d53e8c8931b6",
-      "size": 15546
+      "sha256": "11995e2b0f7345ff60ada6936cdc70c77b1b9123fd246890b26641d963e14f10",
+      "size": 15491
     },
     {
       "category": "addon",
@@ -7942,8 +7942,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_talents/soul_registry_generated.lua",
       "targetPath": "soulspire_talents/soul_registry_generated.lua",
-      "sha256": "ea0c5970d73647ccbee7dd33faf0ad134e85cb996cb3492b20b02244e24b268b",
-      "size": 18852
+      "sha256": "3f9534c12a9be7a16381a082bb2a4beddb69475938b58f434c766ef4c72350be",
+      "size": 18834
     },
     {
       "category": "addon",
@@ -9955,11 +9955,11 @@
     }
   ],
   "registry": {
-    "version": "2026.11.22-phase2-locked",
-    "hash": "de6314e97385e328",
+    "version": "2026.11.22-66-souls-approved",
+    "hash": "0e3278fac7296cb3",
     "idLockStatus": "locked",
-    "nativeDllCompiledHash": "de6314e97385e328",
-    "nativeDllSha256": "8467d286ea52b14913dcbe2f5dd2dc4c6de3ba73abdd504aff6b0e1e5b1b9cbd",
+    "nativeDllCompiledHash": "0e3278fac7296cb3",
+    "nativeDllSha256": "24d409462d8b23d053968b89c702594fe236bd906f737668fc2c59433d248a9b",
     "nativeDllClientVerified": false,
     "crystalJobsHooks": 24
   },
