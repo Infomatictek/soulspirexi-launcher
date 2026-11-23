@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.1.6-testing.registry24",
+  "manifestVersion": "2.1.7-testing.runtime-identity",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
-    "version": "feat/soul-identity-registry-integration (6e4311c)",
-    "branch": "feat/soul-identity-registry-integration",
-    "commit": "6e4311c",
+    "version": "feat/runtime-soul-identity-and-spacing (1938472)",
+    "branch": "feat/runtime-soul-identity-and-spacing",
+    "commit": "1938472",
     "dockerImage": "soulspirexi/server:registry",
     "crystalJobsHooks": 24,
-    "notes": "Candidate B (Fixed native menu2fon): 24-hook Approved 66-Soul Registry (0e3278fac7296cb3) with SoA quad corners {x0,x1,x0,x1,-1,-1,9,9} at tile+0xC0 + immutable glyph banks"
+    "notes": "Runtime Soul Identity Loader (data/soul-identities.json) + Configurable menu2fon Glyph Spacing (data/crystaljobs-presentation.json, trackingPx=-1) + SoA tile+0xC0 fix"
   },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
@@ -23,8 +23,8 @@
   "repo": {
     "owner": "Infomatictek",
     "name": "soulspirexi-launcher",
-    "branch": "feat/soul-identity-registry-integration",
-    "rawBaseUrl": "https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/feat/soul-identity-registry-integration"
+    "branch": "feat/runtime-soul-identity-and-spacing",
+    "rawBaseUrl": "https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/feat/runtime-soul-identity-and-spacing"
   },
   "bootstrap": {
     "ashitaZipUrl": "https://github.com/AshitaXI/Ashita-v4beta/archive/refs/heads/main.zip",
@@ -95,8 +95,22 @@
       "category": "plugin",
       "sourcePath": "channels/testing-registry-24hook/payload/plugins/ashita4/crystaljobs.dll",
       "targetPath": "crystaljobs.dll",
-      "sha256": "7046daaf84c5242ca96b17ba5c846ba261466744bb51e78d0acabb111118f156",
-      "size": 130560
+      "sha256": "d194439a672dc837c065cd131229bf553c25942dbbdce8f425ef40859d50691a",
+      "size": 167936
+    },
+    {
+      "category": "plugin",
+      "sourcePath": "plugins/ashita4/data/crystaljobs-presentation.json",
+      "targetPath": "data/crystaljobs-presentation.json",
+      "sha256": "f41f03a5a48da595f0c3534cff67ffa5e49390175178e6d3ccff8e045ec18e7f",
+      "size": 118
+    },
+    {
+      "category": "plugin",
+      "sourcePath": "plugins/ashita4/data/soul-identities.json",
+      "targetPath": "data/soul-identities.json",
+      "sha256": "a49c665c0c35e0b0208c4ecb6c7527f4ed1979191cefa22f309ca566105933ca",
+      "size": 6600
     },
     {
       "category": "addon",
@@ -9959,7 +9973,7 @@
     "hash": "0e3278fac7296cb3",
     "idLockStatus": "locked",
     "nativeDllCompiledHash": "0e3278fac7296cb3",
-    "nativeDllSha256": "7046daaf84c5242ca96b17ba5c846ba261466744bb51e78d0acabb111118f156",
+    "nativeDllSha256": "d194439a672dc837c065cd131229bf553c25942dbbdce8f425ef40859d50691a",
     "nativeDllClientVerified": false,
     "crystalJobsHooks": 24
   },
