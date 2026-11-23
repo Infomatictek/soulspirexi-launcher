@@ -15,6 +15,17 @@ public sealed class SyncProgress
     public double Percent { get; init; }
 }
 
+public sealed class ManifestFetchResult
+{
+    public LauncherManifest? Manifest { get; init; }
+    public bool FromRemote { get; init; }
+    public bool UsedBundledFallback { get; init; }
+    public UpdateChannel RequestedChannel { get; init; }
+    public string? RequestedUrl { get; init; }
+    public int? HttpStatusCode { get; init; }
+    public string? ErrorMessage { get; init; }
+}
+
 public sealed class ManifestUpdateService
 {
     public const string StableManifestRelativePath = "manifest.json";
@@ -96,8 +107,23 @@ public sealed class ManifestUpdateService
         UpdateChannel channel,
         CancellationToken cancellationToken = default)
     {
-        var manifest = fallback;
-        var fromRemote = false;
+        var result = await FetchManifestDetailedAsync(fallback, localOverride, channel, cancellationToken)
+            .ConfigureAwait(false);
+        if (result.Manifest is not null)
+        {
+            return (result.Manifest, result.FromRemote);
+        }
+
+        throw new InvalidOperationException(
+            result.ErrorMessage ?? $"Could not load remote manifest for channel {channel}.");
+    }
+
+    public async Task<ManifestFetchResult> FetchManifestDetailedAsync(
+        LauncherManifest fallback,
+        LocalServerOverride? localOverride,
+        UpdateChannel channel,
+        CancellationToken cancellationToken = default)
+    {
         var manifestRelativePath = GetManifestRelativePath(channel);
         var manifestBranch = GetManifestBranch(fallback, channel);
 
@@ -109,6 +135,10 @@ public sealed class ManifestUpdateService
         {
             rawBase = $"https://raw.githubusercontent.com/{fallback.Repo.Owner.Trim()}/{fallback.Repo.Name.Trim()}/{manifestBranch}";
         }
+
+        string? lastUrl = null;
+        int? lastStatusCode = null;
+        string? lastError = null;
 
         if (!string.IsNullOrWhiteSpace(rawBase))
         {
@@ -131,77 +161,167 @@ public sealed class ManifestUpdateService
 
             if (!string.IsNullOrWhiteSpace(pinnedRawBase))
             {
-                var remote = await TryFetchManifestFromUrlAsync($"{pinnedRawBase}/{manifestRelativePath}", cancellationToken)
+                var pinnedUrl = $"{pinnedRawBase}/{manifestRelativePath}";
+                var attempt = await TryFetchManifestFromUrlDetailedAsync(pinnedUrl, cancellationToken)
                     .ConfigureAwait(false);
-                if (IsValidManifestForChannel(remote, channel))
+                lastUrl = pinnedUrl;
+                lastStatusCode = attempt.StatusCode;
+                lastError = attempt.Error;
+
+                if (attempt.Manifest is not null)
                 {
-                    remote!.ResolvedRawBaseUrl = !string.IsNullOrWhiteSpace(remote.Repo.RawBaseUrl) &&
-                                                 !string.Equals(remote.Repo.RawBaseUrl.TrimEnd('/'), rawBase, StringComparison.OrdinalIgnoreCase)
-                        ? remote.Repo.RawBaseUrl.TrimEnd('/')
-                        : pinnedRawBase;
-                    manifest = remote;
-                    fromRemote = true;
+                    if (ValidateManifestForChannel(attempt.Manifest, channel, out var validationError))
+                    {
+                        attempt.Manifest.ResolvedRawBaseUrl =
+                            !string.IsNullOrWhiteSpace(attempt.Manifest.Repo.RawBaseUrl) &&
+                            !string.Equals(attempt.Manifest.Repo.RawBaseUrl.TrimEnd('/'), rawBase, StringComparison.OrdinalIgnoreCase)
+                                ? attempt.Manifest.Repo.RawBaseUrl.TrimEnd('/')
+                                : pinnedRawBase;
+                        ApplyLocalOverride(attempt.Manifest, localOverride);
+                        return new ManifestFetchResult
+                        {
+                            Manifest = attempt.Manifest,
+                            FromRemote = true,
+                            UsedBundledFallback = false,
+                            RequestedChannel = channel,
+                            RequestedUrl = pinnedUrl,
+                            HttpStatusCode = attempt.StatusCode
+                        };
+                    }
+
+                    lastError = validationError;
                 }
             }
 
-            if (!fromRemote)
+            var directUrl = $"{rawBase}/{manifestRelativePath}?t={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
+            var directAttempt = await TryFetchManifestFromUrlDetailedAsync(directUrl, cancellationToken)
+                .ConfigureAwait(false);
+            lastUrl = directUrl;
+            lastStatusCode = directAttempt.StatusCode ?? lastStatusCode;
+            lastError = directAttempt.Error ?? lastError;
+
+            if (directAttempt.Manifest is not null)
             {
-                var url = $"{rawBase}/{manifestRelativePath}?t={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
-                var remote = await TryFetchManifestFromUrlAsync(url, cancellationToken).ConfigureAwait(false);
-                if (IsValidManifestForChannel(remote, channel))
+                if (ValidateManifestForChannel(directAttempt.Manifest, channel, out var validationError))
                 {
-                    remote!.ResolvedRawBaseUrl = !string.IsNullOrWhiteSpace(remote.Repo.RawBaseUrl)
-                        ? remote.Repo.RawBaseUrl.TrimEnd('/')
-                        : rawBase;
-                    manifest = remote;
-                    fromRemote = true;
+                    directAttempt.Manifest.ResolvedRawBaseUrl =
+                        !string.IsNullOrWhiteSpace(directAttempt.Manifest.Repo.RawBaseUrl)
+                            ? directAttempt.Manifest.Repo.RawBaseUrl.TrimEnd('/')
+                            : rawBase;
+                    ApplyLocalOverride(directAttempt.Manifest, localOverride);
+                    return new ManifestFetchResult
+                    {
+                        Manifest = directAttempt.Manifest,
+                        FromRemote = true,
+                        UsedBundledFallback = false,
+                        RequestedChannel = channel,
+                        RequestedUrl = directUrl,
+                        HttpStatusCode = directAttempt.StatusCode
+                    };
                 }
+
+                lastError = validationError;
             }
         }
+        else
+        {
+            lastError = "No remote repository RawBaseUrl configured.";
+        }
 
-        ApplyLocalOverride(manifest, localOverride);
-        return (manifest, fromRemote);
+        // Only Stable may fall back to the bundled Stable manifest.json when offline.
+        // Never display or apply the bundled Stable manifest as though it belongs to Testing or Registry Testing.
+        if (channel == UpdateChannel.Stable)
+        {
+            ApplyLocalOverride(fallback, localOverride);
+            return new ManifestFetchResult
+            {
+                Manifest = fallback,
+                FromRemote = false,
+                UsedBundledFallback = true,
+                RequestedChannel = channel,
+                RequestedUrl = lastUrl,
+                HttpStatusCode = lastStatusCode,
+                ErrorMessage = lastError
+            };
+        }
+
+        var channelLabel = channel == UpdateChannel.TestingRegistry24Hook
+            ? "Registry Testing (24-Hook)"
+            : "Testing (27-Hook)";
+        var statusDetail = lastStatusCode.HasValue ? $"HTTP {lastStatusCode.Value}: " : string.Empty;
+        var reason = string.IsNullOrWhiteSpace(lastError) ? "Remote manifest could not be retrieved." : lastError;
+        var urlSuffix = string.IsNullOrWhiteSpace(lastUrl) ? string.Empty : $" ({lastUrl})";
+
+        return new ManifestFetchResult
+        {
+            Manifest = null,
+            FromRemote = false,
+            UsedBundledFallback = false,
+            RequestedChannel = channel,
+            RequestedUrl = lastUrl,
+            HttpStatusCode = lastStatusCode,
+            ErrorMessage = $"{channelLabel} manifest unavailable — {statusDetail}{reason}{urlSuffix}. Switch to Stable or another available Testing channel."
+        };
     }
 
-    public static bool IsValidManifestForChannel(LauncherManifest? manifest, UpdateChannel requestedChannel)
+    public static bool IsValidManifestForChannel(LauncherManifest? manifest, UpdateChannel requestedChannel) =>
+        ValidateManifestForChannel(manifest, requestedChannel, out _);
+
+    public static bool ValidateManifestForChannel(
+        LauncherManifest? manifest,
+        UpdateChannel requestedChannel,
+        out string error)
     {
+        error = string.Empty;
         if (manifest is null || manifest.Files.Count == 0)
         {
+            error = "Manifest is empty or contains no file entries.";
             return false;
         }
 
         var declared = (manifest.Channel ?? "stable").Trim();
         var candidateId = (manifest.CandidateId ?? string.Empty).Trim();
-        if (requestedChannel == UpdateChannel.Stable &&
-            declared.Equals("testing", StringComparison.OrdinalIgnoreCase))
-        {
-            // Never allow a Testing manifest to be applied to Stable players.
-            return false;
-        }
 
-        if (requestedChannel == UpdateChannel.Testing &&
-            candidateId.Equals("registry-24hook", StringComparison.OrdinalIgnoreCase))
+        if (requestedChannel == UpdateChannel.Stable)
         {
-            // Never allow the isolated 24-hook registry candidate to overwrite the 27-hook Testing track.
-            return false;
+            if (declared.Equals("testing", StringComparison.OrdinalIgnoreCase))
+            {
+                error = "Refusing Testing manifest on Stable channel.";
+                return false;
+            }
         }
-
-        if (requestedChannel == UpdateChannel.TestingRegistry24Hook)
+        else if (requestedChannel == UpdateChannel.Testing)
         {
             if (!declared.Equals("testing", StringComparison.OrdinalIgnoreCase))
             {
+                error = $"Expected channel 'testing' for Testing channel, but received '{declared}'.";
                 return false;
             }
 
-            if (!string.IsNullOrWhiteSpace(candidateId) &&
-                !candidateId.Equals("registry-24hook", StringComparison.OrdinalIgnoreCase))
+            if (candidateId.Equals("registry-24hook", StringComparison.OrdinalIgnoreCase))
             {
+                error = "Refusing isolated 24-hook registry candidate on 27-hook Testing channel.";
+                return false;
+            }
+        }
+        else if (requestedChannel == UpdateChannel.TestingRegistry24Hook)
+        {
+            if (!declared.Equals("testing", StringComparison.OrdinalIgnoreCase))
+            {
+                error = $"Expected channel 'testing' for Registry Testing channel, but received '{declared}'.";
+                return false;
+            }
+
+            if (!candidateId.Equals("registry-24hook", StringComparison.OrdinalIgnoreCase))
+            {
+                error = $"Expected candidateId 'registry-24hook' for Registry Testing channel, but received '{(string.IsNullOrWhiteSpace(candidateId) ? "none" : candidateId)}'.";
                 return false;
             }
         }
 
-        if (!ValidateRegistryBundle(manifest, requestedChannel, out _))
+        if (!ValidateRegistryBundle(manifest, requestedChannel, out var bundleError))
         {
+            error = bundleError;
             return false;
         }
 
@@ -315,18 +435,48 @@ public sealed class ManifestUpdateService
         }
     }
 
-    private async Task<LauncherManifest?> TryFetchManifestFromUrlAsync(string url, CancellationToken cancellationToken)
+    private async Task<(LauncherManifest? Manifest, int? StatusCode, string? Error)> TryFetchManifestFromUrlDetailedAsync(
+        string url,
+        CancellationToken cancellationToken)
     {
         try
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(TimeSpan.FromSeconds(10));
-            var json = await _http.GetStringAsync(url, cts.Token).ConfigureAwait(false);
-            return JsonSerializer.Deserialize<LauncherManifest>(json, JsonOptions);
+            using var response = await _http.GetAsync(url, cts.Token).ConfigureAwait(false);
+            var statusCode = (int)response.StatusCode;
+            if (!response.IsSuccessStatusCode)
+            {
+                var reason = string.IsNullOrWhiteSpace(response.ReasonPhrase)
+                    ? response.StatusCode.ToString()
+                    : response.ReasonPhrase;
+                return (null, statusCode, reason);
+            }
+
+            var json = await response.Content.ReadAsStringAsync(cts.Token).ConfigureAwait(false);
+            var parsed = JsonSerializer.Deserialize<LauncherManifest>(json, JsonOptions);
+            if (parsed is null)
+            {
+                return (null, statusCode, "Remote manifest JSON deserialized to null.");
+            }
+
+            return (parsed, statusCode, null);
         }
-        catch
+        catch (JsonException ex)
         {
-            return null;
+            return (null, null, $"Invalid manifest JSON: {ex.Message}");
+        }
+        catch (TaskCanceledException)
+        {
+            return (null, null, "Request timed out while contacting GitHub.");
+        }
+        catch (HttpRequestException ex)
+        {
+            return (null, ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : null, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return (null, null, ex.Message);
         }
     }
 

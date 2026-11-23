@@ -396,4 +396,185 @@ public sealed class ManagedUpdateAndChannelTests
             if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, recursive: true);
         }
     }
+
+    [Fact]
+    public async Task FetchManifestDetailedAsync_Testing404NeverFallsBackToStable()
+    {
+        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound)
+        {
+            ReasonPhrase = "Not Found"
+        });
+        var service = new ManifestUpdateService(new HttpClient(handler));
+        var bundledStable = new LauncherManifest
+        {
+            Channel = "stable",
+            ManifestVersion = "2.1.0",
+            Repo = new ManifestRepo
+            {
+                Owner = "Infomatictek",
+                Name = "soulspirexi-launcher",
+                Branch = "main",
+                RawBaseUrl = "https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/main"
+            },
+            Files = [new ManifestFileEntry { Category = "plugin", SourcePath = "plugins/ashita4/crystaljobs.dll", TargetPath = "crystaljobs.dll", Sha256 = new string('a', 64) }]
+        };
+
+        var result = await service.FetchManifestDetailedAsync(bundledStable, localOverride: null, UpdateChannel.Testing);
+
+        Assert.Null(result.Manifest);
+        Assert.False(result.FromRemote);
+        Assert.False(result.UsedBundledFallback);
+        Assert.Equal(404, result.HttpStatusCode);
+        Assert.NotNull(result.ErrorMessage);
+        Assert.Contains("404", result.ErrorMessage);
+        Assert.Contains("channels/testing/manifest.json", result.RequestedUrl);
+    }
+
+    [Fact]
+    public async Task FetchManifestDetailedAsync_Stable503FallsBackToBundledStable()
+    {
+        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+        {
+            ReasonPhrase = "Service Unavailable"
+        });
+        var service = new ManifestUpdateService(new HttpClient(handler));
+        var bundledStable = new LauncherManifest
+        {
+            Channel = "stable",
+            ManifestVersion = "2.1.0",
+            Repo = new ManifestRepo
+            {
+                Owner = "Infomatictek",
+                Name = "soulspirexi-launcher",
+                Branch = "main",
+                RawBaseUrl = "https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/main"
+            },
+            Files = [new ManifestFileEntry { Category = "plugin", SourcePath = "plugins/ashita4/crystaljobs.dll", TargetPath = "crystaljobs.dll", Sha256 = new string('a', 64) }]
+        };
+
+        var result = await service.FetchManifestDetailedAsync(bundledStable, localOverride: null, UpdateChannel.Stable);
+
+        Assert.NotNull(result.Manifest);
+        Assert.Equal("stable", result.Manifest!.Channel);
+        Assert.False(result.FromRemote);
+        Assert.True(result.UsedBundledFallback);
+        Assert.Equal(503, result.HttpStatusCode);
+    }
+
+    [Fact]
+    public async Task FetchManifestDetailedAsync_RejectsIncorrectChannelMetadataAndInvalidJson()
+    {
+        var bundledStable = new LauncherManifest
+        {
+            Channel = "stable",
+            ManifestVersion = "2.1.0",
+            Repo = new ManifestRepo { RawBaseUrl = "https://updates.soulspirexi.test" },
+            Files = [new ManifestFileEntry { Category = "plugin", SourcePath = "a", TargetPath = "a", Sha256 = new string('a', 64) }]
+        };
+
+        // 1. Testing endpoint returning channel="stable" must be rejected and never shown as Testing.
+        var stableJson = """
+            {"schemaVersion":1,"channel":"stable","manifestVersion":"2.1.0","files":[{"category":"plugin","sourcePath":"a","targetPath":"a","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","size":10}]}
+            """;
+        var svcWrongChannel = new ManifestUpdateService(new HttpClient(new StubHttpHandler(_ =>
+            new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(stableJson, Encoding.UTF8, "application/json") })));
+        var resWrong = await svcWrongChannel.FetchManifestDetailedAsync(bundledStable, null, UpdateChannel.Testing);
+        Assert.Null(resWrong.Manifest);
+        Assert.False(resWrong.UsedBundledFallback);
+        Assert.Contains("Expected channel 'testing'", resWrong.ErrorMessage);
+
+        // 2. Registry Testing endpoint returning wrong candidateId must be rejected.
+        var wrongCandidateJson = """
+            {"schemaVersion":1,"channel":"testing","candidateId":"default-27hook","manifestVersion":"2.1.0-testing.1","files":[{"category":"plugin","sourcePath":"a","targetPath":"a","sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","size":10}]}
+            """;
+        var svcWrongCand = new ManifestUpdateService(new HttpClient(new StubHttpHandler(_ =>
+            new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(wrongCandidateJson, Encoding.UTF8, "application/json") })));
+        var resWrongCand = await svcWrongCand.FetchManifestDetailedAsync(bundledStable, null, UpdateChannel.TestingRegistry24Hook);
+        Assert.Null(resWrongCand.Manifest);
+        Assert.Contains("registry-24hook", resWrongCand.ErrorMessage);
+
+        // 3. Invalid JSON on Testing channel must surface parse error and never fall back to Stable.
+        var svcBadJson = new ManifestUpdateService(new HttpClient(new StubHttpHandler(_ =>
+            new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{not-valid-json", Encoding.UTF8, "application/json") })));
+        var resBadJson = await svcBadJson.FetchManifestDetailedAsync(bundledStable, null, UpdateChannel.TestingRegistry24Hook);
+        Assert.Null(resBadJson.Manifest);
+        Assert.Contains("Invalid manifest JSON", resBadJson.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task FetchManifestDetailedAsync_RegistryTestingResolvesFeatureBranchAndHash()
+    {
+        var requestedUrls = new List<string>();
+        var dllSha = new string('d', 64);
+        var validRegJson = $$"""
+            {
+              "schemaVersion": 1,
+              "channel": "testing",
+              "candidateId": "registry-24hook",
+              "manifestVersion": "2.1.1-testing.registry24",
+              "repo": {
+                "owner": "Infomatictek",
+                "name": "soulspirexi-launcher",
+                "branch": "fix/native-search-label-and-testing-candidate",
+                "rawBaseUrl": "https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/fix/native-search-label-and-testing-candidate"
+              },
+              "registry": {
+                "version": "2026.11.22-phase2-locked",
+                "hash": "de6314e97385e328",
+                "nativeDllCompiledHash": "de6314e97385e328",
+                "nativeDllSha256": "{{dllSha}}",
+                "nativeDllClientVerified": false,
+                "crystalJobsHooks": 24
+              },
+              "files": [
+                {
+                  "category": "plugin",
+                  "sourcePath": "channels/testing-registry-24hook/payload/plugins/ashita4/crystaljobs.dll",
+                  "targetPath": "crystaljobs.dll",
+                  "sha256": "{{dllSha}}",
+                  "size": 130560
+                }
+              ]
+            }
+            """;
+
+        var handler = new StubHttpHandler(req =>
+        {
+            var url = req.RequestUri!.ToString();
+            requestedUrls.Add(url);
+            if (url.Contains("/commits/"))
+            {
+                return new HttpResponseMessage(HttpStatusCode.NotFound);
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(validRegJson, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var service = new ManifestUpdateService(new HttpClient(handler));
+        var bundledStable = new LauncherManifest
+        {
+            Channel = "stable",
+            ManifestVersion = "2.1.0",
+            Repo = new ManifestRepo
+            {
+                Owner = "Infomatictek",
+                Name = "soulspirexi-launcher",
+                Branch = "main",
+                RawBaseUrl = "https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/main"
+            },
+            Files = [new ManifestFileEntry { Category = "plugin", SourcePath = "plugins/ashita4/crystaljobs.dll", TargetPath = "crystaljobs.dll", Sha256 = new string('a', 64) }]
+        };
+
+        var result = await service.FetchManifestDetailedAsync(bundledStable, null, UpdateChannel.TestingRegistry24Hook);
+
+        Assert.True(result.FromRemote);
+        Assert.False(result.UsedBundledFallback);
+        Assert.NotNull(result.Manifest);
+        Assert.Equal("registry-24hook", result.Manifest!.CandidateId);
+        Assert.Equal("de6314e97385e328", result.Manifest.Registry?.Hash);
+        Assert.Contains(requestedUrls, u => u.Contains("fix/native-search-label-and-testing-candidate/channels/testing-registry-24hook/manifest.json"));
+    }
 }
