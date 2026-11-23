@@ -157,7 +157,7 @@ class TestingChannelPublishTests(unittest.TestCase):
             # Publishing via explicit --candidate registry-24hook succeeds in its own isolated path
             sync_data = json.loads((REPO_ROOT / "registry_sync.json").read_text(encoding="utf-8"))
             expected_hash = sync_data["registryHash"]
-            real_dll = REPO_ROOT / "plugins" / "ashita4" / "crystaljobs.dll"
+            real_dll = REPO_ROOT / "channels" / "testing-registry-24hook" / "payload" / "plugins" / "ashita4" / "crystaljobs.dll"
             new_dll = tmp_repo / "ci_crystaljobs.dll"
             shutil.copy2(real_dll, new_dll)
             real_sha = hashlib.sha256(new_dll.read_bytes()).hexdigest()
@@ -205,7 +205,7 @@ class TestingChannelPublishTests(unittest.TestCase):
 
     def test_search_legacy_and_aligned_candidates_are_isolated(self):
         import hashlib
-        real_dll = REPO_ROOT / "plugins" / "ashita4" / "crystaljobs.dll"
+        real_dll = REPO_ROOT / "channels" / "testing-registry-24hook" / "payload" / "plugins" / "ashita4" / "crystaljobs.dll"
         real_bytes = real_dll.read_bytes()
         real_sha = hashlib.sha256(real_bytes).hexdigest()
         reg_sync = json.loads((REPO_ROOT / "registry_sync.json").read_text(encoding="utf-8"))

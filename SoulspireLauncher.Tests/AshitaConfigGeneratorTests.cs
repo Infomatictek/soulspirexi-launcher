@@ -250,9 +250,33 @@ public sealed class AshitaConfigGeneratorTests
 
         Assert.DoesNotContain("crystalsocket", merged);
         Assert.DoesNotContain("crystaljobs", merged);
+        Assert.DoesNotContain("soulspire_native", merged);
         Assert.Contains("/addon load soulspire_talents", merged);
         Assert.Contains("/addon load soulspire_gear", merged);
         Assert.Contains("/fps 1", merged);
+    }
+
+    [Fact]
+    public void MergeBootScriptContent_MigratesLegacyCrystalJobsToSoulspireNativeWithoutDuplicates()
+    {
+        var existing = string.Join(Environment.NewLine,
+            "/load addons",
+            "/load crystaljobs",
+            "/addon load crystalsocket",
+            "/fps 1");
+
+        var settings = new LauncherSettings
+        {
+            AutoLoadCrystalSocketAddon = true,
+            FpsCap = 60
+        };
+
+        var merged = _generator.MergeBootScriptContent(existing, settings);
+
+        Assert.DoesNotContain("/load crystaljobs", merged, StringComparison.OrdinalIgnoreCase);
+        Assert.Single(
+            merged.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries),
+            line => line.Trim().Equals("/load soulspire_native", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

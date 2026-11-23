@@ -8,7 +8,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 IDENTITIES_PATH = REPO_ROOT / "plugins" / "ashita4" / "data" / "soul-identities.json"
-PRESENTATION_PATH = REPO_ROOT / "plugins" / "ashita4" / "data" / "crystaljobs-presentation.json"
+PRESENTATION_PATH = REPO_ROOT / "plugins" / "ashita4" / "data" / "soulspire_native.json"
 
 MENU_GLYPH_WIDTHS = {
     "A": 7, "B": 8, "C": 8, "D": 8, "E": 7, "F": 8, "G": 8, "H": 7, "I": 8,
@@ -72,9 +72,9 @@ class SearchPresentationSpacingTests(unittest.TestCase):
             self.assertLessEqual(right_edge, 23)
 
     def test_h_glyph_maps_to_verified_vanilla_sch_coords(self):
-        cpp = (REPO_ROOT / "native" / "crystaljobs" / "crystaljobs.cpp").read_text(encoding="utf-8")
-        self.assertIn("{118, 214, 7}, // H (SCH)", cpp)
-        self.assertNotIn("{59, 184, 7},  // H (WHM)", cpp)
+        hdr = (REPO_ROOT / "soulspire_native" / "rendering" / "menu2fon.h").read_text(encoding="utf-8")
+        self.assertIn("{118, 214, 7}, // H (SCH)", hdr)
+        self.assertNotIn("{59, 184, 7},  // H (WHM)", hdr)
         cfg = json.loads(PRESENTATION_PATH.read_text(encoding="utf-8"))["searchBadge"]
         for abbr in ("HRB", "HEL", "HLC"):
             xs, right_edge = compute_layout(abbr, cfg["trackingPx"], cfg["offsetXPx"], cfg["useGlyphWidths"])

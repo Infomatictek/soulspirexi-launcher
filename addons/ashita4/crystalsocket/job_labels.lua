@@ -45,9 +45,10 @@ Labels.INIT_STAGES = {
     [4] = 'patch_install_fail',
     [5] = 'detour_install_fail',
     [6] = 'ok',
+    [7] = 'conflict_legacy_dll',
 }
 
--- Matches crystaljobs.cpp hook bit ordering: 0..20 = patches[0..20], 21..23 = PrologueDetours.
+-- Matches soulspire_native.cpp hook bit ordering: 0..21 = CALL patches, 22..26 = PrologueDetours (27 hooks total).
 Labels.HOOK_SPECS = {
     [0]  = { rva = 0x0D8CCD, name = 'encode_request' },
     [1]  = { rva = 0x0E2282, name = 'decode_row' },
@@ -70,51 +71,64 @@ Labels.HOOK_SPECS = {
     [18] = { rva = 0x22DAB9, name = 'magic_list_filter' },
     [19] = { rva = 0x22562F, name = 'ability_list_filter' },
     [20] = { rva = 0x22E64D, name = 'menu_spell_elig' },
-    [21] = { rva = 0x22CDE0, name = 'can_use_spell_detour' },
-    [22] = { rva = 0x22CB44, name = 'missing_spell_bit_detour' },
-    [23] = { rva = 0x133D56, name = 'soul_sub_weapon_detour' },
+    [21] = { rva = 0x133E33, name = 'soul_can_equip_in_slot' },
+    [22] = { rva = 0x22CDE0, name = 'can_use_spell_detour' },
+    [23] = { rva = 0x22CB44, name = 'missing_spell_bit_detour' },
+    [24] = { rva = 0x133D56, name = 'soul_sub_weapon_detour' },
+    [25] = { rva = 0x21DF85, name = 'soul_sub_menu_filter_detour' },
+    [26] = { rva = 0x133DD3, name = 'soul_sub_2h_main_detour' },
 }
 
 -- Cache named function-pointer types once. Re-parsing an anonymous FFI
 -- function-pointer signature on every render/sync can exhaust LuaJIT's type
 -- table after prolonged idle time ("table overflow").
 local signature_types = {
-    CrystalJobsGetStatus = ffi.typeof('uint32_t (__stdcall *)(void*, uint32_t)'),
-    CrystalJobsSetState = ffi.typeof('uint32_t (__stdcall *)(const uint8_t*, uint32_t)'),
-    CrystalJobsInitialize = ffi.typeof('uint32_t (__stdcall *)(void)'),
-    CrystalJobsReplaceWeaponRules = ffi.typeof('uint32_t (__stdcall *)(const void*, uint32_t)'),
-    CrystalJobsClearWeaponRules = ffi.typeof('uint32_t (__stdcall *)(void)'),
-    CrystalJobsGetWeaponStatus = ffi.typeof('uint32_t (__stdcall *)(void*, uint32_t)'),
-    CrystalJobsGetHookDiagnostics = ffi.typeof('uint32_t (__stdcall *)(void*, uint32_t)'),
+    GetStatus           = ffi.typeof('uint32_t (__stdcall *)(void*, uint32_t)'),
+    SetState            = ffi.typeof('uint32_t (__stdcall *)(const uint8_t*, uint32_t)'),
+    Initialize          = ffi.typeof('uint32_t (__stdcall *)(void)'),
+    ReplaceWeaponRules  = ffi.typeof('uint32_t (__stdcall *)(const void*, uint32_t)'),
+    ClearWeaponRules    = ffi.typeof('uint32_t (__stdcall *)(void)'),
+    GetWeaponStatus     = ffi.typeof('uint32_t (__stdcall *)(void*, uint32_t)'),
+    GetHookDiagnostics  = ffi.typeof('uint32_t (__stdcall *)(void*, uint32_t)'),
 }
 local exported = {}
 local state_bytes_type = ffi.typeof('uint8_t[8]')
-local function loaded_function(name)
-    local module = ffi.C.GetModuleHandleA('crystaljobs.dll')
+
+local function resolve_native_module()
+    local mod = ffi.C.GetModuleHandleA('soulspire_native.dll')
+    if mod ~= nil then return mod, 'SoulspireNative' end
+    mod = ffi.C.GetModuleHandleA('crystaljobs.dll')
+    if mod ~= nil then return mod, 'CrystalJobs' end
+    return nil, nil
+end
+
+local function loaded_function(short_name)
+    local module, prefix = resolve_native_module()
     if module == nil then
         exported = {}
-        return nil, 'crystaljobs.dll is not loaded'
+        return nil, 'soulspire_native.dll is not loaded'
     end
-    local address = ffi.C.GetProcAddress(module, name)
+    local address = ffi.C.GetProcAddress(module, prefix .. short_name)
+    if address == nil and prefix == 'SoulspireNative' then
+        address = ffi.C.GetProcAddress(module, 'CrystalJobs' .. short_name)
+    end
     if address == nil then
-        exported[name] = nil
+        exported[short_name] = nil
         return nil, 'DLL export unavailable.'
     end
-    local entry = exported[name]
-    -- A new address means the DLL may have been unloaded/reloaded: recast only
-    -- on change, and never keep an obsolete function pointer.
+    local entry = exported[short_name]
     if entry and entry.module == module and entry.address == address then
         return entry.fn
     end
-    local sig = signature_types[name]
+    local sig = signature_types[short_name]
     if not sig then return nil, 'Unrecognized DLL export.' end
     local fn = ffi.cast(sig, address)
-    exported[name] = { module = module, address = address, fn = fn }
+    exported[short_name] = { module = module, address = address, fn = fn }
     return fn
 end
 
 local function loaded_export()
-    local set_state, why = loaded_function('CrystalJobsSetState')
+    local set_state, why = loaded_function('SetState')
     if not set_state then return nil, why end
     return function(bytes) return set_state(ffi.new(state_bytes_type, bytes), 8) end
 end
@@ -164,7 +178,7 @@ end
 function Labels:ensure_loaded()
     if self.custom_resolve then return true end
     local ok, ready = pcall(function()
-        local module = ffi.C.GetModuleHandleA('crystaljobs.dll')
+        local module = resolve_native_module()
         if module == nil and self.dll_path and not self.load_failed then
             module = ffi.C.LoadLibraryA(self.dll_path)
             if module == nil then
@@ -175,7 +189,7 @@ function Labels:ensure_loaded()
         end
         if module == nil then return false end
 
-        local get_status = loaded_function('CrystalJobsGetStatus')
+        local get_status = loaded_function('GetStatus')
         if get_status then
             local st = ffi.new(status_type)
             if get_status(st, ffi.sizeof(st)) == 0 and st[0].size == 68 and st[0].version == 1 then
@@ -184,11 +198,11 @@ function Labels:ensure_loaded()
                 end
                 if not self.init_attempted and st[0].last_error ~= 1 and st[0].last_error ~= 3 then
                     self.init_attempted = true
-                    local init_fn = loaded_function('CrystalJobsInitialize')
+                    local init_fn = loaded_function('Initialize')
                     if init_fn then
                         self.init_rc = tonumber(init_fn())
                         if self.init_rc ~= 0 then
-                            self.error = ('CrystalJobsInitialize returned %s.'):format(tostring(self.init_rc))
+                            self.error = ('SoulspireNativeInitialize returned %s.'):format(tostring(self.init_rc))
                         end
                     end
                 end
@@ -202,7 +216,7 @@ end
 function Labels:native_decoder_ready()
     local ok, ready = pcall(function()
         self:ensure_loaded()
-        local get_status = loaded_function('CrystalJobsGetStatus')
+        local get_status = loaded_function('GetStatus')
         if not get_status then return false end
         local status = ffi.new(status_type)
         return get_status(status, ffi.sizeof(status)) == 0 and status[0].size == 68
@@ -219,13 +233,13 @@ function Labels:status()
         return nil
     end
     local ok, info, failure = pcall(function()
-        local module = ffi.C.GetModuleHandleA('crystaljobs.dll')
-        if module == nil then return nil, 'crystaljobs.dll is not loaded' end
-        local get_status = loaded_function('CrystalJobsGetStatus')
-        if not get_status then return nil, 'CrystalJobsGetStatus export missing' end
+        local module = resolve_native_module()
+        if module == nil then return nil, 'soulspire_native.dll is not loaded' end
+        local get_status = loaded_function('GetStatus')
+        if not get_status then return nil, 'SoulspireNativeGetStatus export missing' end
         local st = ffi.new(status_type)
         local rc = get_status(st, ffi.sizeof(st))
-        if rc ~= 0 then return nil, 'CrystalJobsGetStatus returned ' .. tostring(rc) end
+        if rc ~= 0 then return nil, 'SoulspireNativeGetStatus returned ' .. tostring(rc) end
         if st[0].size ~= 68 or st[0].version ~= 1 then
             return nil, ('DLL ABI mismatch: size=%d version=%d'):format(
                 tonumber(st[0].size), tonumber(st[0].version))
@@ -291,11 +305,11 @@ function Labels:sync_weapon_rules(rules, override_replace)
 
     local ok, synced, err = pcall(function()
         self:ensure_loaded()
-        local module = ffi.C.GetModuleHandleA('crystaljobs.dll')
+        local module = resolve_native_module()
         if module == nil then
             self.weapon_rules_synced = false
             self.weapon_rules_module = nil
-            return false, 'crystaljobs.dll is not loaded'
+            return false, 'soulspire_native.dll is not loaded'
         end
         if self.weapon_rules_synced and self.weapon_rules_module == module then
             return true, nil
@@ -303,12 +317,12 @@ function Labels:sync_weapon_rules(rules, override_replace)
         if self.weapon_rules_missing and self.weapon_rules_module == module then
             return false, self.weapon_rules_error
         end
-        local replace_fn, why = loaded_function('CrystalJobsReplaceWeaponRules')
+        local replace_fn, why = loaded_function('ReplaceWeaponRules')
         if not replace_fn then
             self.weapon_rules_synced = false
             self.weapon_rules_missing = true
             self.weapon_rules_module = module
-            return false, why or 'CrystalJobsReplaceWeaponRules export missing'
+            return false, why or 'SoulspireNativeReplaceWeaponRules export missing'
         end
         self.weapon_rules_missing = false
         local count = #rules
@@ -330,7 +344,7 @@ function Labels:sync_weapon_rules(rules, override_replace)
         local rc = tonumber(replace_fn(buf, count))
         if rc ~= 0 then
             self.weapon_rules_synced = false
-            return false, 'CrystalJobsReplaceWeaponRules returned ' .. tostring(rc)
+            return false, 'SoulspireNativeReplaceWeaponRules returned ' .. tostring(rc)
         end
         self.weapon_rules_synced = true
         self.weapon_rules_module = module
@@ -349,7 +363,7 @@ end
 function Labels:weapon_status()
     local ok, info = pcall(function()
         self:ensure_loaded()
-        local get_status = loaded_function('CrystalJobsGetWeaponStatus')
+        local get_status = loaded_function('GetWeaponStatus')
         if not get_status then return nil end
         local st = ffi.new(weapon_status_type)
         if get_status(st, ffi.sizeof(st)) ~= 0 or st[0].size ~= 36 or st[0].version ~= 1 then
@@ -371,17 +385,18 @@ end
 function Labels.format_hook_diagnostics(diag)
     if type(diag) ~= 'table' then return {} end
     local stage = Labels.INIT_STAGES[diag.init_stage] or tostring(diag.init_stage)
-    local sub_ok = bit.band(diag.installed_mask or 0, bit.lshift(1, 23)) ~= 0
+    local expected = diag.expected_hooks or 27
+    local sub_bit = (expected >= 27) and 24 or 23
+    local sub_ok = bit.band(diag.installed_mask or 0, bit.lshift(1, sub_bit)) ~= 0
     local lines = {
-        ('hooks_diag stage=%s installed=%d/%d mask=0x%06X site_mask=0x%06X caps=0x%04X sub_weapon_hook=%s'):format(
-            stage, diag.total_hooks or 0, diag.expected_hooks or 24,
+        ('hooks_diag stage=%s installed=%d/%d mask=0x%07X site_mask=0x%07X caps=0x%04X sub_weapon_hook=%s'):format(
+            stage, diag.total_hooks or 0, expected,
             diag.installed_mask or 0, diag.site_set_mask or 0, diag.capabilities or 0,
             sub_ok and 'OK' or 'MISSING'),
         ('ffxi base=0x%08X ts=0x%08X size=0x%X'):format(
             diag.ffxi_base or 0, diag.ffxi_timestamp or 0, diag.ffxi_image_size or 0),
     }
     local missing = {}
-    local expected = diag.expected_hooks or 24
     for i = 0, expected - 1 do
         local m = bit.lshift(1, i)
         if bit.band(diag.installed_mask or 0, m) == 0 then
@@ -412,11 +427,11 @@ function Labels:hook_diagnostics(override_get_diag)
         local get_diag = override_get_diag
         if not get_diag then
             self:ensure_loaded()
-            get_diag = loaded_function('CrystalJobsGetHookDiagnostics')
+            get_diag = loaded_function('GetHookDiagnostics')
         end
         if not get_diag then return nil end
         local d = ffi.new(hook_diag_type)
-        if get_diag(d, ffi.sizeof(d)) ~= 0 or d[0].size ~= 60 or d[0].version ~= 1 then
+        if get_diag(d, ffi.sizeof(d)) ~= 0 or d[0].size ~= 60 or (d[0].version ~= 1 and d[0].version ~= 2) then
             return nil
         end
         local hex = {}

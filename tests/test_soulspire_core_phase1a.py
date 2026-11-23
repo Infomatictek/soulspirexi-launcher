@@ -63,7 +63,7 @@ class SoulspireCorePhase1ATests(unittest.TestCase):
         for required in (
             '"/addon load soulspire_core"',
             '"/addon unload soulspire_core"',
-            '"/load crystaljobs"',
+            '"/load soulspire_native"',
             '"/addon load crystalsocket"',
             '"/addon load soulspire_talents"',
             '"/addon load soulspire_soulhud"',

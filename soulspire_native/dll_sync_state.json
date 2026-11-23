@@ -1,0 +1,19 @@
+{
+  "dllPath": "plugins/ashita4/soulspire_native.dll",
+  "dllSha256": "1111c4f2198ae71d3f6823061fb80b16c25ffa81033b208877d140bef566b85e",
+  "compiledRegistryHash": "cf86aa59ff8d16c6",
+  "runtimeIdentityLoader": true,
+  "identitySchemaVersion": 1,
+  "nativeHooks": 27,
+  "sourceCommit": "1a9e22d9bdb1256fa5811f591cb895b6b008f3a8",
+  "buildTarget": "Win32-x86-MSVC",
+  "ciRunId": "45289068399",
+  "ciRunUrl": "https://github.com/Infomatictek/soulspirexi-launcher/actions/runs/45289068399",
+  "ciVerified": true,
+  "clientVerified": false,
+  "notes": "CI-built 27-hook soulspire_native.dll synced from GitHub Actions windows-latest MSVC x86 build. Client verification requires manual Windows Ashita v4 playtesting.",
+  "dllSize": 176128,
+  "expectedHooks": 27,
+  "abiVersion": 2,
+  "branch": "feat/soulspire-native-foundation"
+}

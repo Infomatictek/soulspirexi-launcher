@@ -36,9 +36,11 @@ W.SKILLS = {
     STAFF        = 12,
 }
 
--- Matches CRYSTALJOBS_WEAPON_MODE_* in native/crystaljobs/crystaljobs.h.
+-- Matches SOULSPIRE_NATIVE_WEAPON_MODE_* in soulspire_native/core/api.h.
 W.MODES = {
-    DUAL_1H = 1,
+    DUAL_1H        = 1,
+    DUAL_2H        = 2,
+    TWOHAND_SHIELD = 3,
 }
 
 function W.skill_mask(skills)

@@ -34,8 +34,11 @@ public sealed class ManifestTests
             !string.IsNullOrWhiteSpace(f.Sha256));
         Assert.Contains(manifest.Files, f =>
             f.Category == "plugin" &&
-            f.TargetPath == "crystaljobs.dll" &&
+            (f.TargetPath == "soulspire_native.dll" || f.TargetPath == "data/soulspire_native.json") &&
             !string.IsNullOrWhiteSpace(f.Sha256));
+        Assert.DoesNotContain(manifest.Files, f =>
+            f.Category == "plugin" &&
+            f.TargetPath == "crystaljobs.dll");
         Assert.Contains(manifest.Files, f =>
             f.Category == "addon" &&
             f.TargetPath == "crystalsocket/assets/sensei.png" &&

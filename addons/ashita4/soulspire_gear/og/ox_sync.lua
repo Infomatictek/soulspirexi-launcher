@@ -124,9 +124,17 @@ function ox_sync.PollCrystalDll()
 
     local changed = false
     pcall(function()
-        local mod = ffi.C.GetModuleHandleA('crystaljobs.dll')
+        local mod = ffi.C.GetModuleHandleA('soulspire_native.dll')
+        local exportName = 'SoulspireNativeGetStatus'
+        if mod == nil then
+            mod = ffi.C.GetModuleHandleA('crystaljobs.dll')
+            exportName = 'CrystalJobsGetStatus'
+        end
         if mod == nil then return end
-        local addr = ffi.C.GetProcAddress(mod, 'CrystalJobsGetStatus')
+        local addr = ffi.C.GetProcAddress(mod, exportName)
+        if addr == nil and exportName == 'SoulspireNativeGetStatus' then
+            addr = ffi.C.GetProcAddress(mod, 'CrystalJobsGetStatus')
+        end
         if addr == nil then return end
         local fn = ffi.cast('uint32_t (__stdcall *)(void*, uint32_t)', addr)
         local st = ffi.new(crystal_status_t)
