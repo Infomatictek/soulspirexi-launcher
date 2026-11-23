@@ -10,6 +10,7 @@
 #include "equipment/weapon_rules.h"
 #include "rendering/menu2fon.h"
 #include "menus/menu_hooks.h"
+#include "menus/commands_menu.h"
 #include "resources/resource_manager.h"
 #include "dat_virtualization/dat_virtualization.h"
 #include "hooks/layout.h"
@@ -31,6 +32,7 @@ static SRWLOCK visibility_lock = SRWLOCK_INIT;
 static SRWLOCK weapon_lock = SRWLOCK_INIT;
 static SRWLOCK lifecycle_lock = SRWLOCK_INIT;
 static SRWLOCK menu2fon_lock = SRWLOCK_INIT;
+static SRWLOCK commands_menu_lock = SRWLOCK_INIT;
 
 static State state;
 static Transport transport;
@@ -53,6 +55,15 @@ static std::atomic<uint32_t> weapon_allow_hits{}, weapon_deny_hits{};
 static std::atomic<uint32_t> action_row_max_chars{16};
 static std::atomic<uint32_t> g_menu2fon_banks_used{0};
 static std::atomic<uint32_t> g_menu2fon_fallback_draws{0};
+static std::atomic<uint32_t> g_commands_injected{0};
+static std::atomic<uint32_t> g_commands_sprite_synthesized{0};
+static std::atomic<uint32_t> g_commands_sprite_banks_used{0};
+static std::atomic<uint32_t> g_commands_open_injections{0};
+static std::atomic<uint32_t> g_commands_nav_overrides{0};
+static std::atomic<uint32_t> g_commands_activations{0};
+static std::atomic<uint32_t> g_commands_pending_open_requests{0};
+static std::atomic<uint32_t> g_commands_last_button_count{kCommandsVanillaButtonCount};
+static std::atomic<uint32_t> g_commands_last_frame_height{kCommandsVanillaFrameH};
 
 using Lookup = const char* (__cdecl*)(int, int);
 using Decode = void* (__cdecl*)(const uint8_t*, uint8_t*, int);
@@ -65,6 +76,19 @@ using GetItemResource = const uint8_t* (__fastcall*)(void*, void*, uint32_t);
 using CanEquipItemInSlot = uint8_t (__fastcall*)(void*, void*, const uint8_t*, uint32_t);
 using MapDecode = int (__cdecl*)(uint8_t*, uint32_t, uintptr_t, uintptr_t, const uint8_t*, uint32_t);
 using MapEncode = int (__cdecl*)(const uint8_t*, uint32_t, uint8_t*, uint32_t, uintptr_t);
+using FfxiOpNew = void* (__cdecl*)(uint32_t);
+using FfxiOpDelete = void (__cdecl*)(void*);
+using FfxiPlayConfirmSound = void (__cdecl*)(void);
+using FfxiFrameUpdateBox = void (__fastcall*)(void*, void*, uint8_t);
+using FfxiBtnCtor = void* (__fastcall*)(void*, void*, void*);
+using FfxiBtnInit = void (__fastcall*)(void*, void*, const void*);
+using FfxiBtnRecalcRect = void (__fastcall*)(void*, void*, int32_t, int32_t, uint8_t);
+using FfxiBtnUpdateSprite = void (__fastcall*)(void*, void*, uint8_t);
+using FfxiBtnSetState = void (__fastcall*)(void*, void*, uint32_t);
+using FfxiPrimSetSelected = void (__fastcall*)(void*, void*, int32_t);
+using FfxiListPushBack = void (__fastcall*)(void*, void*, void*);
+using FfxiListRemoveNode = void (__fastcall*)(void*, void*, void*);
+using FfxiCloseMenu = void (__fastcall*)(void*, void*, void*, int32_t);
 
 static Lookup original_lookup = nullptr;
 static Decode original_decode = nullptr;
@@ -77,6 +101,19 @@ static GetItemResource original_get_item_res = nullptr;
 static CanEquipItemInSlot original_can_equip_in_slot = nullptr;
 static MapDecode original_map_decode = nullptr;
 static MapEncode original_map_encode = nullptr;
+static FfxiOpNew original_ffxi_new = nullptr;
+static FfxiOpDelete original_ffxi_delete = nullptr;
+static FfxiPlayConfirmSound original_play_confirm_sound = nullptr;
+static FfxiFrameUpdateBox original_frame_update_box = nullptr;
+static FfxiBtnCtor original_btn_ctor = nullptr;
+static FfxiBtnInit original_btn_init = nullptr;
+static FfxiBtnRecalcRect original_btn_recalc_rect = nullptr;
+static FfxiBtnUpdateSprite original_btn_update_sprite = nullptr;
+static FfxiBtnSetState original_btn_set_state = nullptr;
+static FfxiPrimSetSelected original_prim_set_selected = nullptr;
+static FfxiListPushBack original_list_push_back = nullptr;
+static FfxiListRemoveNode original_list_remove_node = nullptr;
+static FfxiCloseMenu original_close_menu = nullptr;
 
 static uintptr_t original_sprite = 0;
 static uintptr_t original_sprite_simple = 0;
@@ -87,6 +124,9 @@ static uintptr_t original_ability_name_target = 0;
 static uintptr_t original_ability_desc = 0;
 static uintptr_t original_set_list_count = 0;
 static uintptr_t original_spell_elig = 0;
+static uintptr_t original_restore_saved_cursor = 0;
+static uintptr_t original_get_next_button = 0;
+static uintptr_t menuwind_key_item_resume = 0;
 static uintptr_t missing_spell_bit_resume = 0;
 static uintptr_t soul_sub_weapon_allow_resume = 0;
 static uintptr_t soul_sub_weapon_deny_resume = 0;
@@ -100,6 +140,8 @@ static void** item_res_mgr_slot = nullptr;
 static const uint8_t* main_job_slot = nullptr;
 static const uint8_t* main_lvl_slot = nullptr;
 static uint8_t** ability_list_slot = nullptr;
+static uint8_t** menuwind_singleton_slot = nullptr;
+static void* menu_manager_instance = nullptr;
 
 static thread_local int32_t tls_magic_row_id = -1;
 static thread_local int32_t tls_ability_row_id = -1;
@@ -1200,7 +1242,539 @@ static int __cdecl map_encode(const uint8_t* packets, uint32_t length, uint8_t* 
 }
 
 // ============================================================================
-// Centralized 27-Hook Registry & Lifecycle Management
+// Native FFXI Commands Menu ("menu    menuwind") Hooks (Hooks #28 - #31)
+// ============================================================================
+
+static const NativeMenuButtonRes g_soulspire_btn_res = make_soulspire_button_res();
+static const NativeMenuButtonData g_soulspire_btn_data = {
+    &g_soulspire_btn_res,
+    nullptr,
+    kCommandsSoulspireHelp,
+    kCommandsSoulspireTitle,
+    0u
+};
+
+static std::unique_ptr<SoulspireMenuSpriteBank> g_commands_sprite_banks[kMaxCommandsSpriteBanks]{};
+static size_t g_last_commands_sprite_bank = 0;
+static std::atomic<const uint8_t*> g_active_menuwind_data{nullptr};
+static std::atomic<bool> g_commands_ever_injected{false};
+
+#if defined(SOULSPIRE_NATIVE_SELFTEST) || defined(CRYSTALJOBS_SELFTEST)
+static void reset_commands_menu_state_for_test() noexcept {
+    AcquireSRWLockExclusive(&commands_menu_lock);
+    for (size_t i = 0; i < kMaxCommandsSpriteBanks; ++i) {
+        g_commands_sprite_banks[i].reset();
+    }
+    g_last_commands_sprite_bank = 0;
+    ReleaseSRWLockExclusive(&commands_menu_lock);
+    g_active_menuwind_data.store(nullptr, std::memory_order_release);
+    g_commands_ever_injected.store(false, std::memory_order_release);
+    g_commands_injected.store(0, std::memory_order_release);
+    g_commands_sprite_synthesized.store(0, std::memory_order_release);
+    g_commands_sprite_banks_used.store(0, std::memory_order_release);
+    g_commands_open_injections.store(0, std::memory_order_release);
+    g_commands_nav_overrides.store(0, std::memory_order_release);
+    g_commands_activations.store(0, std::memory_order_release);
+    g_commands_pending_open_requests.store(0, std::memory_order_release);
+    g_commands_last_button_count.store(kCommandsVanillaButtonCount, std::memory_order_release);
+    g_commands_last_frame_height.store(kCommandsVanillaFrameH, std::memory_order_release);
+}
+#endif
+
+static uint8_t* acquire_soulspire_menu_sprite(
+    const uint8_t* const src_sprites[kCommandsSourceSpriteCount]) noexcept {
+    if (src_sprites == nullptr || src_sprites[0] == nullptr) return nullptr;
+    const uint8_t* status_node0 = nullptr;
+    const uint8_t* status_tile0 = nullptr;
+    if (!sprite_list_tile_at(src_sprites[0], 0, status_node0, status_tile0)) return nullptr;
+
+    AcquireSRWLockExclusive(&commands_menu_lock);
+    if (g_last_commands_sprite_bank < kMaxCommandsSpriteBanks &&
+        g_commands_sprite_banks[g_last_commands_sprite_bank] != nullptr &&
+        g_commands_sprite_banks[g_last_commands_sprite_bank]->active &&
+        commands_sprite_bank_key_matches(
+            g_commands_sprite_banks[g_last_commands_sprite_bank]->key, src_sprites, status_tile0)) {
+        uint8_t* sp = g_commands_sprite_banks[g_last_commands_sprite_bank]->sprite;
+        ReleaseSRWLockExclusive(&commands_menu_lock);
+        g_commands_sprite_synthesized.store(1u, std::memory_order_relaxed);
+        return sp;
+    }
+
+    for (size_t i = 0; i < kMaxCommandsSpriteBanks; ++i) {
+        if (g_commands_sprite_banks[i] != nullptr &&
+            g_commands_sprite_banks[i]->active &&
+            commands_sprite_bank_key_matches(g_commands_sprite_banks[i]->key, src_sprites, status_tile0)) {
+            g_last_commands_sprite_bank = i;
+            uint8_t* sp = g_commands_sprite_banks[i]->sprite;
+            ReleaseSRWLockExclusive(&commands_menu_lock);
+            g_commands_sprite_synthesized.store(1u, std::memory_order_relaxed);
+            return sp;
+        }
+    }
+
+    for (size_t i = 0; i < kMaxCommandsSpriteBanks; ++i) {
+        if (g_commands_sprite_banks[i] == nullptr) {
+            auto fresh = std::unique_ptr<SoulspireMenuSpriteBank>(new (std::nothrow) SoulspireMenuSpriteBank{});
+            if (fresh == nullptr) break;
+            if (!synthesize_soulspire_menu_sprite(*fresh, src_sprites)) break;
+            uint8_t* sp = fresh->sprite;
+            g_commands_sprite_banks[i] = std::move(fresh);
+            g_last_commands_sprite_bank = i;
+            g_commands_sprite_banks_used.fetch_add(1u, std::memory_order_relaxed);
+            ReleaseSRWLockExclusive(&commands_menu_lock);
+            g_commands_sprite_synthesized.store(1u, std::memory_order_relaxed);
+            return sp;
+        }
+    }
+
+    ReleaseSRWLockExclusive(&commands_menu_lock);
+    g_commands_sprite_synthesized.store(0u, std::memory_order_relaxed);
+    return nullptr;
+}
+
+static bool inject_commands_menu_entry_impl(uint8_t* prim) noexcept {
+    if (prim == nullptr) return false;
+    uint8_t* menu_data = nullptr;
+    std::memcpy(&menu_data, prim + 0x04, sizeof(menu_data));
+    if (!is_commands_menu_form(menu_data)) return false;
+
+    if (original_ffxi_new == nullptr || original_btn_ctor == nullptr ||
+        original_btn_init == nullptr || original_btn_recalc_rect == nullptr ||
+        original_btn_update_sprite == nullptr || original_btn_set_state == nullptr ||
+        original_list_push_back == nullptr || original_frame_update_box == nullptr) {
+        return false;
+    }
+
+    uint8_t* frame = nullptr;
+    uint8_t* existing_btn16 = nullptr;
+    uint8_t* shifted_buttons[16]{};
+    size_t shifted_count = 0;
+    const uint8_t* src_sprites[kCommandsSourceSpriteCount]{};
+
+    uint8_t* node = nullptr;
+    std::memcpy(&node, prim + 0x14, sizeof(node));
+    uint32_t guard = 0;
+    while (node != nullptr && guard < 128u) {
+        ++guard;
+        if (node[0x14] == 0) {
+            uint8_t* elem = nullptr;
+            std::memcpy(&elem, node + 0x10, sizeof(elem));
+            if (elem != nullptr) {
+                int16_t elem_type = -1;
+                std::memcpy(&elem_type, elem, sizeof(elem_type));
+                if (elem_type == 0 && frame == nullptr) {
+                    frame = elem;
+                } else if (elem_type == 1) {
+                    int16_t btn_id = 0;
+                    std::memcpy(&btn_id, elem + 0x3A, sizeof(btn_id));
+                    if (btn_id == kCommandsSoulspireButtonId) {
+                        existing_btn16 = elem;
+                    } else {
+                        if (is_commands_shifted_row_button(btn_id) && shifted_count < 16u) {
+                            shifted_buttons[shifted_count++] = elem;
+                        }
+                        for (size_t s = 0; s < kCommandsSourceSpriteCount; ++s) {
+                            if (btn_id == kCommandsSourceButtonIds[s]) {
+                                const uint8_t* sp = nullptr;
+                                std::memcpy(&sp, elem + 0x04, sizeof(sp));
+                                src_sprites[s] = sp;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        uint8_t* next = nullptr;
+        std::memcpy(&next, node + 0x00, sizeof(next));
+        node = next;
+    }
+
+    uint8_t* soulspire_sprite = acquire_soulspire_menu_sprite(src_sprites);
+    if (soulspire_sprite == nullptr) {
+        log_message(LOG_LEVEL_WARN,
+            "Skipping native Commands menu injection: unable to synthesize Soulspire sprite from live menuwind tiles.");
+        return false;
+    }
+
+    int16_t origin_x = 0, origin_y = 0;
+    std::memcpy(&origin_x, prim + 0x52, sizeof(origin_x));
+    std::memcpy(&origin_y, prim + 0x54, sizeof(origin_y));
+    const uint8_t use_scale = prim[0x99];
+
+    // 1. Expand menuwind frame from 202px to 218px (+16px) idempotently.
+    if (frame != nullptr) {
+        uint8_t* frame_data = nullptr;
+        std::memcpy(&frame_data, frame + 0x30, sizeof(frame_data));
+        uint8_t* frame_res = nullptr;
+        if (frame_data != nullptr) {
+            std::memcpy(&frame_res, frame_data, sizeof(frame_res));
+        }
+        if (frame_res != nullptr) {
+            int16_t res_h = 0;
+            std::memcpy(&res_h, frame_res + 0x0C, sizeof(res_h));
+            if (res_h == kCommandsVanillaFrameH) {
+                res_h = kCommandsExpandedFrameH;
+                std::memcpy(frame_res + 0x0C, &res_h, sizeof(res_h));
+            }
+            if (use_scale == 0) {
+                int16_t scr_h = 0;
+                std::memcpy(&scr_h, frame + 0x24, sizeof(scr_h));
+                if (scr_h == kCommandsVanillaFrameH) {
+                    scr_h = kCommandsExpandedFrameH;
+                    std::memcpy(frame + 0x24, &scr_h, sizeof(scr_h));
+                }
+            }
+            original_frame_update_box(frame, nullptr, use_scale);
+            int16_t frame_y = 0, frame_h = 0;
+            std::memcpy(&frame_y, frame + 0x1C, sizeof(frame_y));
+            std::memcpy(&frame_h, frame + 0x24, sizeof(frame_h));
+            const int16_t new_bottom = static_cast<int16_t>(frame_y + frame_h);
+            std::memcpy(prim + 0x40, &new_bottom, sizeof(new_bottom));
+            std::memcpy(prim + 0x48, &new_bottom, sizeof(new_bottom));
+            g_commands_last_frame_height.store(static_cast<uint32_t>(res_h), std::memory_order_relaxed);
+        }
+    }
+
+    // 2. Shift vanilla rows 2..12 down by +16px idempotently (Buttons 1, 13, 14, 15 stay put).
+    for (size_t i = 0; i < shifted_count; ++i) {
+        uint8_t* btn = shifted_buttons[i];
+        int16_t btn_id = 0, rel_top = 0, rel_bottom = 0;
+        std::memcpy(&btn_id, btn + 0x3A, sizeof(btn_id));
+        std::memcpy(&rel_top, btn + 0x34, sizeof(rel_top));
+        std::memcpy(&rel_bottom, btn + 0x38, sizeof(rel_bottom));
+        const int16_t vanilla_y = commands_vanilla_row_y(btn_id);
+        if (vanilla_y >= 0 && rel_top == vanilla_y) {
+            rel_top = static_cast<int16_t>(rel_top + kCommandsRowPitchPx);
+            rel_bottom = static_cast<int16_t>(rel_bottom + kCommandsRowPitchPx);
+            std::memcpy(btn + 0x34, &rel_top, sizeof(rel_top));
+            std::memcpy(btn + 0x38, &rel_bottom, sizeof(rel_bottom));
+            original_btn_recalc_rect(btn, nullptr, static_cast<int32_t>(origin_x), static_cast<int32_t>(origin_y), use_scale);
+        }
+    }
+
+    // 3. Allocate & insert Btn 16 ("Soulspire") if not already present on this primitive.
+    if (existing_btn16 == nullptr) {
+        void* raw = original_ffxi_new(0x60u);
+        if (raw == nullptr) return false;
+        uint8_t* btn16 = static_cast<uint8_t*>(original_btn_ctor(raw, nullptr, prim));
+        if (btn16 == nullptr) {
+            if (original_ffxi_delete != nullptr) original_ffxi_delete(raw);
+            return false;
+        }
+        int16_t btn_count = 0;
+        std::memcpy(&btn_count, prim + 0x58, sizeof(btn_count));
+        ++btn_count;
+        std::memcpy(prim + 0x58, &btn_count, sizeof(btn_count));
+
+        original_btn_init(btn16, nullptr, &g_soulspire_btn_data);
+        std::memcpy(btn16 + 0x08, &soulspire_sprite, sizeof(soulspire_sprite));
+        btn16[0x48] = 0; // Normal pill highlight & press animation
+        original_btn_recalc_rect(btn16, nullptr, static_cast<int32_t>(origin_x), static_cast<int32_t>(origin_y), use_scale);
+        original_btn_update_sprite(btn16, nullptr, use_scale);
+        original_btn_set_state(btn16, nullptr, kCommandsButtonStateEnabled);
+        original_list_push_back(prim + 0x14, nullptr, btn16);
+        g_commands_open_injections.fetch_add(1u, std::memory_order_relaxed);
+    } else {
+        std::memcpy(existing_btn16 + 0x08, &soulspire_sprite, sizeof(soulspire_sprite));
+        std::memcpy(existing_btn16 + 0x04, &soulspire_sprite, sizeof(soulspire_sprite));
+        existing_btn16[0x48] = 0;
+        original_btn_recalc_rect(existing_btn16, nullptr, static_cast<int32_t>(origin_x), static_cast<int32_t>(origin_y), use_scale);
+        original_btn_update_sprite(existing_btn16, nullptr, use_scale);
+        uint32_t cur_state = 0;
+        std::memcpy(&cur_state, existing_btn16 + 0x10, sizeof(cur_state));
+        if (cur_state == kCommandsButtonStatePressed) {
+            original_btn_set_state(existing_btn16, nullptr, kCommandsButtonStateEnabled);
+        }
+    }
+
+    int16_t final_btn_count = 0;
+    std::memcpy(&final_btn_count, prim + 0x58, sizeof(final_btn_count));
+    g_commands_last_button_count.store(static_cast<uint32_t>(final_btn_count), std::memory_order_relaxed);
+    g_active_menuwind_data.store(menu_data, std::memory_order_release);
+    g_commands_ever_injected.store(true, std::memory_order_release);
+    g_commands_injected.store(1u, std::memory_order_release);
+    return true;
+}
+
+static bool restore_commands_menu_entry_on_prim(uint8_t* prim) noexcept {
+    if (prim == nullptr) return false;
+    uint8_t* menu_data = nullptr;
+    std::memcpy(&menu_data, prim + 0x04, sizeof(menu_data));
+    if (!is_commands_menu_form(menu_data)) return false;
+
+    int16_t origin_x = 0, origin_y = 0;
+    std::memcpy(&origin_x, prim + 0x52, sizeof(origin_x));
+    std::memcpy(&origin_y, prim + 0x54, sizeof(origin_y));
+    const uint8_t use_scale = prim[0x99];
+
+    // If saved_cursor or current selection points at Btn 16, reset safely to Status (Btn 1).
+    int16_t saved_cursor = 0;
+    std::memcpy(&saved_cursor, menu_data + 0x1A, sizeof(saved_cursor));
+    if (saved_cursor == kCommandsSoulspireButtonId) {
+        saved_cursor = 1;
+        std::memcpy(menu_data + 0x1A, &saved_cursor, sizeof(saved_cursor));
+    }
+    int16_t selected_id = 0;
+    std::memcpy(&selected_id, prim + 0x4C, sizeof(selected_id));
+    if (selected_id == kCommandsSoulspireButtonId && original_prim_set_selected != nullptr) {
+        original_prim_set_selected(prim, nullptr, 1);
+    }
+
+    uint8_t* frame = nullptr;
+    uint8_t* btn16_node = nullptr;
+    uint8_t* btn16_elem = nullptr;
+    uint8_t* shifted_buttons[16]{};
+    size_t shifted_count = 0;
+
+    uint8_t* node = nullptr;
+    std::memcpy(&node, prim + 0x14, sizeof(node));
+    uint32_t guard = 0;
+    while (node != nullptr && guard < 128u) {
+        ++guard;
+        uint8_t* next = nullptr;
+        std::memcpy(&next, node + 0x00, sizeof(next));
+        if (node[0x14] == 0) {
+            uint8_t* elem = nullptr;
+            std::memcpy(&elem, node + 0x10, sizeof(elem));
+            if (elem != nullptr) {
+                int16_t elem_type = -1;
+                std::memcpy(&elem_type, elem, sizeof(elem_type));
+                if (elem_type == 0 && frame == nullptr) {
+                    frame = elem;
+                } else if (elem_type == 1) {
+                    int16_t btn_id = 0;
+                    std::memcpy(&btn_id, elem + 0x3A, sizeof(btn_id));
+                    if (btn_id == kCommandsSoulspireButtonId) {
+                        btn16_node = node;
+                        btn16_elem = elem;
+                    } else if (is_commands_shifted_row_button(btn_id) && shifted_count < 16u) {
+                        shifted_buttons[shifted_count++] = elem;
+                    }
+                }
+            }
+        }
+        node = next;
+    }
+
+    // Restore shifted buttons 2..12 back to exact vanilla Y positions.
+    for (size_t i = 0; i < shifted_count; ++i) {
+        uint8_t* btn = shifted_buttons[i];
+        int16_t btn_id = 0, rel_top = 0, rel_bottom = 0;
+        std::memcpy(&btn_id, btn + 0x3A, sizeof(btn_id));
+        std::memcpy(&rel_top, btn + 0x34, sizeof(rel_top));
+        std::memcpy(&rel_bottom, btn + 0x38, sizeof(rel_bottom));
+        const int16_t shifted_y = commands_target_row_y(btn_id, true);
+        if (shifted_y >= 0 && rel_top == shifted_y) {
+            rel_top = static_cast<int16_t>(rel_top - kCommandsRowPitchPx);
+            rel_bottom = static_cast<int16_t>(rel_bottom - kCommandsRowPitchPx);
+            std::memcpy(btn + 0x34, &rel_top, sizeof(rel_top));
+            std::memcpy(btn + 0x38, &rel_bottom, sizeof(rel_bottom));
+            if (original_btn_recalc_rect != nullptr) {
+                original_btn_recalc_rect(btn, nullptr, static_cast<int32_t>(origin_x), static_cast<int32_t>(origin_y), use_scale);
+            }
+        }
+    }
+
+    // Remove and free Btn 16 if present.
+    if (btn16_node != nullptr && btn16_elem != nullptr &&
+        original_list_remove_node != nullptr && original_ffxi_delete != nullptr) {
+        original_list_remove_node(prim + 0x14, nullptr, btn16_node);
+        original_ffxi_delete(btn16_elem);
+        int16_t btn_count = 0;
+        std::memcpy(&btn_count, prim + 0x58, sizeof(btn_count));
+        if (btn_count > kCommandsVanillaButtonCount) {
+            --btn_count;
+            std::memcpy(prim + 0x58, &btn_count, sizeof(btn_count));
+        }
+    }
+
+    // Restore frame height 218 -> 202.
+    if (frame != nullptr) {
+        uint8_t* frame_data = nullptr;
+        std::memcpy(&frame_data, frame + 0x30, sizeof(frame_data));
+        uint8_t* frame_res = nullptr;
+        if (frame_data != nullptr) {
+            std::memcpy(&frame_res, frame_data, sizeof(frame_res));
+        }
+        if (frame_res != nullptr) {
+            int16_t res_h = 0;
+            std::memcpy(&res_h, frame_res + 0x0C, sizeof(res_h));
+            if (res_h == kCommandsExpandedFrameH) {
+                res_h = kCommandsVanillaFrameH;
+                std::memcpy(frame_res + 0x0C, &res_h, sizeof(res_h));
+            }
+            if (use_scale == 0) {
+                int16_t scr_h = 0;
+                std::memcpy(&scr_h, frame + 0x24, sizeof(scr_h));
+                if (scr_h == kCommandsExpandedFrameH) {
+                    scr_h = kCommandsVanillaFrameH;
+                    std::memcpy(frame + 0x24, &scr_h, sizeof(scr_h));
+                }
+            }
+            if (original_frame_update_box != nullptr) {
+                original_frame_update_box(frame, nullptr, use_scale);
+            }
+            int16_t frame_y = 0, frame_h = 0;
+            std::memcpy(&frame_y, frame + 0x1C, sizeof(frame_y));
+            std::memcpy(&frame_h, frame + 0x24, sizeof(frame_h));
+            const int16_t restored_bottom = static_cast<int16_t>(frame_y + frame_h);
+            std::memcpy(prim + 0x40, &restored_bottom, sizeof(restored_bottom));
+            std::memcpy(prim + 0x48, &restored_bottom, sizeof(restored_bottom));
+        }
+    }
+
+    g_commands_injected.store(0u, std::memory_order_release);
+    g_active_menuwind_data.store(nullptr, std::memory_order_release);
+    g_commands_last_button_count.store(kCommandsVanillaButtonCount, std::memory_order_relaxed);
+    g_commands_last_frame_height.store(kCommandsVanillaFrameH, std::memory_order_relaxed);
+    return true;
+}
+
+static void restore_live_commands_menu_if_present() noexcept {
+    if (!g_commands_ever_injected.load(std::memory_order_acquire)) return;
+    if (menuwind_singleton_slot == nullptr) {
+        g_commands_injected.store(0u, std::memory_order_release);
+        g_active_menuwind_data.store(nullptr, std::memory_order_release);
+        return;
+    }
+#ifdef _MSC_VER
+    __try {
+        uint8_t* mw = *menuwind_singleton_slot;
+        if (mw != nullptr) {
+            uint8_t* prim = nullptr;
+            std::memcpy(&prim, mw + 0x08, sizeof(prim));
+            if (prim != nullptr) {
+                restore_commands_menu_entry_on_prim(prim);
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        // Ignore teardown races if FFXI already destroyed CMenuWind during shutdown.
+    }
+#else
+    uint8_t* mw = *menuwind_singleton_slot;
+    if (mw != nullptr && readable_range(mw + 0x08, sizeof(uint8_t*))) {
+        uint8_t* prim = nullptr;
+        std::memcpy(&prim, mw + 0x08, sizeof(prim));
+        if (prim != nullptr && readable_range(prim, 0x9A)) {
+            restore_commands_menu_entry_on_prim(prim);
+        }
+    }
+#endif
+    g_commands_injected.store(0u, std::memory_order_release);
+    g_active_menuwind_data.store(nullptr, std::memory_order_release);
+}
+
+static void __stdcall on_menuwind_before_restore_cursor(uint8_t* prim) noexcept {
+#if !defined(SOULSPIRE_NATIVE_SELFTEST) && !defined(CRYSTALJOBS_SELFTEST)
+    if (!enabled.load(std::memory_order_acquire)) return;
+#endif
+    if (prim == nullptr) return;
+#ifdef _MSC_VER
+    __try {
+        inject_commands_menu_entry_impl(prim);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        log_message(LOG_LEVEL_ERROR, "Exception caught during native Commands menu injection; keeping vanilla menu.");
+    }
+#else
+    inject_commands_menu_entry_impl(prim);
+#endif
+}
+
+static int32_t __stdcall resolve_menuwind_next_button_hook(
+    const uint8_t* menu_data,
+    int32_t cur_btn,
+    int32_t dir_key) noexcept {
+#if !defined(SOULSPIRE_NATIVE_SELFTEST) && !defined(CRYSTALJOBS_SELFTEST)
+    if (!enabled.load(std::memory_order_acquire)) return 0;
+#endif
+    if (menu_data == nullptr || menu_data != g_active_menuwind_data.load(std::memory_order_acquire)) return 0;
+    const bool injected = g_commands_injected.load(std::memory_order_acquire) != 0;
+    const int16_t override_btn = resolve_commands_menu_next_button(
+        static_cast<int16_t>(cur_btn), static_cast<int16_t>(dir_key), injected);
+    if (override_btn > 0) {
+        g_commands_nav_overrides.fetch_add(1u, std::memory_order_relaxed);
+        return static_cast<int32_t>(override_btn);
+    }
+    return 0;
+}
+
+static uint8_t __stdcall handle_menuwind_key_item(
+    uint8_t* menuwind,
+    int32_t key,
+    int32_t btn_id) noexcept {
+#if !defined(SOULSPIRE_NATIVE_SELFTEST) && !defined(CRYSTALJOBS_SELFTEST)
+    if (!enabled.load(std::memory_order_acquire)) return 0;
+#endif
+    if (key != kCommandsKeyConfirm || btn_id != kCommandsSoulspireButtonId) return 0;
+    if (g_commands_injected.load(std::memory_order_acquire) == 0) return 0;
+
+    if (original_play_confirm_sound != nullptr) {
+        original_play_confirm_sound();
+    }
+    if (menuwind != nullptr && original_close_menu != nullptr && menu_manager_instance != nullptr) {
+        uint8_t* prim = nullptr;
+        std::memcpy(&prim, menuwind + 0x08, sizeof(prim));
+        if (prim != nullptr) {
+            original_close_menu(menu_manager_instance, nullptr, prim, 1);
+        }
+    }
+    g_commands_activations.fetch_add(1u, std::memory_order_relaxed);
+    g_commands_pending_open_requests.fetch_add(1u, std::memory_order_acq_rel);
+    return 1;
+}
+
+static __declspec(naked) void menuwind_restore_cursor_hook() {
+    __asm {
+        pushad
+        push ecx
+        call on_menuwind_before_restore_cursor
+        popad
+        jmp dword ptr [original_restore_saved_cursor]
+    }
+}
+
+static __declspec(naked) void menuwind_next_button_hook() {
+    __asm {
+        pushad
+        movsx eax, word ptr [esp + 40]
+        movsx edx, word ptr [esp + 36]
+        push eax
+        push edx
+        push ecx
+        call resolve_menuwind_next_button_hook
+        test eax, eax
+        jz stock
+        mov [esp + 28], eax
+        popad
+        ret 8
+    stock:
+        popad
+        jmp dword ptr [original_get_next_button]
+    }
+}
+
+static __declspec(naked) void menuwind_key_item_hook() {
+    __asm {
+        pushad
+        movsx eax, word ptr [esp + 40]
+        movsx edx, word ptr [esp + 36]
+        push eax
+        push edx
+        push ecx
+        call handle_menuwind_key_item
+        test al, al
+        jz stock
+        popad
+        ret 8
+    stock:
+        popad
+        movsx eax, word ptr [esp + 4]
+        jmp dword ptr [menuwind_key_item_resume]
+    }
+}
+
+// ============================================================================
+// Centralized 31-Hook Registry & Lifecycle Management
 // ============================================================================
 
 static Patch patches[] = {
@@ -1226,19 +1800,23 @@ static Patch patches[] = {
     {0x22562F, reinterpret_cast<void*>(&ability_list_filter_hook)},    // Bit 19 (#20)
     {0x22E64D, reinterpret_cast<void*>(&menu_spell_elig_hook)},        // Bit 20 (#21)
     {0x133E33, reinterpret_cast<void*>(&soul_can_equip_in_slot_hook)}, // Bit 21 (#22 / CanEquipItemInSlot)
+    {0x15F9B8, reinterpret_cast<void*>(&menuwind_restore_cursor_hook)},// Bit 22 (#28 / OpenMenu cached RestoreSavedCursor)
+    {0x15FA90, reinterpret_cast<void*>(&menuwind_restore_cursor_hook)},// Bit 23 (#29 / OpenMenu fresh RestoreSavedCursor)
+    {0x11979C, reinterpret_cast<void*>(&menuwind_next_button_hook)},   // Bit 24 (#30 / CTkMenuData::GetNextButton)
 };
 
-static PrologueDetour can_use_spell_detour{0x22CDE0, reinterpret_cast<void*>(&magic_list_filter_hook), 0xA1u};        // Bit 22 (#23)
-static PrologueDetour missing_spell_bit_detour{0x22CB44, reinterpret_cast<void*>(&missing_spell_bit_hook), 0xBDu};    // Bit 23 (#24)
-static PrologueDetour soul_sub_weapon_detour{0x133D56, reinterpret_cast<void*>(&soul_sub_weapon_hook), 0x68u};        // Bit 24 (#25)
-static PrologueDetour soul_sub_menu_filter_detour{0x21DF85, reinterpret_cast<void*>(&soul_sub_menu_filter_hook), 0x85u}; // Bit 25 (#26)
-static PrologueDetour soul_sub_2h_main_detour{0x133DD3, reinterpret_cast<void*>(&soul_sub_2h_main_hook), 0x68u};      // Bit 26 (#27)
+static PrologueDetour can_use_spell_detour{0x22CDE0, reinterpret_cast<void*>(&magic_list_filter_hook), 0xA1u};        // Bit 25 (#23)
+static PrologueDetour missing_spell_bit_detour{0x22CB44, reinterpret_cast<void*>(&missing_spell_bit_hook), 0xBDu};    // Bit 26 (#24)
+static PrologueDetour soul_sub_weapon_detour{0x133D56, reinterpret_cast<void*>(&soul_sub_weapon_hook), 0x68u};        // Bit 27 (#25)
+static PrologueDetour soul_sub_menu_filter_detour{0x21DF85, reinterpret_cast<void*>(&soul_sub_menu_filter_hook), 0x85u}; // Bit 28 (#26)
+static PrologueDetour soul_sub_2h_main_detour{0x133DD3, reinterpret_cast<void*>(&soul_sub_2h_main_hook), 0x68u};      // Bit 29 (#27)
+static PrologueDetour menuwind_key_item_detour{0x141800, reinterpret_cast<void*>(&menuwind_key_item_hook), 0x0Fu};    // Bit 30 (#31 / CMenuWind::OnKeyItem)
 
 static constexpr uint32_t kPatchCount = static_cast<uint32_t>(sizeof(patches) / sizeof(*patches));
-static constexpr uint32_t kDetourCount = 5u;
+static constexpr uint32_t kDetourCount = 6u;
 static constexpr uint32_t kExpectedHooks = kPatchCount + kDetourCount;
-static_assert(kPatchCount == 22u);
-static_assert(kExpectedHooks == 27u);
+static_assert(kPatchCount == 25u);
+static_assert(kExpectedHooks == 31u);
 static_assert(kExpectedHooks == SOULSPIRE_NATIVE_EXPECTED_HOOKS);
 
 static PrologueDetour* detour_at(uint32_t idx) noexcept {
@@ -1248,6 +1826,7 @@ static PrologueDetour* detour_at(uint32_t idx) noexcept {
         case 2: return &soul_sub_weapon_detour;
         case 3: return &soul_sub_menu_filter_detour;
         case 4: return &soul_sub_2h_main_detour;
+        case 5: return &menuwind_key_item_detour;
         default: return nullptr;
     }
 }
@@ -1430,6 +2009,12 @@ static void collect_hook_state(uint32_t& total, uint32_t& installed_mask, uint32
             dat_virt_mgr.override_count() > 0) {
             caps |= SOULSPIRE_NATIVE_CAP_DAT_VIRTUALIZATION;
         }
+        if (patch_installed_at(0x15F9B8) &&
+            patch_installed_at(0x15FA90) &&
+            patch_installed_at(0x11979C) &&
+            ((installed_mask & (1u << (kPatchCount + 5u))) != 0)) {
+            caps |= SOULSPIRE_NATIVE_CAP_COMMANDS_MENU_ENTRY;
+        }
     }
 }
 
@@ -1443,7 +2028,7 @@ extern "C" uint32_t __stdcall SoulspireNativeShutdown() {
     // passthrough path while all original_* and *_resume pointers remain valid.
     enabled.store(false, std::memory_order_release);
 
-    // Step 2: Restore all 5 detours and 22 CALL patches BEFORE clearing pointers.
+    // Step 2: Restore all 6 detours and 25 CALL patches BEFORE clearing pointers.
     uint32_t failure = 0;
     for (uint32_t j = kDetourCount; j-- > 0;) {
         if (!detour_at(j)->restore()) failure = 3;
@@ -1457,6 +2042,10 @@ extern "C" uint32_t __stdcall SoulspireNativeShutdown() {
         }
         if (!patch.restore()) failure = 3;
     }
+
+    // Step 2b: Restore live menu    menuwind layout & remove injected Soulspire button if still open.
+    restore_live_commands_menu_if_present();
+    g_commands_pending_open_requests.store(0u, std::memory_order_release);
 
     // Step 3: Clear session/override state and TLS cursors.
     AcquireSRWLockExclusive(&state_lock);
@@ -1474,6 +2063,8 @@ extern "C" uint32_t __stdcall SoulspireNativeShutdown() {
         main_job_slot = nullptr;
         main_lvl_slot = nullptr;
         ability_list_slot = nullptr;
+        menuwind_singleton_slot = nullptr;
+        menu_manager_instance = nullptr;
     }
 
     last_error.store(failure, std::memory_order_release);
@@ -1565,10 +2156,28 @@ extern "C" uint32_t __stdcall SoulspireNativeInitialize() {
     main_job_slot = base + 0x4867F0;
     main_lvl_slot = base + 0x4867F1;
     ability_list_slot = reinterpret_cast<uint8_t**>(base + 0x668308);
+    menuwind_singleton_slot = reinterpret_cast<uint8_t**>(base + 0x5793F4);
+    menu_manager_instance = reinterpret_cast<void*>(base + 0x6229F0);
     original_map_decode = reinterpret_cast<MapDecode>(base + 0xDD6C0);
     original_map_encode = reinterpret_cast<MapEncode>(base + 0xDF7C0);
+    original_ffxi_new = reinterpret_cast<FfxiOpNew>(base + 0x3131FB);
+    original_ffxi_delete = reinterpret_cast<FfxiOpDelete>(base + 0x3131F0);
+    original_play_confirm_sound = reinterpret_cast<FfxiPlayConfirmSound>(base + 0x037B90);
+    original_frame_update_box = reinterpret_cast<FfxiFrameUpdateBox>(base + 0x11A9E0);
+    original_btn_ctor = reinterpret_cast<FfxiBtnCtor>(base + 0x11AD60);
+    original_btn_init = reinterpret_cast<FfxiBtnInit>(base + 0x11AEE0);
+    original_btn_recalc_rect = reinterpret_cast<FfxiBtnRecalcRect>(base + 0x11AF60);
+    original_btn_update_sprite = reinterpret_cast<FfxiBtnUpdateSprite>(base + 0x11B090);
+    original_btn_set_state = reinterpret_cast<FfxiBtnSetState>(base + 0x11AE00);
+    original_prim_set_selected = reinterpret_cast<FfxiPrimSetSelected>(base + 0x11A320);
+    original_list_push_back = reinterpret_cast<FfxiListPushBack>(base + 0x127910);
+    original_list_remove_node = reinterpret_cast<FfxiListRemoveNode>(base + 0x127A10);
+    original_close_menu = reinterpret_cast<FfxiCloseMenu>(base + 0x15FD60);
+    original_restore_saved_cursor = reinterpret_cast<uintptr_t>(base + 0x119D00);
+    original_get_next_button = reinterpret_cast<uintptr_t>(base + 0x11C6B0);
 
     // Pre-populate all detour resume targets BEFORE installing any hook.
+    menuwind_key_item_resume = reinterpret_cast<uintptr_t>(base + 0x141805);
     missing_spell_bit_resume = reinterpret_cast<uintptr_t>(base + 0x22CB49);
     soul_sub_weapon_deny_resume = reinterpret_cast<uintptr_t>(base + 0x133D5B);
     soul_sub_weapon_allow_resume = reinterpret_cast<uintptr_t>(base + 0x133D65);
@@ -1967,6 +2576,37 @@ extern "C" uint32_t __stdcall SoulspireNativeGetInterfaceInfo(SoulspireNativeInt
     return 0;
 }
 
+extern "C" uint32_t __stdcall SoulspireNativeGetMainMenuStatus(SoulspireNativeMainMenuStatus* output, uint32_t size) {
+    if (output == nullptr || size < sizeof(*output)) return 1;
+    SoulspireNativeMainMenuStatus st{};
+    st.size = sizeof(st);
+    st.version = 1;
+    st.expected_hooks = kExpectedHooks;
+
+    AcquireSRWLockShared(&lifecycle_lock);
+    uint32_t inst_mask = 0, site_mask = 0, caps = 0;
+    collect_hook_state(st.total_hooks, inst_mask, site_mask, caps);
+    ReleaseSRWLockShared(&lifecycle_lock);
+
+    st.hooks_installed = ((caps & SOULSPIRE_NATIVE_CAP_COMMANDS_MENU_ENTRY) != 0) ? 1u : 0u;
+    st.injected = g_commands_injected.load(std::memory_order_acquire);
+    st.button_id = static_cast<uint32_t>(kCommandsSoulspireButtonId);
+    st.button_count = g_commands_last_button_count.load(std::memory_order_relaxed);
+    st.frame_height = g_commands_last_frame_height.load(std::memory_order_relaxed);
+    st.sprite_synthesized = g_commands_sprite_synthesized.load(std::memory_order_relaxed);
+    st.sprite_banks_used = g_commands_sprite_banks_used.load(std::memory_order_relaxed);
+    st.open_injections = g_commands_open_injections.load(std::memory_order_relaxed);
+    st.nav_overrides = g_commands_nav_overrides.load(std::memory_order_relaxed);
+    st.activations = g_commands_activations.load(std::memory_order_relaxed);
+    st.pending_open_requests = g_commands_pending_open_requests.load(std::memory_order_acquire);
+    *output = st;
+    return 0;
+}
+
+extern "C" uint32_t __stdcall SoulspireNativeConsumeCoreOpenRequest(void) {
+    return g_commands_pending_open_requests.exchange(0u, std::memory_order_acq_rel);
+}
+
 static_assert(sizeof(SoulspireNativeStatus) == 68);
 static_assert(sizeof(SoulspireNativeActionEntry) == 288);
 static_assert(sizeof(SoulspireNativeActionStatus) == 64);
@@ -1976,6 +2616,7 @@ static_assert(sizeof(SoulspireNativeWeaponRule) == 24);
 static_assert(sizeof(SoulspireNativeWeaponStatus) == 36);
 static_assert(sizeof(SoulspireNativeHookDiagnostics) == 60);
 static_assert(sizeof(SoulspireNativeInterfaceInfo) == 104);
+static_assert(sizeof(SoulspireNativeMainMenuStatus) == 60);
 
 // ============================================================================
 // Temporary Backwards-Compatible CrystalJobs* Forwarding Exports

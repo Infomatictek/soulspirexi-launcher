@@ -1,3 +1,4 @@
+import json
 import pathlib
 import re
 import struct
@@ -7,6 +8,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 NATIVE_DIR = ROOT / "soulspire_native"
 CS_DIR = ROOT / "addons" / "ashita4" / "crystalsocket"
 SHIPPED_DLL = ROOT / "plugins" / "ashita4" / "soulspire_native.dll"
+DLL_SYNC_STATE = NATIVE_DIR / "dll_sync_state.json"
 
 
 def parse_pe32_exports(path: pathlib.Path):
@@ -57,6 +59,11 @@ class NativeEquipmentHookTests(unittest.TestCase):
         self.assertIn("{0x133E33, {0xe8, 0x48, 0xf7, 0xff, 0xff, 0x84, 0xc0, 0x75, 0x24, 0xfe", layout)
         self.assertIn("{0xEB5D0,  {0x8b, 0x15, 0x48, 0x0f, 0x4e, 0x10", layout)
         self.assertIn("{0x15D210, {0xb8, 0xac, 0x15, 0x00, 0x00, 0xe8, 0x76, 0x65, 0x1b, 0x00", layout)
+        # Native Commands menu ("menu    menuwind") hooks #28-#31
+        self.assertIn("{0x15F9B8, {0xe8, 0x43, 0xa3, 0xfb, 0xff", layout)
+        self.assertIn("{0x15FA90, {0xe8, 0x6b, 0xa2, 0xfb, 0xff", layout)
+        self.assertIn("{0x11979C, {0xe8, 0x0f, 0x2f, 0x00, 0x00", layout)
+        self.assertIn("{0x141800, {0x0f, 0xbf, 0x44, 0x24, 0x04", layout)
 
     def test_soulspire_native_header_and_exports_define_canonical_and_compat_abi(self):
         header = (NATIVE_DIR / "core" / "api.h").read_text(encoding="utf-8")
@@ -78,6 +85,10 @@ class NativeEquipmentHookTests(unittest.TestCase):
             "SoulspireNativeGetWeaponStatus",
             "SoulspireNativeGetHookDiagnostics",
             "SoulspireNativeGetInterfaceInfo",
+            "SoulspireNativeGetMainMenuStatus",
+            "SoulspireNativeConsumeCoreOpenRequest",
+            "SOULSPIRE_NATIVE_CAP_COMMANDS_MENU_ENTRY",
+            "typedef struct SoulspireNativeMainMenuStatus",
             "SoulspireNativeReloadConfig",
         ):
             self.assertIn(sym, header)
@@ -98,6 +109,8 @@ class NativeEquipmentHookTests(unittest.TestCase):
             "SoulspireNativeGetWeaponStatus@8",
             "SoulspireNativeGetHookDiagnostics@8",
             "SoulspireNativeGetInterfaceInfo@8",
+            "SoulspireNativeGetMainMenuStatus@8",
+            "SoulspireNativeConsumeCoreOpenRequest@0",
             "CrystalJobsReplaceWeaponRules@8",
             "CrystalJobsClearWeaponRules@0",
             "CrystalJobsGetWeaponStatus@8",
@@ -120,7 +133,12 @@ class NativeEquipmentHookTests(unittest.TestCase):
         self.assertIn("static_assert(sizeof(SoulspireNativeWeaponRule) == 24)", cpp)
         self.assertIn("static_assert(sizeof(SoulspireNativeWeaponStatus) == 36)", cpp)
         self.assertIn("static_assert(sizeof(SoulspireNativeHookDiagnostics) == 60)", cpp)
-        self.assertIn("static_assert(kExpectedHooks == 27u)", cpp)
+        self.assertIn("static_assert(sizeof(SoulspireNativeMainMenuStatus) == 60)", cpp)
+        self.assertIn("static_assert(kExpectedHooks == 31u)", cpp)
+        self.assertIn("menuwind_key_item_detour{0x141800", cpp)
+        self.assertIn("SoulspireNativeGetMainMenuStatus", cpp)
+        self.assertIn("SoulspireNativeConsumeCoreOpenRequest", cpp)
+        self.assertIn("SOULSPIRE_NATIVE_CAP_COMMANDS_MENU_ENTRY", cpp)
         self.assertIn("collect_hook_state(", cpp)
         self.assertIn("SoulspireNativeGetHookDiagnostics", cpp)
         self.assertIn("SOULSPIRE_NATIVE_CAP_SOUL_SUB_WEAPON", cpp)
@@ -128,9 +146,10 @@ class NativeEquipmentHookTests(unittest.TestCase):
 
         selftest = (NATIVE_DIR / "tests" / "selftest.cpp").read_text(encoding="utf-8")
         self.assertIn("weapon_rule_checks();", selftest)
-        self.assertIn("diag.expected_hooks == 27", selftest)
-        self.assertIn("info.expected_hooks == 27", selftest)
-        self.assertIn("dll_diag.expected_hooks == 27", selftest)
+        self.assertIn("commands_menu_checks();", selftest)
+        self.assertIn("diag.expected_hooks == 31", selftest)
+        self.assertIn("info.expected_hooks == 31", selftest)
+        self.assertIn("dll_diag.expected_hooks == 31", selftest)
         self.assertIn("SoulspireNativeGetHookDiagnostics", selftest)
 
     def test_crystalsocket_removed_custom_equipment_picker_and_preserves_soul_ui(self):
@@ -203,7 +222,15 @@ class NativeEquipmentHookTests(unittest.TestCase):
             "expDestroyPlugin",
             "expGetInterfaceVersion",
         ]
-        self.assertEqual(len(exports), 43, f"Expected 43 PE exports, found {len(exports)}: {exports}")
+        sync_hooks = 27
+        if DLL_SYNC_STATE.is_file():
+            sync_hooks = int(json.loads(DLL_SYNC_STATE.read_text(encoding="utf-8")).get("expectedHooks", 27))
+        if sync_hooks >= 31:
+            expected_exports.extend([
+                "SoulspireNativeGetMainMenuStatus",
+                "SoulspireNativeConsumeCoreOpenRequest",
+            ])
+        self.assertEqual(len(exports), len(expected_exports), f"Expected {len(expected_exports)} PE exports, found {len(exports)}: {exports}")
         self.assertEqual(sorted(exports), sorted(expected_exports))
 
 

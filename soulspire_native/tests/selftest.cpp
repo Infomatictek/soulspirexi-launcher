@@ -1011,6 +1011,510 @@ static void weapon_rule_checks() {
     selftest_alive = false;
 }
 
+// ============================================================================
+// Native Commands Menu ("menu    menuwind") Unit & ABI Self-Tests
+// ============================================================================
+
+struct MockSpriteBundle {
+    uint8_t sprite[0x30]{};
+    uint8_t nodes[24][0x18]{};
+    uint8_t tiles[24][0xE0]{};
+
+    void init(uint32_t tile_count, uint8_t tag) {
+        std::memset(this, 0, sizeof(*this));
+        sprite[0] = tag;
+        for (uint32_t i = 0; i < tile_count; ++i) {
+            uint8_t* next_p = (i + 1 < tile_count) ? nodes[i + 1] : nullptr;
+            uint8_t* prev_p = (i > 0) ? nodes[i - 1] : nullptr;
+            uint8_t* tile_p = tiles[i];
+            std::memcpy(nodes[i] + 0x00, &next_p, sizeof(next_p));
+            std::memcpy(nodes[i] + 0x04, &prev_p, sizeof(prev_p));
+            std::memcpy(nodes[i] + 0x10, &tile_p, sizeof(tile_p));
+            nodes[i][0x14] = 0;
+            tiles[i][0] = tag;
+            tiles[i][1] = static_cast<uint8_t>(i);
+            const int16_t w = (i < 2) ? static_cast<int16_t>(i == 0 ? 48 : 40) : 8;
+            const int16_t xs[4] = {0, w, 0, w};
+            const int16_t ys[4] = {3, 3, 12, 12};
+            std::memcpy(tiles[i] + 0xC0, xs, sizeof(xs));
+            std::memcpy(tiles[i] + 0xC8, ys, sizeof(ys));
+        }
+        uint8_t* head_p = nodes[0];
+        uint8_t* tail_p = nodes[tile_count - 1];
+        std::memcpy(sprite + 0x04, &head_p, sizeof(head_p));
+        std::memcpy(sprite + 0x08, &tail_p, sizeof(tail_p));
+        std::memcpy(sprite + 0x14, &tile_count, sizeof(tile_count));
+    }
+};
+
+struct MockListNode {
+    uint8_t raw[0x18]{};
+};
+
+static uint32_t mock_cmd_new_calls = 0;
+static uint32_t mock_cmd_delete_calls = 0;
+static uint32_t mock_cmd_sound_calls = 0;
+static uint32_t mock_cmd_close_calls = 0;
+static void*    mock_cmd_closed_prim = nullptr;
+static int32_t  mock_cmd_selected_override = -1;
+static uint32_t mock_cmd_frame_box_updates = 0;
+static uint32_t mock_cmd_recalc_calls = 0;
+static uint32_t mock_cmd_update_sprite_calls = 0;
+static MockListNode mock_cmd_extra_nodes[8]{};
+static uint32_t mock_cmd_extra_node_idx = 0;
+
+static void* __cdecl mock_ffxi_new(uint32_t sz) noexcept {
+    ++mock_cmd_new_calls;
+    return ::operator new(sz);
+}
+static void __cdecl mock_ffxi_delete(void* p) noexcept {
+    ++mock_cmd_delete_calls;
+    ::operator delete(p);
+}
+static void __cdecl mock_play_confirm_sound() noexcept {
+    ++mock_cmd_sound_calls;
+}
+static void __fastcall mock_frame_update_box(void* frame_ptr, void*, uint8_t) noexcept {
+    ++mock_cmd_frame_box_updates;
+    auto* frame = static_cast<uint8_t*>(frame_ptr);
+    uint8_t* fd = nullptr;
+    std::memcpy(&fd, frame + 0x30, sizeof(fd));
+    if (fd != nullptr) {
+        uint8_t* fres = nullptr;
+        std::memcpy(&fres, fd, sizeof(fres));
+        if (fres != nullptr) {
+            int16_t h = 0;
+            std::memcpy(&h, fres + 0x0C, sizeof(h));
+            std::memcpy(frame + 0x24, &h, sizeof(h));
+        }
+    }
+}
+static void* __fastcall mock_btn_ctor(void* raw, void*, void*) noexcept {
+    auto* b = static_cast<uint8_t*>(raw);
+    std::memset(b, 0, 0x60);
+    const int16_t type = 1;
+    std::memcpy(b, &type, sizeof(type));
+    b[0x4A] = 1;
+    return b;
+}
+static void __fastcall mock_btn_init(void* btn_ptr, void*, const void* data_ptr) noexcept {
+    auto* b = static_cast<uint8_t*>(btn_ptr);
+    const auto* d = static_cast<const NativeMenuButtonData*>(data_ptr);
+    std::memcpy(b + 0x0C, &d, sizeof(d));
+    const int16_t r_left = d->res->x;
+    const int16_t r_top = d->res->y;
+    const int16_t r_right = static_cast<int16_t>(d->res->x + d->res->w);
+    const int16_t r_bottom = static_cast<int16_t>(d->res->y + d->res->h);
+    std::memcpy(b + 0x32, &r_left, 2);
+    std::memcpy(b + 0x34, &r_top, 2);
+    std::memcpy(b + 0x36, &r_right, 2);
+    std::memcpy(b + 0x38, &r_bottom, 2);
+    std::memcpy(b + 0x3A, &d->res->button_id, 2);
+    std::memcpy(b + 0x40, &d->help, sizeof(d->help));
+    std::memcpy(b + 0x44, &d->title, sizeof(d->title));
+}
+static void __fastcall mock_btn_recalc_rect(void* btn_ptr, void*, int32_t ox, int32_t oy, uint8_t) noexcept {
+    ++mock_cmd_recalc_calls;
+    auto* b = static_cast<uint8_t*>(btn_ptr);
+    int16_t l = 0, t = 0, r = 0, bt = 0;
+    std::memcpy(&l, b + 0x32, 2);
+    std::memcpy(&t, b + 0x34, 2);
+    std::memcpy(&r, b + 0x36, 2);
+    std::memcpy(&bt, b + 0x38, 2);
+    const int16_t sx = static_cast<int16_t>(ox + l);
+    const int16_t sy = static_cast<int16_t>(oy + t);
+    const int16_t sw = static_cast<int16_t>(r - l);
+    const int16_t sh = static_cast<int16_t>(bt - t);
+    std::memcpy(b + 0x2A, &sx, 2);
+    std::memcpy(b + 0x2C, &sy, 2);
+    std::memcpy(b + 0x2E, &sw, 2);
+    std::memcpy(b + 0x30, &sh, 2);
+}
+static void __fastcall mock_btn_update_sprite(void* btn_ptr, void*, uint8_t) noexcept {
+    ++mock_cmd_update_sprite_calls;
+    auto* b = static_cast<uint8_t*>(btn_ptr);
+    void* ov = nullptr;
+    std::memcpy(&ov, b + 0x08, sizeof(ov));
+    if (ov != nullptr) {
+        std::memcpy(b + 0x04, &ov, sizeof(ov));
+    }
+}
+static void __fastcall mock_btn_set_state(void* btn_ptr, void*, uint32_t st) noexcept {
+    auto* b = static_cast<uint8_t*>(btn_ptr);
+    std::memcpy(b + 0x10, &st, sizeof(st));
+}
+static void __fastcall mock_prim_set_selected(void* prim_ptr, void*, int32_t btn_id) noexcept {
+    mock_cmd_selected_override = btn_id;
+    auto* p = static_cast<uint8_t*>(prim_ptr);
+    const int16_t id16 = static_cast<int16_t>(btn_id);
+    std::memcpy(p + 0x4C, &id16, 2);
+}
+static void __fastcall mock_list_push_back(void* list_ptr, void*, void* elem) noexcept {
+    auto* list = static_cast<uint8_t*>(list_ptr);
+    assert(mock_cmd_extra_node_idx < 8u);
+    uint8_t* node = mock_cmd_extra_nodes[mock_cmd_extra_node_idx++].raw;
+    std::memset(node, 0, 0x18);
+    std::memcpy(node + 0x10, &elem, sizeof(elem));
+    uint8_t* tail = nullptr;
+    std::memcpy(&tail, list + 0x04, sizeof(tail));
+    if (tail == nullptr) {
+        std::memcpy(list + 0x00, &node, sizeof(node));
+        std::memcpy(list + 0x04, &node, sizeof(node));
+    } else {
+        std::memcpy(tail + 0x00, &node, sizeof(node));
+        std::memcpy(node + 0x04, &tail, sizeof(tail));
+        std::memcpy(list + 0x04, &node, sizeof(node));
+    }
+    uint32_t cnt = 0;
+    std::memcpy(&cnt, list + 0x10, sizeof(cnt));
+    ++cnt;
+    std::memcpy(list + 0x10, &cnt, sizeof(cnt));
+}
+static void __fastcall mock_list_remove_node(void* list_ptr, void*, void* node_ptr) noexcept {
+    auto* list = static_cast<uint8_t*>(list_ptr);
+    auto* node = static_cast<uint8_t*>(node_ptr);
+    uint8_t* next = nullptr;
+    uint8_t* prev = nullptr;
+    std::memcpy(&next, node + 0x00, sizeof(next));
+    std::memcpy(&prev, node + 0x04, sizeof(prev));
+    if (prev != nullptr) std::memcpy(prev + 0x00, &next, sizeof(next));
+    else std::memcpy(list + 0x00, &next, sizeof(next));
+    if (next != nullptr) std::memcpy(next + 0x04, &prev, sizeof(prev));
+    else std::memcpy(list + 0x04, &prev, sizeof(prev));
+    uint32_t cnt = 0;
+    std::memcpy(&cnt, list + 0x10, sizeof(cnt));
+    if (cnt > 0) --cnt;
+    std::memcpy(list + 0x10, &cnt, sizeof(cnt));
+}
+static void __fastcall mock_close_menu(void* mgr, void*, void* prim, int32_t save_cursor) noexcept {
+    assert(mgr == reinterpret_cast<void*>(0x23450000u));
+    assert(save_cursor == 1);
+    ++mock_cmd_close_calls;
+    mock_cmd_closed_prim = prim;
+}
+
+static int32_t mock_stock_next_btn_calls = 0;
+static int16_t __fastcall mock_stock_get_next_btn(void*, void*, int16_t cur, int16_t) noexcept {
+    ++mock_stock_next_btn_calls;
+    return static_cast<int16_t>(cur + 100);
+}
+
+static int32_t mock_stock_key_item_calls = 0;
+static int32_t mock_stock_key_item_last_eax = -1;
+static __declspec(naked) void mock_stock_key_item_resume() {
+    __asm {
+        mov mock_stock_key_item_last_eax, eax
+        inc mock_stock_key_item_calls
+        ret 8
+    }
+}
+
+static __declspec(naked) int32_t __cdecl call_next_button_hook_abi(const void*, int32_t, int32_t) {
+    __asm {
+        push ebx
+        push esi
+        push edi
+        mov ecx, [esp + 16]
+        mov eax, [esp + 24]
+        push eax
+        mov eax, [esp + 24]
+        push eax
+        call menuwind_next_button_hook
+        movsx eax, ax
+        pop edi
+        pop esi
+        pop ebx
+        ret
+    }
+}
+
+static __declspec(naked) void __cdecl call_key_item_hook_abi(void*, int32_t, int32_t) {
+    __asm {
+        push ebx
+        push esi
+        push edi
+        mov ecx, [esp + 16]
+        mov eax, [esp + 24]
+        push eax
+        mov eax, [esp + 24]
+        push eax
+        call menuwind_key_item_hook
+        pop edi
+        pop esi
+        pop ebx
+        ret
+    }
+}
+
+static void commands_menu_checks() {
+    reset_commands_menu_state_for_test();
+    mock_cmd_new_calls = 0;
+    mock_cmd_delete_calls = 0;
+    mock_cmd_sound_calls = 0;
+    mock_cmd_close_calls = 0;
+    mock_cmd_closed_prim = nullptr;
+    mock_cmd_selected_override = -1;
+    mock_cmd_frame_box_updates = 0;
+    mock_cmd_recalc_calls = 0;
+    mock_cmd_update_sprite_calls = 0;
+    mock_cmd_extra_node_idx = 0;
+    mock_stock_next_btn_calls = 0;
+    mock_stock_key_item_calls = 0;
+    mock_stock_key_item_last_eax = -1;
+
+    // 1. Pure layout and navigation invariants (Status -> Soulspire -> Equipment -> Magic...).
+    assert(commands_target_row_y(1, true) == 6);
+    assert(commands_target_row_y(16, true) == 22);
+    assert(commands_target_row_y(2, true) == 38);
+    assert(commands_target_row_y(3, true) == 54);
+    assert(commands_target_row_y(12, true) == 198);
+    assert(commands_target_row_y(13, true) == -1);
+    assert(commands_target_row_y(14, true) == -1);
+    assert(commands_target_row_y(15, true) == -1);
+
+    assert(resolve_commands_menu_next_button(1, kCommandsKeyDown, true) == 16);
+    assert(resolve_commands_menu_next_button(16, kCommandsKeyDown, true) == 2);
+    assert(resolve_commands_menu_next_button(2, kCommandsKeyUp, true) == 16);
+    assert(resolve_commands_menu_next_button(16, kCommandsKeyUp, true) == 1);
+    assert(resolve_commands_menu_next_button(16, kCommandsKeyLeft, true) == 16);
+    assert(resolve_commands_menu_next_button(16, kCommandsKeyRight, true) == 16);
+    assert(resolve_commands_menu_next_button(2, kCommandsKeyDown, true) == 0);
+    assert(resolve_commands_menu_next_button(1, kCommandsKeyUp, true) == 0);
+    assert(resolve_commands_menu_next_button(1, kCommandsKeyDown, false) == 0);
+
+    // 2. Wire mock FFXI functions and build a full mock menu    menuwind primitive.
+    original_ffxi_new = &mock_ffxi_new;
+    original_ffxi_delete = &mock_ffxi_delete;
+    original_play_confirm_sound = &mock_play_confirm_sound;
+    original_frame_update_box = &mock_frame_update_box;
+    original_btn_ctor = &mock_btn_ctor;
+    original_btn_init = &mock_btn_init;
+    original_btn_recalc_rect = &mock_btn_recalc_rect;
+    original_btn_update_sprite = &mock_btn_update_sprite;
+    original_btn_set_state = &mock_btn_set_state;
+    original_prim_set_selected = &mock_prim_set_selected;
+    original_list_push_back = &mock_list_push_back;
+    original_list_remove_node = &mock_list_remove_node;
+    original_close_menu = &mock_close_menu;
+    original_get_next_button = reinterpret_cast<uintptr_t>(&mock_stock_get_next_btn);
+    menuwind_key_item_resume = reinterpret_cast<uintptr_t>(&mock_stock_key_item_resume);
+    menu_manager_instance = reinterpret_cast<void*>(0x23450000u);
+
+    static MockSpriteBundle sp_status, sp_equip, sp_trade, sp_ls, sp_region;
+    sp_status.init(14, 0x11);
+    sp_equip.init(20, 0x22);
+    sp_trade.init(12, 0x33);
+    sp_ls.init(20, 0x44);
+    sp_region.init(22, 0x55);
+
+    uint8_t mock_menu_data[0x80]{};
+    std::memcpy(mock_menu_data + 0x46, kCommandsMenuFormName, sizeof(kCommandsMenuFormName));
+    const int16_t init_saved_cursor = 1;
+    std::memcpy(mock_menu_data + 0x1A, &init_saved_cursor, 2);
+
+    uint8_t mock_frame_res[0x20]{};
+    int16_t f_w = 112, f_h = kCommandsVanillaFrameH;
+    std::memcpy(mock_frame_res + 0x0A, &f_w, 2);
+    std::memcpy(mock_frame_res + 0x0C, &f_h, 2);
+    uint8_t* frame_res_ptr = mock_frame_res;
+    uint8_t mock_frame_data[0x10]{};
+    std::memcpy(mock_frame_data, &frame_res_ptr, sizeof(frame_res_ptr));
+    uint8_t mock_frame[0x50]{};
+    int16_t frame_type = 0, frame_y = 48;
+    std::memcpy(mock_frame + 0x00, &frame_type, 2);
+    std::memcpy(mock_frame + 0x1C, &frame_y, 2);
+    std::memcpy(mock_frame + 0x24, &f_h, 2);
+    uint8_t* frame_data_ptr = mock_frame_data;
+    std::memcpy(mock_frame + 0x30, &frame_data_ptr, sizeof(frame_data_ptr));
+
+    uint8_t mock_buttons[15][0x60]{};
+    MockListNode mock_nodes[16]{}; // node 0 = frame, nodes 1..15 = buttons 1..15
+    uint8_t mock_prim[0xC0]{};
+    uint8_t* menu_data_ptr = mock_menu_data;
+    std::memcpy(mock_prim + 0x04, &menu_data_ptr, sizeof(menu_data_ptr));
+    int16_t ox = 384, oy = 48, init_count = 15, init_sel = 1;
+    std::memcpy(mock_prim + 0x52, &ox, 2);
+    std::memcpy(mock_prim + 0x54, &oy, 2);
+    std::memcpy(mock_prim + 0x58, &init_count, 2);
+    std::memcpy(mock_prim + 0x4C, &init_sel, 2);
+
+    for (int i = 0; i < 16; ++i) {
+        uint8_t* next_p = (i + 1 < 16) ? mock_nodes[i + 1].raw : nullptr;
+        uint8_t* prev_p = (i > 0) ? mock_nodes[i - 1].raw : nullptr;
+        uint8_t* elem_p = (i == 0) ? mock_frame : mock_buttons[i - 1];
+        std::memcpy(mock_nodes[i].raw + 0x00, &next_p, sizeof(next_p));
+        std::memcpy(mock_nodes[i].raw + 0x04, &prev_p, sizeof(prev_p));
+        std::memcpy(mock_nodes[i].raw + 0x10, &elem_p, sizeof(elem_p));
+    }
+    uint8_t* head_n = mock_nodes[0].raw;
+    uint8_t* tail_n = mock_nodes[15].raw;
+    uint32_t list_cnt = 16;
+    std::memcpy(mock_prim + 0x14 + 0x00, &head_n, sizeof(head_n));
+    std::memcpy(mock_prim + 0x14 + 0x04, &tail_n, sizeof(tail_n));
+    std::memcpy(mock_prim + 0x14 + 0x10, &list_cnt, sizeof(list_cnt));
+
+    for (int16_t id = 1; id <= 15; ++id) {
+        uint8_t* b = mock_buttons[id - 1];
+        const int16_t btype = 1;
+        std::memcpy(b + 0x00, &btype, 2);
+        std::memcpy(b + 0x3A, &id, 2);
+        const int16_t vy = commands_vanilla_row_y(id);
+        const int16_t top = (vy >= 0) ? vy : static_cast<int16_t>(id == 15 ? 0 : 7);
+        const int16_t bot = static_cast<int16_t>(top + 16);
+        const int16_t left = (id == 13) ? -16 : (id == 14 ? 113 : (id == 15 ? 0 : 16));
+        const int16_t right = static_cast<int16_t>(left + 88);
+        std::memcpy(b + 0x32, &left, 2);
+        std::memcpy(b + 0x34, &top, 2);
+        std::memcpy(b + 0x36, &right, 2);
+        std::memcpy(b + 0x38, &bot, 2);
+        uint8_t* sp = nullptr;
+        if (id == 1) sp = sp_status.sprite;
+        else if (id == 2) sp = sp_equip.sprite;
+        else if (id == 7) sp = sp_trade.sprite;
+        else if (id == 9) sp = sp_ls.sprite;
+        else if (id == 11) sp = sp_region.sprite;
+        std::memcpy(b + 0x04, &sp, sizeof(sp));
+    }
+
+    // 3. First injection: verify insertion, frame height 202->218, row shifts, 20-tile sprite, row count 15->16.
+    assert(inject_commands_menu_entry_impl(mock_prim));
+    assert(mock_cmd_new_calls == 1);
+    int16_t after_count = 0, after_frame_h = 0, prim_bottom = 0;
+    std::memcpy(&after_count, mock_prim + 0x58, 2);
+    std::memcpy(&after_frame_h, mock_frame_res + 0x0C, 2);
+    std::memcpy(&prim_bottom, mock_prim + 0x40, 2);
+    assert(after_count == 16);
+    assert(after_frame_h == kCommandsExpandedFrameH);
+    assert(prim_bottom == 48 + kCommandsExpandedFrameH);
+
+    // Check Status stays at y=6, Equipment shifted 22->38, Map shifted 182->198, arrows/header untouched.
+    int16_t y_status = 0, y_equip = 0, y_map = 0, y_arrow = 0;
+    std::memcpy(&y_status, mock_buttons[0] + 0x34, 2);
+    std::memcpy(&y_equip, mock_buttons[1] + 0x34, 2);
+    std::memcpy(&y_map, mock_buttons[11] + 0x34, 2);
+    std::memcpy(&y_arrow, mock_buttons[12] + 0x34, 2);
+    assert(y_status == 6 && y_equip == 38 && y_map == 198 && y_arrow == 7);
+
+    // Locate injected Btn 16 and verify its properties and 20-tile synthesized sprite.
+    uint8_t* tail_after = nullptr;
+    std::memcpy(&tail_after, mock_prim + 0x14 + 0x04, sizeof(tail_after));
+    uint8_t* btn16 = nullptr;
+    std::memcpy(&btn16, tail_after + 0x10, sizeof(btn16));
+    assert(btn16 != nullptr);
+    int16_t btn16_id = 0, btn16_y = 0, btn16_sy = 0;
+    std::memcpy(&btn16_id, btn16 + 0x3A, 2);
+    std::memcpy(&btn16_y, btn16 + 0x34, 2);
+    std::memcpy(&btn16_sy, btn16 + 0x2C, 2);
+    assert(btn16_id == 16 && btn16_y == 22 && btn16_sy == 70 && btn16[0x48] == 0);
+    const char* btn16_title = nullptr;
+    const char* btn16_help = nullptr;
+    std::memcpy(&btn16_help, btn16 + 0x40, sizeof(btn16_help));
+    std::memcpy(&btn16_title, btn16 + 0x44, sizeof(btn16_title));
+    assert(std::strcmp(btn16_title, "Soulspire") == 0);
+    assert(std::strcmp(btn16_help, "Open SoulspireXI Core.") == 0);
+    uint8_t* sp16 = nullptr;
+    std::memcpy(&sp16, btn16 + 0x04, sizeof(sp16));
+    assert(sp16 != nullptr);
+    uint32_t sp16_tiles = 0;
+    std::memcpy(&sp16_tiles, sp16 + 0x14, sizeof(sp16_tiles));
+    assert(sp16_tiles == kCommandsSpriteTileCount);
+
+    // 4. Repeated open cycles must be strictly idempotent (no duplicate Btn 16, no double-shift).
+    for (int cycle = 0; cycle < 4; ++cycle) {
+        const uint32_t pressed = kCommandsButtonStatePressed;
+        std::memcpy(btn16 + 0x10, &pressed, 4);
+        assert(inject_commands_menu_entry_impl(mock_prim));
+        std::memcpy(&after_count, mock_prim + 0x58, 2);
+        std::memcpy(&y_equip, mock_buttons[1] + 0x34, 2);
+        uint32_t st16 = 0;
+        std::memcpy(&st16, btn16 + 0x10, 4);
+        assert(after_count == 16 && y_equip == 38 && mock_cmd_new_calls == 1);
+        assert(st16 == kCommandsButtonStateEnabled);
+    }
+
+    // 5. ABI test Hook #30 (CTkMenuData::GetNextButton) D-pad navigation & non-menuwind isolation.
+    assert(call_next_button_hook_abi(mock_menu_data, 1, kCommandsKeyDown) == 16);
+    assert(call_next_button_hook_abi(mock_menu_data, 16, kCommandsKeyDown) == 2);
+    assert(call_next_button_hook_abi(mock_menu_data, 2, kCommandsKeyUp) == 16);
+    assert(call_next_button_hook_abi(mock_menu_data, 16, kCommandsKeyUp) == 1);
+    assert(call_next_button_hook_abi(mock_menu_data, 16, kCommandsKeyLeft) == 16);
+    assert(call_next_button_hook_abi(mock_menu_data, 16, kCommandsKeyRight) == 16);
+    assert(mock_stock_next_btn_calls == 0);
+    // Vanilla buttons delegate cleanly to stock GetNextButton.
+    assert(call_next_button_hook_abi(mock_menu_data, 3, kCommandsKeyDown) == 103);
+    uint8_t other_menu_data[0x80]{};
+    assert(call_next_button_hook_abi(other_menu_data, 1, kCommandsKeyDown) == 101);
+    assert(mock_stock_next_btn_calls == 2);
+
+    // 6. ABI test Hook #31 (CMenuWind::OnKeyItem): Confirm on Btn 16 opens Core; Cancel/Left/Right/vanilla pass through.
+    uint8_t mock_menuwind[0x20]{};
+    uint8_t* prim_ptr = mock_prim;
+    std::memcpy(mock_menuwind + 0x08, &prim_ptr, sizeof(prim_ptr));
+
+    assert(SoulspireNativeConsumeCoreOpenRequest() == 0);
+    call_key_item_hook_abi(mock_menuwind, kCommandsKeyConfirm, 16);
+    assert(mock_cmd_sound_calls == 1 && mock_cmd_close_calls == 1 && mock_cmd_closed_prim == mock_prim);
+    assert(mock_stock_key_item_calls == 0);
+
+    SoulspireNativeMainMenuStatus mm_st{};
+    assert(SoulspireNativeGetMainMenuStatus(&mm_st, sizeof(mm_st)) == 0);
+    assert(mm_st.injected == 1 && mm_st.button_id == 16 && mm_st.button_count == 16);
+    assert(mm_st.frame_height == 218 && mm_st.sprite_synthesized == 1 && mm_st.sprite_banks_used == 1);
+    assert(mm_st.activations == 1 && mm_st.pending_open_requests == 1 && mm_st.nav_overrides == 6);
+    assert(SoulspireNativeConsumeCoreOpenRequest() == 1);
+    assert(SoulspireNativeConsumeCoreOpenRequest() == 0);
+
+    // Cancel (6), Left (3), Right (4) on Btn 16 and Confirm (5) on Status (1) must reach stock handler.
+    call_key_item_hook_abi(mock_menuwind, 6, 16);
+    assert(mock_stock_key_item_calls == 1 && mock_stock_key_item_last_eax == 6);
+    call_key_item_hook_abi(mock_menuwind, 3, 16);
+    assert(mock_stock_key_item_calls == 2 && mock_stock_key_item_last_eax == 3);
+    call_key_item_hook_abi(mock_menuwind, kCommandsKeyConfirm, 1);
+    assert(mock_stock_key_item_calls == 3 && mock_stock_key_item_last_eax == 5);
+    assert(SoulspireNativeConsumeCoreOpenRequest() == 0);
+
+    // 7. Clean shutdown restore: saved_cursor 16->1, selected 16->1, frame 218->202, rows shifted back, Btn 16 freed.
+    const int16_t sel16 = 16;
+    std::memcpy(mock_menu_data + 0x1A, &sel16, 2);
+    std::memcpy(mock_prim + 0x4C, &sel16, 2);
+    assert(restore_commands_menu_entry_on_prim(mock_prim));
+    int16_t restored_saved = 0, restored_sel = 0, restored_cnt = 0, restored_h = 0;
+    std::memcpy(&restored_saved, mock_menu_data + 0x1A, 2);
+    std::memcpy(&restored_sel, mock_prim + 0x4C, 2);
+    std::memcpy(&restored_cnt, mock_prim + 0x58, 2);
+    std::memcpy(&restored_h, mock_frame_res + 0x0C, 2);
+    std::memcpy(&y_equip, mock_buttons[1] + 0x34, 2);
+    std::memcpy(&y_map, mock_buttons[11] + 0x34, 2);
+    assert(restored_saved == 1 && restored_sel == 1 && mock_cmd_selected_override == 1);
+    assert(restored_cnt == 15 && restored_h == kCommandsVanillaFrameH);
+    assert(y_equip == 22 && y_map == 182 && mock_cmd_delete_calls == 1);
+
+    // 8. Safe fallback when source sprites have unexpected tile counts (non-standard DAT).
+    sp_status.init(4, 0x99); // too few tiles
+    assert(!inject_commands_menu_entry_impl(mock_prim));
+    std::memcpy(&restored_cnt, mock_prim + 0x58, 2);
+    assert(restored_cnt == 15);
+
+    // Clean up mock pointers.
+    reset_commands_menu_state_for_test();
+    original_ffxi_new = nullptr;
+    original_ffxi_delete = nullptr;
+    original_play_confirm_sound = nullptr;
+    original_frame_update_box = nullptr;
+    original_btn_ctor = nullptr;
+    original_btn_init = nullptr;
+    original_btn_recalc_rect = nullptr;
+    original_btn_update_sprite = nullptr;
+    original_btn_set_state = nullptr;
+    original_prim_set_selected = nullptr;
+    original_list_push_back = nullptr;
+    original_list_remove_node = nullptr;
+    original_close_menu = nullptr;
+    original_get_next_button = 0;
+    menuwind_key_item_resume = 0;
+    menu_manager_instance = nullptr;
+}
+
 static void runtime_identity_and_config_checks() {
     static char raw_buf[kMaxIdentityFileBytes + 1]{};
     size_t raw_len = 0;
@@ -1090,12 +1594,12 @@ int main() {
     assert(soul_sub_weapon_detour.install(memory));
     assert(memory[0x105] == 0xAA && memory[0x106] == 0xBB && memory[0x107] == 0xCC);
 
-    // Per-hook diagnostics bit position check for all 27 hooks (soul_sub_weapon_detour = kPatchCount + 2 = bit 24).
+    // Per-hook diagnostics bit position check for all 31 hooks (soul_sub_weapon_detour = kPatchCount + 2 = bit 27).
     hook_diag = {};
     hook_diag.init_stage = SOULSPIRE_NATIVE_INIT_OK;
     SoulspireNativeHookDiagnostics diag{};
     assert(SoulspireNativeGetHookDiagnostics(&diag, sizeof(diag)) == 0);
-    assert(diag.total_hooks == 1 && diag.expected_hooks == 27);
+    assert(diag.total_hooks == 1 && diag.expected_hooks == 31);
     assert((diag.installed_mask & (1u << (kPatchCount + 2u))) != 0);
     memory[0x100] = 0x90; // Simulate external overwrite.
     assert(SoulspireNativeGetHookDiagnostics(&diag, sizeof(diag)) == 0);
@@ -1105,6 +1609,17 @@ int main() {
     assert(std::memcmp(memory + 0x100, sub_weapon_instruction, 8) == 0);
     soul_sub_weapon_detour.rva = saved_rva;
     hook_diag = {};
+
+    // Verify PrologueDetour #31 (CMenuWind::OnKeyItem @ 0x141800, 0x0F opcode) atomic install & restore.
+    const uint8_t key_item_instruction[8] = {0x0f, 0xbf, 0x44, 0x24, 0x04, 0x83, 0xc0, 0xfd};
+    std::memcpy(memory + 0x200, key_item_instruction, 8);
+    const uintptr_t saved_key_rva = menuwind_key_item_detour.rva;
+    menuwind_key_item_detour.rva = 0x200;
+    assert(menuwind_key_item_detour.install(memory));
+    assert(memory[0x205] == 0x83 && memory[0x206] == 0xc0 && memory[0x207] == 0xfd);
+    assert(menuwind_key_item_detour.restore());
+    assert(std::memcmp(memory + 0x200, key_item_instruction, 8) == 0);
+    menuwind_key_item_detour.rva = saved_key_rva;
 
     // Verify safe Shutdown preserves resume pointer (never zeroes jump targets before restore).
     soul_sub_weapon_deny_resume = 0x12345678u;
@@ -1120,6 +1635,7 @@ int main() {
     action_catalog_checks();
     visibility_checks();
     weapon_rule_checks();
+    commands_menu_checks();
 
     // Load compiled soulspire_native.dll and verify ALL canonical + compatibility + Ashita v4 exports!
     const HMODULE dll = LoadLibraryA("soulspire_native.dll");
@@ -1132,7 +1648,7 @@ int main() {
         "SoulspireNativeSetActionRowLimit", "SoulspireNativeReplaceVisibility", "SoulspireNativeClearVisibility",
         "SoulspireNativeGetVisibilityStatus", "SoulspireNativeReplaceWeaponRules", "SoulspireNativeClearWeaponRules",
         "SoulspireNativeGetWeaponStatus", "SoulspireNativeGetHookDiagnostics", "SoulspireNativeGetIdentityDiagnostics",
-        "SoulspireNativeGetInterfaceInfo",
+        "SoulspireNativeGetInterfaceInfo", "SoulspireNativeGetMainMenuStatus", "SoulspireNativeConsumeCoreOpenRequest",
         "CrystalJobsInitialize", "CrystalJobsShutdown", "CrystalJobsGetStatus", "CrystalJobsSetState",
         "CrystalJobsReplaceCatalog", "CrystalJobsUpsertAction", "CrystalJobsClearCatalog",
         "CrystalJobsSetActiveSoul", "CrystalJobsClearActiveSoul", "CrystalJobsGetActionStatus",
@@ -1150,17 +1666,26 @@ int main() {
     SoulspireNativeInterfaceInfo info{};
     assert(get_iface_info(&info, sizeof(info)) == 0);
     assert(info.size == sizeof(info) && info.abi_version == SOULSPIRE_NATIVE_ABI_VERSION);
-    assert(info.expected_hooks == 27 && std::strcmp(info.project_name, "Soulspire Native") == 0);
+    assert(info.expected_hooks == 31 && std::strcmp(info.project_name, "Soulspire Native") == 0);
+
+    const auto get_main_menu = reinterpret_cast<uint32_t(__stdcall*)(SoulspireNativeMainMenuStatus*, uint32_t)>(
+        GetProcAddress(dll, "SoulspireNativeGetMainMenuStatus"));
+    const auto consume_open = reinterpret_cast<uint32_t(__stdcall*)(void)>(
+        GetProcAddress(dll, "SoulspireNativeConsumeCoreOpenRequest"));
+    SoulspireNativeMainMenuStatus dll_mm{};
+    assert(get_main_menu(&dll_mm, sizeof(dll_mm)) == 0);
+    assert(dll_mm.size == sizeof(dll_mm) && dll_mm.expected_hooks == 31 && dll_mm.button_id == 16);
+    assert(consume_open() == 0);
 
     const auto get_diag = reinterpret_cast<uint32_t(__stdcall*)(SoulspireNativeHookDiagnostics*, uint32_t)>(
         GetProcAddress(dll, "SoulspireNativeGetHookDiagnostics"));
     SoulspireNativeHookDiagnostics dll_diag{};
-    assert(get_diag(&dll_diag, sizeof(dll_diag)) == 0 && dll_diag.expected_hooks == 27);
+    assert(get_diag(&dll_diag, sizeof(dll_diag)) == 0 && dll_diag.expected_hooks == 31);
 
     const auto get_compat_diag = reinterpret_cast<uint32_t(__stdcall*)(CrystalJobsHookDiagnostics*, uint32_t)>(
         GetProcAddress(dll, "CrystalJobsGetHookDiagnostics"));
     CrystalJobsHookDiagnostics compat_diag{};
-    assert(get_compat_diag(&compat_diag, sizeof(compat_diag)) == 0 && compat_diag.expected_hooks == 27);
+    assert(get_compat_diag(&compat_diag, sizeof(compat_diag)) == 0 && compat_diag.expected_hooks == 31);
 
     const auto get_iface = reinterpret_cast<double(__stdcall*)()>(GetProcAddress(dll, "expGetInterfaceVersion"));
     const auto create_plugin = reinterpret_cast<void*(__stdcall*)(const char*)>(GetProcAddress(dll, "expCreatePlugin"));
@@ -1173,6 +1698,6 @@ int main() {
     destroy_plugin(plugin);
     FreeLibrary(dll);
 
-    std::printf("[Soulspire Native] selftest PASSED (all 27 hooks, ABI v2, and CrystalJobs compat verified).\n");
+    std::printf("[Soulspire Native] selftest PASSED (all 31 hooks, native Commands menu, ABI v2, and CrystalJobs compat verified).\n");
     return 0;
 }
