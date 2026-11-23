@@ -10,6 +10,9 @@ public sealed class LauncherManifest
     [JsonPropertyName("channel")]
     public string Channel { get; set; } = "stable";
 
+    [JsonPropertyName("candidateId")]
+    public string? CandidateId { get; set; }
+
     [JsonPropertyName("manifestVersion")]
     public string ManifestVersion { get; set; } = "2.1.0";
 
@@ -177,6 +180,9 @@ public sealed class InstalledClientState
 {
     [JsonPropertyName("channel")]
     public string Channel { get; set; } = "stable";
+
+    [JsonPropertyName("candidateId")]
+    public string? CandidateId { get; set; }
 
     [JsonPropertyName("manifestVersion")]
     public string ManifestVersion { get; set; } = string.Empty;

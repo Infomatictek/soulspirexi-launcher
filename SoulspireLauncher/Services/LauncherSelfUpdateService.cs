@@ -256,7 +256,8 @@ public sealed class LauncherSelfUpdateService
             }
         }
 
-        var channelAllowsRelease = channel == UpdateChannel.Testing || !isPrerelease;
+        var isTesting = channel is UpdateChannel.Testing or UpdateChannel.TestingRegistry24Hook;
+        var channelAllowsRelease = isTesting || !isPrerelease;
         Version? latestVersion = null;
         var isNewer = !isDraft &&
                       channelAllowsRelease &&
@@ -290,11 +291,11 @@ public sealed class LauncherSelfUpdateService
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(TimeSpan.FromSeconds(10));
 
-        if (channel == UpdateChannel.Testing)
+        if (channel is UpdateChannel.Testing or UpdateChannel.TestingRegistry24Hook)
         {
             var listUrl = $"https://api.github.com/repos/{owner}/{repo}/releases?per_page=15";
             var json = await _http.GetStringAsync(listUrl, cts.Token).ConfigureAwait(false);
-            return ParseReleaseListJson(json, currentVersion, UpdateChannel.Testing, currentInfoVersion);
+            return ParseReleaseListJson(json, currentVersion, channel, currentInfoVersion);
         }
 
         var apiUrl = $"https://api.github.com/repos/{owner}/{repo}/releases/latest";

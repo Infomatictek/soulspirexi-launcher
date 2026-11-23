@@ -12,7 +12,8 @@ public enum WindowModeOption
 public enum UpdateChannel
 {
     Stable = 0,
-    Testing = 1
+    Testing = 1,
+    TestingRegistry24Hook = 2
 }
 
 public sealed class LauncherSettings

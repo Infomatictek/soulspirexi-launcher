@@ -19,6 +19,8 @@ public sealed class ManifestUpdateService
 {
     public const string StableManifestRelativePath = "manifest.json";
     public const string TestingManifestRelativePath = "channels/testing/manifest.json";
+    public const string TestingRegistry24HookManifestRelativePath = "channels/testing-registry-24hook/manifest.json";
+    public const string TestingRegistry24HookBranch = "fix/native-search-label-and-testing-candidate";
     public const string InstalledStateFileName = ".soulspire-state.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -34,8 +36,17 @@ public sealed class ManifestUpdateService
         _http = httpClient ?? CreateDefaultHttpClient();
     }
 
-    public static string GetManifestRelativePath(UpdateChannel channel) =>
-        channel == UpdateChannel.Testing ? TestingManifestRelativePath : StableManifestRelativePath;
+    public static string GetManifestRelativePath(UpdateChannel channel) => channel switch
+    {
+        UpdateChannel.Testing => TestingManifestRelativePath,
+        UpdateChannel.TestingRegistry24Hook => TestingRegistry24HookManifestRelativePath,
+        _ => StableManifestRelativePath
+    };
+
+    public static string GetManifestBranch(LauncherManifest fallback, UpdateChannel channel) =>
+        channel == UpdateChannel.TestingRegistry24Hook
+            ? TestingRegistry24HookBranch
+            : (string.IsNullOrWhiteSpace(fallback.Repo.Branch) ? "main" : fallback.Repo.Branch.Trim());
 
     public static HttpClient CreateDefaultHttpClient()
     {
@@ -88,20 +99,29 @@ public sealed class ManifestUpdateService
         var manifest = fallback;
         var fromRemote = false;
         var manifestRelativePath = GetManifestRelativePath(channel);
+        var manifestBranch = GetManifestBranch(fallback, channel);
 
         var rawBase = fallback.Repo.RawBaseUrl.TrimEnd('/');
+        if (IsGitHubRawBaseUrl(rawBase) &&
+            !string.IsNullOrWhiteSpace(fallback.Repo.Owner) &&
+            !string.IsNullOrWhiteSpace(fallback.Repo.Name) &&
+            !string.IsNullOrWhiteSpace(manifestBranch))
+        {
+            rawBase = $"https://raw.githubusercontent.com/{fallback.Repo.Owner.Trim()}/{fallback.Repo.Name.Trim()}/{manifestBranch}";
+        }
+
         if (!string.IsNullOrWhiteSpace(rawBase))
         {
             string? pinnedRawBase = null;
             if (IsGitHubRawBaseUrl(rawBase) &&
                 !string.IsNullOrWhiteSpace(fallback.Repo.Owner) &&
                 !string.IsNullOrWhiteSpace(fallback.Repo.Name) &&
-                !string.IsNullOrWhiteSpace(fallback.Repo.Branch))
+                !string.IsNullOrWhiteSpace(manifestBranch))
             {
                 var commitSha = await TryResolveBranchCommitShaAsync(
                     fallback.Repo.Owner.Trim(),
                     fallback.Repo.Name.Trim(),
-                    fallback.Repo.Branch.Trim(),
+                    manifestBranch,
                     cancellationToken).ConfigureAwait(false);
                 if (!string.IsNullOrWhiteSpace(commitSha))
                 {
@@ -151,11 +171,33 @@ public sealed class ManifestUpdateService
         }
 
         var declared = (manifest.Channel ?? "stable").Trim();
+        var candidateId = (manifest.CandidateId ?? string.Empty).Trim();
         if (requestedChannel == UpdateChannel.Stable &&
             declared.Equals("testing", StringComparison.OrdinalIgnoreCase))
         {
             // Never allow a Testing manifest to be applied to Stable players.
             return false;
+        }
+
+        if (requestedChannel == UpdateChannel.Testing &&
+            candidateId.Equals("registry-24hook", StringComparison.OrdinalIgnoreCase))
+        {
+            // Never allow the isolated 24-hook registry candidate to overwrite the 27-hook Testing track.
+            return false;
+        }
+
+        if (requestedChannel == UpdateChannel.TestingRegistry24Hook)
+        {
+            if (!declared.Equals("testing", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(candidateId) &&
+                !candidateId.Equals("registry-24hook", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
         }
 
         if (!ValidateRegistryBundle(manifest, requestedChannel, out _))

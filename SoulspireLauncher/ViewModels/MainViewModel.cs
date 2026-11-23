@@ -584,7 +584,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public IReadOnlyList<UpdateChannel> UpdateChannelOptions { get; } =
     [
         UpdateChannel.Stable,
-        UpdateChannel.Testing
+        UpdateChannel.Testing,
+        UpdateChannel.TestingRegistry24Hook
     ];
 
     public UpdateChannel SelectedUpdateChannel
@@ -606,15 +607,21 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    public bool IsTestingChannel => _settings.UpdateChannel == UpdateChannel.Testing;
+    public bool IsTestingChannel => _settings.UpdateChannel is UpdateChannel.Testing or UpdateChannel.TestingRegistry24Hook;
 
-    public string ChannelBadgeText => _settings.UpdateChannel == UpdateChannel.Testing
-        ? "TESTING CHANNEL"
-        : "STABLE";
+    public string ChannelBadgeText => _settings.UpdateChannel switch
+    {
+        UpdateChannel.Testing => "TESTING CHANNEL",
+        UpdateChannel.TestingRegistry24Hook => "TESTING (24-HOOK REGISTRY)",
+        _ => "STABLE"
+    };
 
-    public string ChannelDescriptionText => _settings.UpdateChannel == UpdateChannel.Testing
-        ? "Testing channel delivers verified preview DLLs, addons, and DAT overlays without affecting Stable players."
-        : "Stable channel delivers production-verified SoulspireXI client builds.";
+    public string ChannelDescriptionText => _settings.UpdateChannel switch
+    {
+        UpdateChannel.Testing => "Testing channel delivers verified 27-hook weapon-template preview DLLs, addons, and DAT overlays without affecting Stable players.",
+        UpdateChannel.TestingRegistry24Hook => "Isolated 24-hook Centralized Registry + Search label fix testing candidate. Switch back to Stable anytime to automatically restore Stable files.",
+        _ => "Stable channel delivers production-verified SoulspireXI client builds."
+    };
 
     public string ManifestVersionText
     {

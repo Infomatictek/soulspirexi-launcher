@@ -280,6 +280,16 @@ public sealed class ManagedUpdateAndChannelTests
     {
         Assert.Equal("manifest.json", ManifestUpdateService.GetManifestRelativePath(UpdateChannel.Stable));
         Assert.Equal("channels/testing/manifest.json", ManifestUpdateService.GetManifestRelativePath(UpdateChannel.Testing));
+        Assert.Equal(
+            "channels/testing-registry-24hook/manifest.json",
+            ManifestUpdateService.GetManifestRelativePath(UpdateChannel.TestingRegistry24Hook));
+
+        var fallback = new LauncherManifest();
+        Assert.Equal("main", ManifestUpdateService.GetManifestBranch(fallback, UpdateChannel.Stable));
+        Assert.Equal("main", ManifestUpdateService.GetManifestBranch(fallback, UpdateChannel.Testing));
+        Assert.Equal(
+            ManifestUpdateService.TestingRegistry24HookBranch,
+            ManifestUpdateService.GetManifestBranch(fallback, UpdateChannel.TestingRegistry24Hook));
 
         var testingManifest = new LauncherManifest
         {
@@ -289,6 +299,27 @@ public sealed class ManagedUpdateAndChannelTests
 
         Assert.False(ManifestUpdateService.IsValidManifestForChannel(testingManifest, UpdateChannel.Stable));
         Assert.True(ManifestUpdateService.IsValidManifestForChannel(testingManifest, UpdateChannel.Testing));
+
+        var dllSha = new string('d', 64);
+        var registry24Candidate = new LauncherManifest
+        {
+            Channel = "testing",
+            CandidateId = "registry-24hook",
+            Registry = new ManifestRegistryMetadata
+            {
+                Version = "2026.11.22-phase2-locked",
+                Hash = "de6314e97385e328",
+                NativeDllCompiledHash = "de6314e97385e328",
+                NativeDllSha256 = dllSha,
+                NativeDllClientVerified = false,
+                CrystalJobsHooks = 24
+            },
+            Files = [new ManifestFileEntry { Category = "plugin", SourcePath = "channels/testing-registry-24hook/payload/plugins/ashita4/crystaljobs.dll", TargetPath = "crystaljobs.dll", Sha256 = dllSha }]
+        };
+
+        Assert.False(ManifestUpdateService.IsValidManifestForChannel(registry24Candidate, UpdateChannel.Stable));
+        Assert.False(ManifestUpdateService.IsValidManifestForChannel(registry24Candidate, UpdateChannel.Testing));
+        Assert.True(ManifestUpdateService.IsValidManifestForChannel(registry24Candidate, UpdateChannel.TestingRegistry24Hook));
     }
 
     [Fact]

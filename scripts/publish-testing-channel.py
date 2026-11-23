@@ -112,7 +112,7 @@ def build_testing_manifest(
     if candidate == "registry-24hook":
         reg_sync_path = repo_root / "registry_sync.json"
         reg_sync = json.loads(reg_sync_path.read_text(encoding="utf-8")) if reg_sync_path.is_file() else {}
-        prov = json.loads(provenance_json.read_text(encoding="utf-8")) if (provenance_json and provenance_json.is_file()) else {}
+        prov = json.loads(provenance_json.read_text(encoding="utf-8-sig")) if (provenance_json and provenance_json.is_file()) else {}
         testing_manifest["registry"] = {
             "version": str(reg_sync.get("registryVersion") or ""),
             "hash": str(reg_sync.get("registryHash") or ""),
