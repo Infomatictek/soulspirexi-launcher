@@ -1,0 +1,15 @@
+{
+  "dllPath": "plugins/ashita4/soulspire_native.dll",
+  "dllSha256": "pending-ci-build",
+  "compiledRegistryHash": "cf86aa59ff8d16c6",
+  "runtimeIdentityLoader": true,
+  "identitySchemaVersion": 1,
+  "nativeHooks": 27,
+  "sourceCommit": "pending-ci-build",
+  "buildTarget": "Win32-x86-MSVC",
+  "ciRunId": "",
+  "ciRunUrl": "",
+  "ciVerified": false,
+  "clientVerified": false,
+  "notes": "Tracks provenance of plugins/ashita4/soulspire_native.dll. Updated automatically by Windows CI build-soulspire-native after selftest.exe and PE32 verification pass."
+}

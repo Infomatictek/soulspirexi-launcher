@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       should_build: ${{ steps.changes.outputs.should_build }}
-      should_build_crystaljobs: ${{ steps.changes.outputs.should_build_crystaljobs }}
+      should_build_native: ${{ steps.changes.outputs.should_build_native }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -37,7 +37,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Run manifest verification unit tests
+      - name: Run Python unit tests
         shell: bash
         run: |
           set -euo pipefail
@@ -64,7 +64,7 @@ jobs:
           set -euo pipefail
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
-            echo "should_build_crystaljobs=true" >> "$GITHUB_OUTPUT"
+            echo "should_build_native=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -76,7 +76,7 @@ jobs:
 
           if [[ -z "$base_ref" ]] || [[ "$base_ref" == "0000000000000000000000000000000000000000" ]] || ! git cat-file -e "$base_ref^{commit}" 2>/dev/null; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
-            echo "should_build_crystaljobs=true" >> "$GITHUB_OUTPUT"
+            echo "should_build_native=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -84,18 +84,18 @@ jobs:
           echo "Changed files:"
           echo "$changed"
 
-          if echo "$changed" | grep -Eq '^(SoulspireLauncher/|SoulspireLauncher\.Tests/|SoulspireLauncher\.sln|manifest\.json|dat-overlay/|addons/|plugins/|native/crystaljobs/|scripts/|tests/|\.github/workflows/build-launcher\.yml)'; then
+          if echo "$changed" | grep -Eq '^(SoulspireLauncher/|SoulspireLauncher\.Tests/|SoulspireLauncher\.sln|manifest\.json|dat-overlay/|addons/|plugins/|soulspire_native/|scripts/|tests/|\.github/workflows/build-launcher\.yml)'; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
           else
             echo "No launcher/client/manifest files changed; skipping redundant Windows launcher build."
             echo "should_build=false" >> "$GITHUB_OUTPUT"
           fi
 
-          if echo "$changed" | grep -Eq '^(native/crystaljobs/.*\.(c|cc|cpp|cxx|h|hh|hpp|hxx|def|cmd|bat|ps1)|\.github/workflows/build-launcher\.yml|scripts/publish-testing-channel\.py|scripts/verify-launcher-manifest\.py)$'; then
-            echo "should_build_crystaljobs=true" >> "$GITHUB_OUTPUT"
+          if echo "$changed" | grep -Eq '^(soulspire_native/.*\.(c|cc|cpp|cxx|h|hh|hpp|hxx|def|cmd|bat|ps1)|\.github/workflows/build-launcher\.yml|scripts/verify-soulspire-native-dll\.py|scripts/publish-testing-channel\.py|scripts/verify-launcher-manifest\.py)$'; then
+            echo "should_build_native=true" >> "$GITHUB_OUTPUT"
           else
-            echo "No native/crystaljobs C++ source files changed; skipping crystaljobs.dll build."
-            echo "should_build_crystaljobs=false" >> "$GITHUB_OUTPUT"
+            echo "No soulspire_native C++ source files changed; skipping soulspire_native.dll build."
+            echo "should_build_native=false" >> "$GITHUB_OUTPUT"
           fi
 
   build-and-test:
@@ -182,136 +182,105 @@ jobs:
             publish/SoulspireLauncher/SoulspireLauncher.exe
             SoulspireLauncher-win-x64.zip
 
-  build-crystaljobs:
+  build-soulspire-native:
     needs: verify-manifest
-    if: needs.verify-manifest.outputs.should_build_crystaljobs == 'true'
+    if: needs.verify-manifest.outputs.should_build_native == 'true'
     runs-on: windows-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Build and self-test Candidate C (aligned native_text) and Candidate A (legacy 4f0fdb3 native_text)
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Build and self-test Soulspire Native (Win32 / x86, 27 hooks)
         shell: pwsh
         env:
-          CRYSTALJOBS_KEEP_SELFTEST: "1"
+          SOULSPIRE_NATIVE_KEEP_SELFTEST: "1"
         run: |
+          $ErrorActionPreference = 'Continue'
+          & cmd.exe /c "soulspire_native\build.cmd 2>&1" | Tee-Object -FilePath "soulspire_native-build.log"
+          $rc = $LASTEXITCODE
           $ErrorActionPreference = 'Stop'
-          function Invoke-CrystalJobsBuild([string]$extraFlags, [string]$outDir, [string]$logFile) {
-            $env:CRYSTALJOBS_EXTRA_CXXFLAGS = $extraFlags
-            $ErrorActionPreference = 'Continue'
-            & cmd.exe /c "native\crystaljobs\build.cmd 2>&1" | Tee-Object -FilePath $logFile
-            $rc = $LASTEXITCODE
-            $ErrorActionPreference = 'Stop'
-            if ($rc -ne 0) {
-              $tail = (Get-Content $logFile -Tail 40) -join "`n"
-              foreach ($line in (Get-Content $logFile | Select-String -Pattern '(error |ERROR:|Assertion failed|fatal error)' | Select-Object -First 10)) {
-                Write-Host "::error::$($line.Line)"
-              }
-              if (-not (Get-Content $logFile | Select-String -Pattern '(error |ERROR:|Assertion failed|fatal error)')) {
-                Write-Host "::error::build.cmd ($extraFlags) exited with code $rc. Last lines: $tail"
-              }
-              exit $rc
+          if ($rc -ne 0) {
+            foreach ($line in (Get-Content "soulspire_native-build.log" | Select-String -Pattern '(error |ERROR:|Assertion failed|fatal error)' | Select-Object -First 20)) {
+              Write-Host "::error::$($line.Line)"
             }
-            New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-            Copy-Item -Force "plugins/ashita4/crystaljobs.dll" (Join-Path $outDir "crystaljobs.dll")
-            Copy-Item -Force "native/crystaljobs/selftest.exe" (Join-Path $outDir "selftest.exe")
+            Get-Content "soulspire_native-build.log" -Tail 50
+            exit $rc
           }
 
-          # Candidate A: Historical working implementation (4f0fdb3 single-call native_text)
-          Invoke-CrystalJobsBuild "/DCRYSTALJOBS_SEARCH_RENDER_MODE=0" "ci-builds/search-legacy-text" "crystaljobs-legacy-build.log"
-          # Candidate B: Fixed native menu2fon sprite renderer (SoA x[4]/y[4] quad corners at tile+0xC0)
-          Invoke-CrystalJobsBuild "/DCRYSTALJOBS_SEARCH_RENDER_MODE=1" "ci-builds/registry-24hook" "crystaljobs-menu2fon-build.log"
-          # Candidate C: Safe fallback (fixed-column aligned native_text)
-          Invoke-CrystalJobsBuild "/DCRYSTALJOBS_SEARCH_RENDER_MODE=2" "ci-builds/search-aligned-text" "crystaljobs-build.log"
-
-      - name: Verify built 32-bit binaries and write build metadata
+      - name: Verify built 32-bit soulspire_native.dll and write build metadata
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          function Assert-Win32PE([string]$path) {
-            if (-not (Test-Path $path)) { throw "Missing built binary: $path" }
-            $bytes = [System.IO.File]::ReadAllBytes($path)
-            if ($bytes.Length -lt 64 -or $bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) {
-              throw "Invalid PE header (missing MZ) in $path"
-            }
-            $peOffset = [BitConverter]::ToInt32($bytes, 0x3C)
-            $machine = [BitConverter]::ToUInt16($bytes, $peOffset + 4)
-            if ($machine -ne 0x014C) {
-              throw ("Expected x86 (0x014C) PE machine type in $path, got 0x{0:X4}" -f $machine)
-            }
-            $hash = (Get-FileHash -Path $path -Algorithm SHA256).Hash.ToLowerInvariant()
-            Write-Host "Verified 32-bit PE binary: $path ($($bytes.Length) bytes, sha256=$hash)"
-            return @{ Size = $bytes.Length; Sha256 = $hash }
-          }
+          $dllPath = "plugins/ashita4/soulspire_native.dll"
+          $testPath = "soulspire_native/selftest.exe"
+          if (-not (Test-Path $dllPath)) { throw "Missing built DLL: $dllPath" }
+          if (-not (Test-Path $testPath)) { throw "Missing built selftest.exe: $testPath" }
+
+          $dllBytes = [System.IO.File]::ReadAllBytes($dllPath)
+          $dllHash = (Get-FileHash -Path $dllPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          $testBytes = [System.IO.File]::ReadAllBytes($testPath)
+          $testHash = (Get-FileHash -Path $testPath -Algorithm SHA256).Hash.ToLowerInvariant()
 
           $regHash = "unknown"
-          if (Test-Path "native/crystaljobs/labels_generated.h") {
-            $m = Select-String -Path "native/crystaljobs/labels_generated.h" -Pattern 'kRegistryHash\s*=\s*"([^"]+)"'
+          if (Test-Path "soulspire_native/registry/labels_generated.h") {
+            $m = Select-String -Path "soulspire_native/registry/labels_generated.h" -Pattern 'kRegistryHash\s*=\s*"([^"]+)"'
             if ($m) { $regHash = $m.Matches[0].Groups[1].Value }
           }
 
-          function Write-CandidateMetadata([string]$dllPath, [string]$testPath, [string]$modeLabel, [string]$provOut, [string]$infoOut) {
-            $dllInfo = Assert-Win32PE $dllPath
-            $testInfo = Assert-Win32PE $testPath
-            $provenance = [ordered]@{
-              dllPath              = "plugins/ashita4/crystaljobs.dll"
-              dllSha256            = $dllInfo.Sha256
-              dllSize              = $dllInfo.Size
-              compiledRegistryHash = $regHash
-              runtimeIdentityLoader = $true
-              identitySchemaVersion = 1
-              searchRenderMode     = $modeLabel
-              sourceCommit         = "${{ github.sha }}"
-              branch               = "${{ github.ref_name }}"
-              ciRunId              = "${{ github.run_id }}"
-              ciRunUrl             = "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-              buildTarget          = "Win32-x86-MSVC"
-              ciVerified           = $true
-              clientVerified       = $false
-              notes                = "CI-built crystaljobs.dll provenance ($modeLabel). Never set clientVerified=true until verified in the Windows FFXI client."
-            }
-            $provenance | ConvertTo-Json -Depth 4 | Set-Content -Path $provOut -Encoding UTF8
-            @(
-              "commit_sha=${{ github.sha }}"
-              "ref=${{ github.ref }}"
-              "branch=${{ github.ref_name }}"
-              "run_id=${{ github.run_id }}"
-              "registry_hash=$regHash"
-              "search_render_mode=$modeLabel"
-              "crystaljobs_dll_size=$($dllInfo.Size)"
-              "crystaljobs_dll_sha256=$($dllInfo.Sha256)"
-              "selftest_exe_size=$($testInfo.Size)"
-              "selftest_exe_sha256=$($testInfo.Sha256)"
-            ) | Set-Content -Path $infoOut -Encoding UTF8
-            return $dllInfo
+          $provenance = [ordered]@{
+            dllPath               = "plugins/ashita4/soulspire_native.dll"
+            dllSha256             = $dllHash
+            dllSize               = $dllBytes.Length
+            expectedHooks         = 27
+            abiVersion            = 2
+            compiledRegistryHash  = $regHash
+            runtimeIdentityLoader = $true
+            identitySchemaVersion = 1
+            searchRenderMode      = "menu2fon-soa-corners (mode 1)"
+            sourceCommit          = "${{ github.sha }}"
+            branch                = "${{ github.ref_name }}"
+            ciRunId               = "${{ github.run_id }}"
+            ciRunUrl              = "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            buildTarget           = "Win32-x86-MSVC"
+            ciVerified            = $true
+            clientVerified        = $false
+            notes                 = "CI-built 27-hook soulspire_native.dll provenance. Never set clientVerified=true until verified in the Windows FFXI client."
           }
+          $provenance | ConvertTo-Json -Depth 4 | Set-Content -Path "soulspire_native-provenance.json" -Encoding UTF8
 
-          $alignedInfo  = Write-CandidateMetadata "ci-builds/search-aligned-text/crystaljobs.dll" "ci-builds/search-aligned-text/selftest.exe" "aligned-native-text (mode 2)" "ci-builds/search-aligned-text/crystaljobs-provenance.json" "ci-builds/search-aligned-text/crystaljobs-build-info.txt"
-          $legacyInfo   = Write-CandidateMetadata "ci-builds/search-legacy-text/crystaljobs.dll" "ci-builds/search-legacy-text/selftest.exe" "legacy-native-text-4f0fdb3 (mode 0)" "ci-builds/search-legacy-text/crystaljobs-provenance.json" "ci-builds/search-legacy-text/crystaljobs-build-info.txt"
-          $menu2fonInfo = Write-CandidateMetadata "ci-builds/registry-24hook/crystaljobs.dll" "ci-builds/registry-24hook/selftest.exe" "menu2fon-soa-corners (mode 1)" "ci-builds/registry-24hook/crystaljobs-provenance.json" "ci-builds/registry-24hook/crystaljobs-build-info.txt"
-          if ($alignedInfo.Sha256 -eq $legacyInfo.Sha256 -or $alignedInfo.Sha256 -eq $menu2fonInfo.Sha256 -or $legacyInfo.Sha256 -eq $menu2fonInfo.Sha256) {
-            throw "Candidates A, B, and C must produce distinct DLL SHA-256 hashes!"
-          }
-          Copy-Item -Force "ci-builds/registry-24hook/crystaljobs-provenance.json" "crystaljobs-provenance.json"
-          Copy-Item -Force "ci-builds/registry-24hook/crystaljobs-build-info.txt" "crystaljobs-build-info.txt"
-          Get-Content "crystaljobs-build-info.txt"
+          @(
+            "commit_sha=${{ github.sha }}"
+            "ref=${{ github.ref }}"
+            "branch=${{ github.ref_name }}"
+            "run_id=${{ github.run_id }}"
+            "registry_hash=$regHash"
+            "expected_hooks=27"
+            "abi_version=2"
+            "soulspire_native_dll_size=$($dllBytes.Length)"
+            "soulspire_native_dll_sha256=$dllHash"
+            "selftest_exe_size=$($testBytes.Length)"
+            "selftest_exe_sha256=$testHash"
+          ) | Set-Content -Path "soulspire_native-build-info.txt" -Encoding UTF8
 
-      - name: Upload crystaljobs.dll and selftest.exe build artifacts
+          python scripts/verify-soulspire-native-dll.py $dllPath --build-info soulspire_native-build-info.txt --expected-commit "${{ github.sha }}"
+          Get-Content "soulspire_native-build-info.txt"
+
+      - name: Upload soulspire_native.dll and selftest.exe build artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: crystaljobs-win-x86
+          name: soulspire-native-win-x86
           retention-days: 14
           path: |
-            plugins/ashita4/crystaljobs.dll
-            native/crystaljobs/selftest.exe
-            crystaljobs-build-info.txt
-            crystaljobs-provenance.json
-            crystaljobs-build.log
-            crystaljobs-legacy-build.log
-            crystaljobs-menu2fon-build.log
-            ci-builds/search-legacy-text/
-            ci-builds/registry-24hook/
-            ci-builds/search-aligned-text/
+            plugins/ashita4/soulspire_native.dll
+            soulspire_native/selftest.exe
+            soulspire_native-build-info.txt
+            soulspire_native-provenance.json
+            soulspire_native-build.log
 
   build-testing-channel:
     needs: [verify-manifest, build-and-test]
@@ -328,58 +297,48 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Checkout 27-hook CrystalJobs source from feat/soul-weapon-templates
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin feat/soul-weapon-templates
-          git checkout origin/feat/soul-weapon-templates -- native/crystaljobs
-
-      - name: Build and self-test 27-hook crystaljobs.dll (Win32 / x86)
+      - name: Build and self-test 27-hook soulspire_native.dll (Win32 / x86)
         shell: pwsh
         env:
-          CRYSTALJOBS_KEEP_SELFTEST: "1"
+          SOULSPIRE_NATIVE_KEEP_SELFTEST: "1"
         run: |
           $ErrorActionPreference = 'Continue'
-          & cmd.exe /c "native\crystaljobs\build.cmd 2>&1" | Tee-Object -FilePath "crystaljobs-testing-build.log"
+          & cmd.exe /c "soulspire_native\build.cmd 2>&1" | Tee-Object -FilePath "soulspire_native-testing-build.log"
           $rc = $LASTEXITCODE
+          $ErrorActionPreference = 'Stop'
           if ($rc -ne 0) {
-            Get-Content "crystaljobs-testing-build.log" -Tail 40
+            Get-Content "soulspire_native-testing-build.log" -Tail 40
             exit $rc
           }
 
-      - name: Verify 27-hook crystaljobs.dll and build Testing channel manifest
+      - name: Verify 27-hook soulspire_native.dll and build Testing channel manifest
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $dllPath = "plugins/ashita4/crystaljobs.dll"
+          $dllPath = "plugins/ashita4/soulspire_native.dll"
           $hash = (Get-FileHash -Path $dllPath -Algorithm SHA256).Hash.ToLowerInvariant()
           $size = (Get-Item $dllPath).Length
-          $templatesCommit = (git rev-parse origin/feat/soul-weapon-templates).Trim()
           @(
-            "commit_sha=$templatesCommit"
-            "ref=refs/heads/feat/soul-weapon-templates"
-            "branch=feat/soul-weapon-templates"
+            "commit_sha=${{ github.sha }}"
+            "ref=${{ github.ref }}"
+            "branch=${{ github.ref_name }}"
             "run_id=${{ github.run_id }}"
-            "crystaljobs_dll_size=$size"
-            "crystaljobs_dll_sha256=$hash"
-          ) | Set-Content -Path "crystaljobs-testing-build-info.txt" -Encoding UTF8
+            "soulspire_native_dll_size=$size"
+            "soulspire_native_dll_sha256=$hash"
+          ) | Set-Content -Path "soulspire_native-testing-build-info.txt" -Encoding UTF8
 
-          python scripts/verify-crystaljobs-dll.py $dllPath --build-info crystaljobs-testing-build-info.txt
+          python scripts/verify-soulspire-native-dll.py $dllPath --build-info soulspire_native-testing-build-info.txt
           python scripts/publish-testing-channel.py `
-            --crystaljobs-dll $dllPath `
-            --build-info crystaljobs-testing-build-info.txt `
-            --manifest-version "2.1.0-testing.1" `
-            --server-version "feat/soul-weapon-templates (b05c027 / patch 0074)" `
-            --server-branch "feat/soul-weapon-templates" `
-            --server-commit "b05c027" `
-            --server-image "soulspirexi/server:feat-soul-weapon-templates" `
-            --crystaljobs-hooks 27
+            --native-dll $dllPath `
+            --build-info soulspire_native-testing-build-info.txt `
+            --manifest-version "2.2.0-testing.1" `
+            --server-version "${{ github.ref_name }} (${{ github.sha }})" `
+            --server-branch "${{ github.ref_name }}" `
+            --server-commit "${{ github.sha }}" `
+            --server-image "soulspirexi/server:main" `
+            --native-hooks 27
 
-          # Verify Testing manifest strictly and confirm Stable manifest.json was untouched
           python scripts/verify-launcher-manifest.py --manifest channels/testing/manifest.json
-          git checkout -- plugins/ashita4/crystaljobs.dll native/crystaljobs
-          python scripts/verify-launcher-manifest.py
 
       - name: Upload verified Testing channel package artifact
         uses: actions/upload-artifact@v7
@@ -388,13 +347,13 @@ jobs:
           retention-days: 14
           path: |
             channels/testing/manifest.json
-            channels/testing/payload/plugins/ashita4/crystaljobs.dll
-            crystaljobs-testing-build-info.txt
-            crystaljobs-testing-build.log
+            channels/testing/payload/plugins/ashita4/soulspire_native.dll
+            soulspire_native-testing-build-info.txt
+            soulspire_native-testing-build.log
 
-  publish-registry-24hook-candidate:
-    needs: [verify-manifest, build-crystaljobs, build-and-test]
-    if: (github.ref == 'refs/heads/feat/soul-identity-registry-integration' || github.ref == 'refs/heads/feat/runtime-soul-identity-and-spacing') && !startsWith(github.event.head_commit.message, 'chore(testing-candidate):')
+  sync-soulspire-native-binary:
+    needs: [verify-manifest, build-and-test, build-soulspire-native]
+    if: (github.ref == 'refs/heads/feat/soulspire-native-foundation' || github.ref == 'refs/heads/feat/dat-virtualization-poc') && !startsWith(github.event.head_commit.message, 'chore(soulspire-native):')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -410,114 +369,67 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Download verified Windows x86 crystaljobs-win-x86 artifact
+      - name: Download verified Windows x86 soulspire-native-win-x86 artifact
         uses: actions/download-artifact@v8
         with:
-          name: crystaljobs-win-x86
-          path: ci-crystaljobs
+          name: soulspire-native-win-x86
+          path: ci-native
 
-      - name: Verify DLL provenance, registry hash, architecture, and exports for Candidates A, B, and C
+      - name: Sync soulspire_native.dll, dll_sync_state.json, and manifest.json
         shell: bash
         run: |
           set -euo pipefail
-          for cand in search-legacy-text registry-24hook search-aligned-text; do
-            python scripts/verify-crystaljobs-dll.py \
-              "ci-crystaljobs/ci-builds/${cand}/crystaljobs.dll" \
-              --allow-24-hook \
-              --build-info "ci-crystaljobs/ci-builds/${cand}/crystaljobs-build-info.txt"
-          done
+          cp ci-native/plugins/ashita4/soulspire_native.dll plugins/ashita4/soulspire_native.dll
+          python scripts/verify-soulspire-native-dll.py \
+            plugins/ashita4/soulspire_native.dll \
+            --build-info ci-native/soulspire_native-build-info.txt
 
           python - <<'PY'
           import json
           from pathlib import Path
-          reg = json.loads(Path("registry_sync.json").read_text(encoding="utf-8"))
-          ident_path = Path("plugins/ashita4/data/soul-identities.json")
-          runtime_identities = json.loads(ident_path.read_text(encoding="utf-8")) if ident_path.is_file() else None
-          seen_shas = set()
-          for cand in ("search-legacy-text", "registry-24hook", "search-aligned-text"):
-              prov = json.loads(Path(f"ci-crystaljobs/ci-builds/{cand}/crystaljobs-provenance.json").read_text(encoding="utf-8-sig"))
-              if runtime_identities is not None:
-                  assert runtime_identities["registryHash"] == reg["registryHash"], (
-                      f"{cand} runtime identity hash mismatch: data={runtime_identities['registryHash']} vs sync={reg['registryHash']}"
-                  )
-              else:
-                  assert prov["compiledRegistryHash"] == reg["registryHash"], (
-                      f"{cand} registry hash mismatch: dll={prov['compiledRegistryHash']} vs sync={reg['registryHash']}"
-                  )
-              assert prov["clientVerified"] is False, f"{cand} provenance must keep clientVerified=false"
-              assert prov["dllSha256"] not in seen_shas, f"Duplicate DLL sha256 across candidates: {prov['dllSha256']}"
-              seen_shas.add(prov["dllSha256"])
-              rhash = runtime_identities["registryHash"] if runtime_identities else prov["compiledRegistryHash"]
-              print(f"Verified {cand}: sha256={prov['dllSha256']} mode={prov.get('searchRenderMode')} compiledHash={prov['compiledRegistryHash']} runtimeHash={rhash}")
+          prov = json.loads(Path("ci-native/soulspire_native-provenance.json").read_text(encoding="utf-8-sig"))
+          state_path = Path("soulspire_native/dll_sync_state.json")
+          state = json.loads(state_path.read_text(encoding="utf-8"))
+          state.update({
+              "dllPath": "plugins/ashita4/soulspire_native.dll",
+              "dllSha256": prov["dllSha256"],
+              "dllSize": prov["dllSize"],
+              "compiledRegistryHash": prov["compiledRegistryHash"],
+              "expectedHooks": 27,
+              "abiVersion": 2,
+              "runtimeIdentityLoader": True,
+              "identitySchemaVersion": 1,
+              "sourceCommit": prov["sourceCommit"],
+              "branch": prov["branch"],
+              "ciRunId": prov["ciRunId"],
+              "ciRunUrl": prov["ciRunUrl"],
+              "ciVerified": True,
+              "clientVerified": False,
+              "notes": "CI-built 27-hook soulspire_native.dll synced from GitHub Actions windows-latest MSVC x86 build. Client verification requires manual Windows Ashita v4 playtesting.",
+          })
+          state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
           PY
 
-      - name: Publish isolated Candidate A, B (fixed menu2fon), and C manifests
-        shell: bash
-        run: |
-          set -euo pipefail
-          python scripts/publish-testing-channel.py \
-            --candidate search-legacy-text \
-            --crystaljobs-dll ci-crystaljobs/ci-builds/search-legacy-text/crystaljobs.dll \
-            --build-info ci-crystaljobs/ci-builds/search-legacy-text/crystaljobs-build-info.txt \
-            --provenance-json ci-crystaljobs/ci-builds/search-legacy-text/crystaljobs-provenance.json \
-            --repo-branch "${{ github.ref_name }}" \
-            --manifest-version "2.1.12-testing.search-legacy-text" \
-            --server-version "feat/runtime-soul-identity-and-spacing (b28a7a3)" \
-            --server-branch "feat/runtime-soul-identity-and-spacing" \
-            --server-commit "b28a7a3" \
-            --server-image "soulspirexi/server:registry" \
-            --crystaljobs-hooks 24 \
-            --notes "Candidate A (Historical 4f0fdb3): 24-hook runtime identity loader + legacy 0.75x native_text fallback"
+          python scripts/update-launcher-manifest.py
+          python scripts/verify-launcher-manifest.py
+          python scripts/verify-soulspire-native-dll.py plugins/ashita4/soulspire_native.dll --manifest manifest.json
 
-          python scripts/publish-testing-channel.py \
-            --candidate registry-24hook \
-            --crystaljobs-dll ci-crystaljobs/ci-builds/registry-24hook/crystaljobs.dll \
-            --build-info ci-crystaljobs/ci-builds/registry-24hook/crystaljobs-build-info.txt \
-            --provenance-json ci-crystaljobs/ci-builds/registry-24hook/crystaljobs-provenance.json \
-            --repo-branch "${{ github.ref_name }}" \
-            --manifest-version "2.1.12-testing.runtime-identity" \
-            --server-version "feat/runtime-soul-identity-and-spacing (b28a7a3)" \
-            --server-branch "feat/runtime-soul-identity-and-spacing" \
-            --server-commit "b28a7a3" \
-            --server-image "soulspirexi/server:registry" \
-            --crystaljobs-hooks 24 \
-            --notes "Native H glyph repair ({118, 214, 7} from vanilla SCH in ROM/118/111.DAT) + Runtime Soul Identity Loader (66 approved Souls, cf86aa59ff8d16c6) + 7px uniform Search pitch"
-
-          python scripts/publish-testing-channel.py \
-            --candidate search-aligned-text \
-            --crystaljobs-dll ci-crystaljobs/ci-builds/search-aligned-text/crystaljobs.dll \
-            --build-info ci-crystaljobs/ci-builds/search-aligned-text/crystaljobs-build-info.txt \
-            --provenance-json ci-crystaljobs/ci-builds/search-aligned-text/crystaljobs-provenance.json \
-            --repo-branch "${{ github.ref_name }}" \
-            --manifest-version "2.1.12-testing.search-aligned-text" \
-            --server-version "feat/runtime-soul-identity-and-spacing (b28a7a3)" \
-            --server-branch "feat/runtime-soul-identity-and-spacing" \
-            --server-commit "b28a7a3" \
-            --server-image "soulspirexi/server:registry" \
-            --crystaljobs-hooks 24 \
-            --notes "Candidate C (Fallback): 24-hook runtime identity loader + fixed-column aligned native_text"
-
-          python scripts/verify-launcher-manifest.py --manifest channels/testing-search-legacy-text/manifest.json
-          python scripts/verify-launcher-manifest.py --manifest channels/testing-search-aligned-text/manifest.json
-          python scripts/verify-launcher-manifest.py --manifest channels/testing-registry-24hook/manifest.json
-          git diff --exit-code manifest.json
-
-      - name: Commit and push isolated Search testing candidates to feature branch
+      - name: Commit and push synced soulspire_native.dll to feature branch
         shell: bash
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add channels/testing-search-legacy-text/ channels/testing-registry-24hook/ channels/testing-search-aligned-text/
+          git add plugins/ashita4/soulspire_native.dll soulspire_native/dll_sync_state.json manifest.json
           if git diff --cached --quiet; then
-            echo "No changes to Search testing candidates."
+            echo "No binary/manifest changes to commit."
             exit 0
           fi
-          git commit -m "chore(testing-candidate): publish H-glyph fix crystaljobs.dll (2.1.12-testing.runtime-identity)"
+          git commit -m "chore(soulspire-native): sync CI-verified 27-hook soulspire_native.dll"
           git push origin "HEAD:${{ github.ref_name }}"
 
   publish-release:
-    needs: [build-and-test, build-crystaljobs]
+    needs: [build-and-test, build-soulspire-native]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:

@@ -1,10 +1,10 @@
 -- SoulspireXI Core (Phase 1A): Modular UI foundation & Native-Styled Main Menu integration.
--- Preserves all existing addons and crystaljobs.dll hooks untouched.
+-- Preserves all existing addons and soulspire_native.dll hooks untouched.
 --
 -- Integration Mode:
 --   Native-Styled Fallback docked to FFXI's Main Menu via read-only MenuManager
 --   inspection (same verified memory layout as crystalsocket/menu.lua).
---   Does NOT modify FFXiMain.dll binaries or existing crystaljobs.dll hooks.
+--   Consumes Soulspire Native's versioned ABI (core.native_bridge) read-only.
 
 addon.name    = 'soulspire_core'
 addon.author  = 'SoulspireXI'
@@ -19,8 +19,9 @@ local Registry   = require('core.registry')
 local MenuBridge = require('core.menu_bridge')
 local Focus      = require('core.focus')
 local Input      = require('core.input')
-local Assets     = require('core.assets')
-local UI         = require('core.ui')
+local Assets       = require('core.assets')
+local UI           = require('core.ui')
+local NativeBridge = require('core.native_bridge')
 
 local registry = Registry.new()
 local focus    = Focus.new(registry)
@@ -100,6 +101,7 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
     elseif sub == 'status' then
         local native = current_native_menu()
         local active = registry:get(focus.active_index)
+        local sn, sn_err = NativeBridge.query()
         log(('version=%s mode=native-styled-fallback bridge=%s sections=%d hub_open=%s dock_focused=%s active=%s native_form=%s'):format(
             addon.version,
             tostring(menu ~= nil and menu:is_available()),
@@ -109,6 +111,14 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
             tostring(active and active.id or 'none'),
             tostring(native and native.name or 'none')
         ))
+        if sn then
+            log(('soulspire_native abi=v%d hooks=%d/%d caps=0x%04X modules=0x%02X/0x%02X banks=%d/%d hash=%s'):format(
+                sn.abi_version, sn.installed_hooks, sn.expected_hooks, sn.capabilities,
+                sn.active_modules_mask, sn.enabled_modules_mask,
+                sn.menu2fon_banks_used, sn.menu2fon_banks_max, sn.registry_hash))
+        else
+            log('soulspire_native unavailable: ' .. tostring(sn_err))
+        end
     elseif sub == 'debug' then
         if not menu or not menu:is_available() then
             log('MenuBridge unavailable.')

@@ -29,12 +29,20 @@ end
 local function read_crystaljobs_status()
     if not (ffi and status_t and get_status_type) then return nil end
     local ok, result = pcall(function()
-        local handle = ffi.C.GetModuleHandleA('crystaljobs.dll')
+        local handle = ffi.C.GetModuleHandleA('soulspire_native.dll')
+        local export_name = 'SoulspireNativeGetStatus'
+        if handle == nil then
+            handle = ffi.C.GetModuleHandleA('crystaljobs.dll')
+            export_name = 'CrystalJobsGetStatus'
+        end
         if handle == nil then
             cached_module, cached_address, cached_function = nil, nil, nil
             return nil
         end
-        local addr = ffi.C.GetProcAddress(handle, 'CrystalJobsGetStatus')
+        local addr = ffi.C.GetProcAddress(handle, export_name)
+        if addr == nil and export_name == 'SoulspireNativeGetStatus' then
+            addr = ffi.C.GetProcAddress(handle, 'CrystalJobsGetStatus')
+        end
         if addr == nil then return nil end
         if cached_module ~= handle or cached_address ~= addr then
             cached_module, cached_address = handle, addr

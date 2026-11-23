@@ -370,12 +370,15 @@ public sealed class ManifestUpdateService
 
         var dllEntry = manifest.Files.FirstOrDefault(f =>
             f.Category.Equals("plugin", StringComparison.OrdinalIgnoreCase) &&
+            f.TargetPath.Replace('\\', '/').EndsWith("soulspire_native.dll", StringComparison.OrdinalIgnoreCase))
+            ?? manifest.Files.FirstOrDefault(f =>
+            f.Category.Equals("plugin", StringComparison.OrdinalIgnoreCase) &&
             f.TargetPath.Replace('\\', '/').EndsWith("crystaljobs.dll", StringComparison.OrdinalIgnoreCase));
 
         if (dllEntry is not null && !string.IsNullOrWhiteSpace(reg.NativeDllSha256) &&
             !dllEntry.Sha256.Equals(reg.NativeDllSha256, StringComparison.OrdinalIgnoreCase))
         {
-            error = $"Manifest registry.nativeDllSha256 ({reg.NativeDllSha256}) does not match crystaljobs.dll entry ({dllEntry.Sha256}).";
+            error = $"Manifest registry.nativeDllSha256 ({reg.NativeDllSha256}) does not match {dllEntry.TargetPath} entry ({dllEntry.Sha256}).";
             return false;
         }
 
@@ -385,7 +388,8 @@ public sealed class ManifestUpdateService
             !reg.NativeDllCompiledHash.Equals("legacy-pre-registry", StringComparison.OrdinalIgnoreCase) &&
             !reg.NativeDllClientVerified)
         {
-            error = "Refusing Stable manifest: crystaljobs.dll is not marked client-verified (nativeDllClientVerified=false).";
+            var dllName = dllEntry?.TargetPath ?? "soulspire_native.dll";
+            error = $"Refusing Stable manifest: {dllName} is not marked client-verified (nativeDllClientVerified=false).";
             return false;
         }
 
@@ -693,6 +697,68 @@ public sealed class ManifestUpdateService
         "metrics/overlords.lua"
     };
 
+    // Obsolete managed CrystalJobs plugin files superseded by soulspire_native.dll.
+    // Safely removed when the active manifest deploys soulspire_native.dll to prevent
+    // simultaneous loading of both crystaljobs.dll and soulspire_native.dll.
+    public static readonly string[] RetiredCrystalJobsPluginFiles =
+    {
+        "crystaljobs.dll",
+        "data/crystaljobs-presentation.json"
+    };
+
+    public static int RemoveRetiredPlugins(LauncherManifest activeManifest, LauncherSettings settings)
+    {
+        if (string.IsNullOrWhiteSpace(settings.AshitaPath))
+        {
+            return 0;
+        }
+
+        var activeDeploysSoulspireNative = activeManifest.Files.Any(f =>
+            f.Category.Equals("plugin", StringComparison.OrdinalIgnoreCase) &&
+            f.TargetPath.Replace('\\', '/').EndsWith("soulspire_native.dll", StringComparison.OrdinalIgnoreCase));
+
+        if (!activeDeploysSoulspireNative)
+        {
+            return 0;
+        }
+
+        var activeTargets = new HashSet<string>(
+            EnumerateActiveFiles(activeManifest, settings)
+                .Select(e => ResolveTargetFilePath(settings, e)),
+            StringComparer.OrdinalIgnoreCase);
+
+        var removed = 0;
+        foreach (var relPlugin in RetiredCrystalJobsPluginFiles)
+        {
+            try
+            {
+                var path = Path.GetFullPath(Path.Combine(
+                    settings.AshitaPath,
+                    "plugins",
+                    relPlugin.Replace('/', Path.DirectorySeparatorChar)));
+                if (activeTargets.Contains(path))
+                {
+                    continue;
+                }
+
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                    removed++;
+                }
+            }
+            catch (IOException)
+            {
+                // Locked by a running game process; removed on next clean sync.
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+
+        return removed;
+    }
+
     public static void RemoveRetiredAddons(LauncherSettings settings)
     {
         foreach (var folder in RetiredAddonFolders)
@@ -854,6 +920,7 @@ public sealed class ManifestUpdateService
         if (pending.Count == 0)
         {
             ReconcileRemovedManagedFiles(manifest, settings, previousState);
+            RemoveRetiredPlugins(manifest, settings);
             SaveInstalledState(settings.AshitaPath, manifest, settings);
             progress?.Report(new SyncProgress { Message = "All SoulspireXI client files are up to date.", Percent = 100 });
             return 0;
@@ -959,8 +1026,9 @@ public sealed class ManifestUpdateService
                 }
             }
 
-            // Phase 3: Reconcile retired managed files, mirror custom DAT folder, and save installed state.
+            // Phase 3: Reconcile retired managed files, clean up obsolete CrystalJobs files, mirror custom DAT folder, and save installed state.
             ReconcileRemovedManagedFiles(manifest, settings, previousState);
+            RemoveRetiredPlugins(manifest, settings);
 
             foreach (var (entry, _, destPath) in stagedFiles)
             {

@@ -199,7 +199,7 @@ ashita.events.register('command', 'crystalsocket_command', function(e)
                 print('[crystalsocket] ' .. line)
             end
         else
-            print('[crystalsocket] hooks_diag unavailable (older crystaljobs.dll without CrystalJobsGetHookDiagnostics)')
+            print('[crystalsocket] hooks_diag unavailable (older native DLL without SoulspireNativeGetHookDiagnostics)')
         end
         return
     end
@@ -259,7 +259,7 @@ ashita.events.register('command', 'crystalsocket_command', function(e)
             report('[crystalsocket] ' .. line)
         end
     else
-        report('[crystalsocket] hooks_diag unavailable (older crystaljobs.dll without CrystalJobsGetHookDiagnostics)')
+        report('[crystalsocket] hooks_diag unavailable (older native DLL without SoulspireNativeGetHookDiagnostics)')
     end
     report(('[crystalsocket] tx queued=%d request=%s observed=%d size=%s buffer=%s injected=%s blocked=%s'):format(
         transport.queued, tostring(transport.request_id), transport.outgoing, tostring(transport.out_size),
@@ -298,7 +298,7 @@ end)
 
 ashita.events.register('load', 'crystalsocket_load', function()
     if type(addon.path) == 'string' and addon.path ~= '' then
-        labels:set_dll_path(addon.path:gsub('[/\\]+$', '') .. '\\..\\..\\plugins\\crystaljobs.dll')
+        labels:set_dll_path(addon.path:gsub('[/\\]+$', '') .. '\\..\\..\\plugins\\soulspire_native.dll')
         labels:ensure_loaded()
         labels:sync_weapon_rules(native_weapon_rules)
     end

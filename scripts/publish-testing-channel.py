@@ -76,17 +76,28 @@ def build_testing_manifest(
     payload_root = testing_dir / "payload"
     payload_root.mkdir(parents=True, exist_ok=True)
 
-    # Verify and stage the candidate crystaljobs.dll when provided
+    # Verify and stage the candidate native DLL (soulspire_native.dll or legacy crystaljobs.dll) when provided
     staged_dll_sha: str | None = None
     if crystaljobs_dll is not None:
-        dll_verifier = load_module(repo_root / "scripts" / "verify-crystaljobs-dll.py", "verify_crystaljobs_dll")
-        dll_verifier.verify_dll(
-            crystaljobs_dll,
-            require_26_hooks=(crystaljobs_hooks >= 26),
-            build_info_path=build_info,
-            manifest_path=None,
-        )
-        dest_dll = payload_root / "plugins" / "ashita4" / "crystaljobs.dll"
+        is_soulspire_native = crystaljobs_dll.name.lower() == "soulspire_native.dll"
+        if is_soulspire_native:
+            dll_verifier = load_module(repo_root / "scripts" / "verify-soulspire-native-dll.py", "verify_soulspire_native_dll")
+            dll_verifier.verify_dll(
+                crystaljobs_dll,
+                require_27_hooks=(crystaljobs_hooks >= 27),
+                build_info_path=build_info,
+                manifest_path=None,
+            )
+            dest_dll = payload_root / "plugins" / "ashita4" / "soulspire_native.dll"
+        else:
+            dll_verifier = load_module(repo_root / "scripts" / "verify-crystaljobs-dll.py", "verify_crystaljobs_dll")
+            dll_verifier.verify_dll(
+                crystaljobs_dll,
+                require_26_hooks=(crystaljobs_hooks >= 26),
+                build_info_path=build_info,
+                manifest_path=None,
+            )
+            dest_dll = payload_root / "plugins" / "ashita4" / "crystaljobs.dll"
         dest_dll.parent.mkdir(parents=True, exist_ok=True)
         if crystaljobs_dll.resolve() != dest_dll.resolve():
             shutil.copy2(crystaljobs_dll, dest_dll)
@@ -182,17 +193,17 @@ def build_testing_manifest(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parent.parent)
-    parser.add_argument("--crystaljobs-dll", type=Path, default=None, help="Verified 27-hook crystaljobs.dll to stage into Testing payload")
-    parser.add_argument("--build-info", type=Path, default=None, help="Optional crystaljobs-build-info.txt for build provenance validation")
-    parser.add_argument("--manifest-version", default="2.1.0-testing.1")
-    parser.add_argument("--server-version", default="feat/soul-weapon-templates (b05c027 / patch 0074)")
-    parser.add_argument("--server-branch", default="feat/soul-weapon-templates")
-    parser.add_argument("--server-commit", default="b05c027")
-    parser.add_argument("--server-image", default="soulspirexi/server:feat-soul-weapon-templates")
-    parser.add_argument("--crystaljobs-hooks", type=int, default=27)
+    parser.add_argument("--native-dll", "--crystaljobs-dll", dest="crystaljobs_dll", type=Path, default=None, help="Verified 27-hook soulspire_native.dll (or legacy crystaljobs.dll) to stage into Testing payload")
+    parser.add_argument("--build-info", type=Path, default=None, help="Optional soulspire_native-build-info.txt for build provenance validation")
+    parser.add_argument("--manifest-version", default="2.2.0-testing.1")
+    parser.add_argument("--server-version", default="main (Soulspire Native 27-hook)")
+    parser.add_argument("--server-branch", default="main")
+    parser.add_argument("--server-commit", default="HEAD")
+    parser.add_argument("--server-image", default="soulspirexi/server:main")
+    parser.add_argument("--native-hooks", "--crystaljobs-hooks", dest="crystaljobs_hooks", type=int, default=27)
     parser.add_argument(
         "--notes",
-        default="Testing channel build pairing verified 27-hook CrystalJobs (DUAL_2H + CanEquipItemInSlot Hook #27) with feat/soul-weapon-templates server.",
+        default="Testing channel build pairing verified 27-hook Soulspire Native (soulspire_native.dll) with server.",
     )
     parser.add_argument("--repo-branch", default=None, help="Optional branch override for testing manifest rawBaseUrl")
     parser.add_argument(

@@ -232,4 +232,10 @@ for _, label in ipairs(expected_labels) do
 end
 assert(joined:find('Native-Styled Main Menu Fallback', 1, true), 'UI must clearly identify fallback mode')
 
+-- 7. Soulspire Native ABI v2 bridge checks (headless/non-Windows safe)
+local NativeBridge = require('core.native_bridge')
+assert(NativeBridge.EXPECTED_ABI_VERSION == 2, 'NativeBridge must target Soulspire Native ABI v2')
+local bridge_info, bridge_err = NativeBridge.query()
+assert(bridge_info == nil and type(bridge_err) == 'string', 'Headless Linux test must fail closed cleanly without Windows DLL')
+
 print('SoulspireXI Core Phase 1A tests passed.')

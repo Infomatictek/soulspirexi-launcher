@@ -92,24 +92,17 @@
     },
     {
       "category": "plugin",
-      "sourcePath": "plugins/ashita4/crystaljobs.dll",
-      "targetPath": "crystaljobs.dll",
-      "sha256": "8e10ac388d13531c1d8e3572af1cab196a96d9d61a43f4ce0194960cfc3133e3",
-      "size": 130048
-    },
-    {
-      "category": "plugin",
-      "sourcePath": "plugins/ashita4/data/crystaljobs-presentation.json",
-      "targetPath": "data/crystaljobs-presentation.json",
-      "sha256": "f1a43b2f9fa4a831dd465b5e431ebc71db34ad6eb66b12cef644cd77e737b09e",
-      "size": 119
-    },
-    {
-      "category": "plugin",
       "sourcePath": "plugins/ashita4/data/soul-identities.json",
       "targetPath": "data/soul-identities.json",
       "sha256": "f9cf9895360c269624ca5116dc8700e35089406406b348740eb6f919cee75628",
       "size": 6600
+    },
+    {
+      "category": "plugin",
+      "sourcePath": "plugins/ashita4/data/soulspire_native.json",
+      "targetPath": "data/soulspire_native.json",
+      "sha256": "7051ec15ace9f7fe11a2ff008f86cc21164c93d538a293b8dc1b03c408d25c87",
+      "size": 328
     },
     {
       "category": "addon",
@@ -388,15 +381,15 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/crystalsocket/crystalsocket.lua",
       "targetPath": "crystalsocket/crystalsocket.lua",
-      "sha256": "e526e7ffe0a862701a334f33cb24aa294b4cfc6c64f0c14a7fbe4664d5479f6d",
-      "size": 22414
+      "sha256": "68a0faa47b25392b11a314a30a0926e2126d17f197e624fb42e9a5b61be6db5c",
+      "size": 22417
     },
     {
       "category": "addon",
       "sourcePath": "addons/ashita4/crystalsocket/job_labels.lua",
       "targetPath": "crystalsocket/job_labels.lua",
-      "sha256": "ce7aa4fb5e83d5c7628731ac5ac1dfc315eb47df011bea3fc9ad61d58187df84",
-      "size": 20864
+      "sha256": "902433f2872f4f2e8f470ee36adf241b9afb4028d1854625635a1d41f9925b17",
+      "size": 21358
     },
     {
       "category": "addon",
@@ -458,8 +451,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/crystalsocket/tests/weapon_config_test.lua",
       "targetPath": "crystalsocket/tests/weapon_config_test.lua",
-      "sha256": "02a1ec51af20393c36b5503d904631a7b7128693f8dc8db5a0a0e0fada9de5d3",
-      "size": 7846
+      "sha256": "a6b37e44262fb5d8202890b8ad38a23f2e271b46f41193e6d51e6bd89d116974",
+      "size": 8304
     },
     {
       "category": "addon",
@@ -472,8 +465,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/crystalsocket/weapon_config.lua",
       "targetPath": "crystalsocket/weapon_config.lua",
-      "sha256": "140a4c14b5b128460a06c8bbe5f6af74e1130e11f5cf11e976c488531a883488",
-      "size": 3167
+      "sha256": "656658831c67037d0bd357c13b03429be02288d3bdb8df44c7e87fbd6b349d8c",
+      "size": 3222
     },
     {
       "category": "addon",
@@ -6007,10 +6000,17 @@
     },
     {
       "category": "addon",
+      "sourcePath": "addons/ashita4/soulspire_core/core/native_bridge.lua",
+      "targetPath": "soulspire_core/core/native_bridge.lua",
+      "sha256": "9f682cd0e0a3b537ea93db1c311a3efb6885d5d59dd83b999c3dc6487415903b",
+      "size": 3502
+    },
+    {
+      "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/registry.lua",
       "targetPath": "soulspire_core/core/registry.lua",
-      "sha256": "715bf94e98c3f48d3e7b5fc46428c1b5bce0c410d8d84e99111561cea1916791",
-      "size": 5312
+      "sha256": "2fa65b90b3e696b799780d5bbbc58b2762b4ced323c7f45f322c961dd2ddc25c",
+      "size": 5317
     },
     {
       "category": "addon",
@@ -6037,15 +6037,15 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/soulspire_core.lua",
       "targetPath": "soulspire_core/soulspire_core.lua",
-      "sha256": "084a6334290da07c5a93215c6829f1d90b1384e883d34fea8d3e6ac52c4100c2",
-      "size": 6725
+      "sha256": "3bc3a639b4199e89de2dc42ba150e4e5fd7f2825bf985b7216462d244f6178a6",
+      "size": 7302
     },
     {
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/tests/soulspire_core_test.lua",
       "targetPath": "soulspire_core/tests/soulspire_core_test.lua",
-      "sha256": "8ebf6e02a11dc97dc99658aa80f8996c2c11537741c86029a50c3ad62cedc322",
-      "size": 10246
+      "sha256": "cb46b3f1a280699c31bc2c2f6151cfb7db66d74e03623d7b59beee86524cb2a4",
+      "size": 10650
     },
     {
       "category": "addon",
@@ -6065,8 +6065,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_flintlock/soulspire_flintlock.lua",
       "targetPath": "soulspire_flintlock/soulspire_flintlock.lua",
-      "sha256": "0db9c9a48852dad903af19684aa429d9783ca3d820b469a05a2e116bff9c913b",
-      "size": 10753
+      "sha256": "238a36cf99279020d5bf499e87997465608651615192ecb7946256c3ef1bbb3b",
+      "size": 11114
     },
     {
       "category": "addon",
@@ -6142,8 +6142,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_gear/og/ox_sync.lua",
       "targetPath": "soulspire_gear/og/ox_sync.lua",
-      "sha256": "1f6b4b2b38e01b7293787dcb63dc1a8ae502556bc2357a5f501127267076bdb2",
-      "size": 12464
+      "sha256": "a8fb5e5c1309da558594370510a1126b64a9eb6a0ca83ac9a510be04e072647a",
+      "size": 12812
     },
     {
       "category": "addon",
@@ -6247,8 +6247,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_soul_actions/native_actions.lua",
       "targetPath": "soulspire_soul_actions/native_actions.lua",
-      "sha256": "85c2fc8037a2dbc385ecc3f3ff1f3adf7fb123eacbc812ff053a56940206f808",
-      "size": 14058
+      "sha256": "ca3f500f8247ef84e6a8af7418b3b74dea1fe9ab6c26b94b3dc355421468b707",
+      "size": 14360
     },
     {
       "category": "addon",
@@ -6296,8 +6296,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_soul_actions/soul_bridge.lua",
       "targetPath": "soulspire_soul_actions/soul_bridge.lua",
-      "sha256": "1ac288f5a4f8417807cbb4539041f59bb01552a7bae11b1807792889db1a04dc",
-      "size": 3848
+      "sha256": "a8eda4efe0abcb5868a26d5352614ba5c13d2c2c94eceb7523453f4a7fa4baf8",
+      "size": 4205
     },
     {
       "category": "addon",
@@ -7647,8 +7647,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_soulhud/soulspire_soulhud.lua",
       "targetPath": "soulspire_soulhud/soulspire_soulhud.lua",
-      "sha256": "c0361de8132567868b47328f33230eb795e2a30da99748587e6f61cf3da4aeec",
-      "size": 23124
+      "sha256": "8d0a5e7c11fb1c6cfb7a44eb99f8b74b14e33bec9df0d45b9c5408671d0f05b4",
+      "size": 23472
     },
     {
       "category": "addon",
@@ -9971,9 +9971,10 @@
     "version": "2026.11.22-66-souls-approved",
     "hash": "cf86aa59ff8d16c6",
     "idLockStatus": "locked",
-    "nativeDllCompiledHash": "legacy-pre-registry",
-    "nativeDllSha256": "8e10ac388d13531c1d8e3572af1cab196a96d9d61a43f4ce0194960cfc3133e3",
+    "nativeDllCompiledHash": "cf86aa59ff8d16c6",
+    "nativeDllSha256": "pending-ci-build",
     "nativeDllClientVerified": false,
-    "crystalJobsHooks": 24
+    "nativeHooks": 27,
+    "crystalJobsHooks": 27
   }
 }

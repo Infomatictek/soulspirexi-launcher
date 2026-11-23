@@ -18,7 +18,7 @@ local DEFAULT_SECTIONS = {
         badge = 'PLACEHOLDER',
         accent = 'gold',
         summary = 'Socket, inspect, and switch job-specific Soul Crystals.',
-        details = 'Phase 1A placeholder. Existing CrystalSocket addon remains active in the native Equipment menu and continues syncing native job labels and weapon rules via crystaljobs.dll.',
+        details = 'Phase 1A placeholder. Existing CrystalSocket addon remains active in the native Equipment menu and continues syncing native job labels and weapon rules via soulspire_native.dll.',
         existing_addon = 'crystalsocket',
     },
     {
