@@ -218,11 +218,12 @@ def verify_manifest(repo_root: Path, manifest_path: Path | None = None) -> list[
     expected = expected_client_files(repo_root)
     if declared_channel == "testing":
         candidate_id = str(manifest.get("candidateId") or "").strip()
-        allowed_testing_prefix = (
-            "channels/testing-registry-24hook/payload/"
-            if candidate_id == "registry-24hook"
-            else "channels/testing/payload/"
-        )
+        candidate_prefixes = {
+            "registry-24hook": "channels/testing-registry-24hook/payload/",
+            "search-legacy-text": "channels/testing-search-legacy-text/payload/",
+            "search-aligned-text": "channels/testing-search-aligned-text/payload/",
+        }
+        allowed_testing_prefix = candidate_prefixes.get(candidate_id, "channels/testing/payload/")
         for src, (cat, tgt) in sorted(manifest_sources.items()):
             in_stable = src in expected
             in_testing = src.startswith(allowed_testing_prefix)

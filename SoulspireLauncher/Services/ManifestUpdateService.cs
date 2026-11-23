@@ -31,6 +31,8 @@ public sealed class ManifestUpdateService
     public const string StableManifestRelativePath = "manifest.json";
     public const string TestingManifestRelativePath = "channels/testing/manifest.json";
     public const string TestingRegistry24HookManifestRelativePath = "channels/testing-registry-24hook/manifest.json";
+    public const string TestingSearchLegacyTextManifestRelativePath = "channels/testing-search-legacy-text/manifest.json";
+    public const string TestingSearchAlignedTextManifestRelativePath = "channels/testing-search-aligned-text/manifest.json";
     public const string TestingRegistry24HookBranch = "feat/soul-identity-registry-integration";
     public const string InstalledStateFileName = ".soulspire-state.json";
 
@@ -51,11 +53,15 @@ public sealed class ManifestUpdateService
     {
         UpdateChannel.Testing => TestingManifestRelativePath,
         UpdateChannel.TestingRegistry24Hook => TestingRegistry24HookManifestRelativePath,
+        UpdateChannel.TestingSearchLegacyText => TestingSearchLegacyTextManifestRelativePath,
+        UpdateChannel.TestingSearchAlignedText => TestingSearchAlignedTextManifestRelativePath,
         _ => StableManifestRelativePath
     };
 
     public static string GetManifestBranch(LauncherManifest fallback, UpdateChannel channel) =>
-        channel == UpdateChannel.TestingRegistry24Hook
+        channel is UpdateChannel.TestingRegistry24Hook
+            or UpdateChannel.TestingSearchLegacyText
+            or UpdateChannel.TestingSearchAlignedText
             ? TestingRegistry24HookBranch
             : (string.IsNullOrWhiteSpace(fallback.Repo.Branch) ? "main" : fallback.Repo.Branch.Trim());
 
@@ -245,9 +251,13 @@ public sealed class ManifestUpdateService
             };
         }
 
-        var channelLabel = channel == UpdateChannel.TestingRegistry24Hook
-            ? "Registry Testing (24-Hook)"
-            : "Testing (27-Hook)";
+        var channelLabel = channel switch
+        {
+            UpdateChannel.TestingRegistry24Hook => "Testing B — Registry 24-Hook (Current menu2fon)",
+            UpdateChannel.TestingSearchLegacyText => "Testing A — Search Legacy native_text (4f0fdb3)",
+            UpdateChannel.TestingSearchAlignedText => "Testing C — Search Aligned native_text (Repair)",
+            _ => "Testing (27-Hook)"
+        };
         var statusDetail = lastStatusCode.HasValue ? $"HTTP {lastStatusCode.Value}: " : string.Empty;
         var reason = string.IsNullOrWhiteSpace(lastError) ? "Remote manifest could not be retrieved." : lastError;
         var urlSuffix = string.IsNullOrWhiteSpace(lastUrl) ? string.Empty : $" ({lastUrl})";
@@ -298,23 +308,35 @@ public sealed class ManifestUpdateService
                 return false;
             }
 
-            if (candidateId.Equals("registry-24hook", StringComparison.OrdinalIgnoreCase))
+            if (candidateId.Equals("registry-24hook", StringComparison.OrdinalIgnoreCase) ||
+                candidateId.Equals("search-legacy-text", StringComparison.OrdinalIgnoreCase) ||
+                candidateId.Equals("search-aligned-text", StringComparison.OrdinalIgnoreCase))
             {
-                error = "Refusing isolated 24-hook registry candidate on 27-hook Testing channel.";
+                error = "Refusing isolated 24-hook candidate on 27-hook Testing channel.";
                 return false;
             }
         }
-        else if (requestedChannel == UpdateChannel.TestingRegistry24Hook)
+        else if (requestedChannel is UpdateChannel.TestingRegistry24Hook
+                 or UpdateChannel.TestingSearchLegacyText
+                 or UpdateChannel.TestingSearchAlignedText)
         {
+            var expectedCandidateId = requestedChannel switch
+            {
+                UpdateChannel.TestingRegistry24Hook => "registry-24hook",
+                UpdateChannel.TestingSearchLegacyText => "search-legacy-text",
+                UpdateChannel.TestingSearchAlignedText => "search-aligned-text",
+                _ => string.Empty
+            };
+
             if (!declared.Equals("testing", StringComparison.OrdinalIgnoreCase))
             {
-                error = $"Expected channel 'testing' for Registry Testing channel, but received '{declared}'.";
+                error = $"Expected channel 'testing' for {requestedChannel} channel, but received '{declared}'.";
                 return false;
             }
 
-            if (!candidateId.Equals("registry-24hook", StringComparison.OrdinalIgnoreCase))
+            if (!candidateId.Equals(expectedCandidateId, StringComparison.OrdinalIgnoreCase))
             {
-                error = $"Expected candidateId 'registry-24hook' for Registry Testing channel, but received '{(string.IsNullOrWhiteSpace(candidateId) ? "none" : candidateId)}'.";
+                error = $"Expected candidateId '{expectedCandidateId}' for {requestedChannel}, but received '{(string.IsNullOrWhiteSpace(candidateId) ? "none" : candidateId)}'.";
                 return false;
             }
         }

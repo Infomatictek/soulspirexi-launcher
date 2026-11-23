@@ -58,19 +58,21 @@ def build_testing_manifest(
     if not stable_manifest_path.is_file():
         raise FileNotFoundError(f"Stable manifest not found: {stable_manifest_path}")
 
-    if candidate not in ("default-27hook", "registry-24hook"):
-        raise ValueError(f"Unknown Testing candidate {candidate!r}; expected 'default-27hook' or 'registry-24hook'")
+    candidate_dirs = {
+        "default-27hook": repo_root / "channels" / "testing",
+        "registry-24hook": repo_root / "channels" / "testing-registry-24hook",
+        "search-legacy-text": repo_root / "channels" / "testing-search-legacy-text",
+        "search-aligned-text": repo_root / "channels" / "testing-search-aligned-text",
+    }
+    if candidate not in candidate_dirs:
+        raise ValueError(f"Unknown Testing candidate {candidate!r}; expected one of {tuple(candidate_dirs)}")
     if candidate == "default-27hook" and crystaljobs_hooks < 26:
         raise ValueError(
             "Refusing to replace the 27-hook Testing channel with a 24-hook DLL. "
-            "Use --candidate registry-24hook to publish an isolated 24-hook registry candidate."
+            "Use --candidate registry-24hook (or search-legacy-text / search-aligned-text) to publish an isolated 24-hook candidate."
         )
 
-    testing_dir = (
-        repo_root / "channels" / "testing-registry-24hook"
-        if candidate == "registry-24hook"
-        else repo_root / "channels" / "testing"
-    )
+    testing_dir = candidate_dirs[candidate]
     payload_root = testing_dir / "payload"
     payload_root.mkdir(parents=True, exist_ok=True)
 
@@ -109,7 +111,7 @@ def build_testing_manifest(
         "notes": testing_notes,
     }
 
-    if candidate == "registry-24hook":
+    if candidate in ("registry-24hook", "search-legacy-text", "search-aligned-text"):
         reg_sync_path = repo_root / "registry_sync.json"
         reg_sync = json.loads(reg_sync_path.read_text(encoding="utf-8")) if reg_sync_path.is_file() else {}
         prov = json.loads(provenance_json.read_text(encoding="utf-8-sig")) if (provenance_json and provenance_json.is_file()) else {}
@@ -195,9 +197,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo-branch", default=None, help="Optional branch override for testing manifest rawBaseUrl")
     parser.add_argument(
         "--candidate",
-        choices=("default-27hook", "registry-24hook"),
+        choices=("default-27hook", "registry-24hook", "search-legacy-text", "search-aligned-text"),
         default="default-27hook",
-        help="Explicit Testing candidate track (default-27hook preserves 27-hook channel; registry-24hook isolates 24-hook registry candidate).",
+        help="Explicit Testing candidate track (preserves 27-hook channel and isolates each 24-hook Search/Registry candidate).",
     )
     parser.add_argument("--provenance-json", type=Path, default=None, help="Optional crystaljobs-provenance.json to bundle with candidate.")
     args = parser.parse_args(argv)

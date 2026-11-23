@@ -586,7 +586,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
     [
         UpdateChannel.Stable,
         UpdateChannel.Testing,
-        UpdateChannel.TestingRegistry24Hook
+        UpdateChannel.TestingSearchLegacyText,
+        UpdateChannel.TestingRegistry24Hook,
+        UpdateChannel.TestingSearchAlignedText
     ];
 
     public UpdateChannel SelectedUpdateChannel
@@ -608,19 +610,26 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    public bool IsTestingChannel => _settings.UpdateChannel is UpdateChannel.Testing or UpdateChannel.TestingRegistry24Hook;
+    public bool IsTestingChannel => _settings.UpdateChannel is UpdateChannel.Testing
+        or UpdateChannel.TestingRegistry24Hook
+        or UpdateChannel.TestingSearchLegacyText
+        or UpdateChannel.TestingSearchAlignedText;
 
     public string ChannelBadgeText => _settings.UpdateChannel switch
     {
         UpdateChannel.Testing => "TESTING CHANNEL",
-        UpdateChannel.TestingRegistry24Hook => "TESTING (24-HOOK REGISTRY)",
+        UpdateChannel.TestingRegistry24Hook => "TESTING B (MENU2FON)",
+        UpdateChannel.TestingSearchLegacyText => "TESTING A (LEGACY TEXT)",
+        UpdateChannel.TestingSearchAlignedText => "TESTING C (ALIGNED TEXT)",
         _ => "STABLE"
     };
 
     public string ChannelDescriptionText => _settings.UpdateChannel switch
     {
         UpdateChannel.Testing => "Testing channel delivers verified 27-hook weapon-template preview DLLs, addons, and DAT overlays without affecting Stable players.",
-        UpdateChannel.TestingRegistry24Hook => "Isolated 24-hook Centralized Registry + Search label fix testing candidate. Switch back to Stable anytime to automatically restore Stable files.",
+        UpdateChannel.TestingRegistry24Hook => "Candidate B (Control): Current 24-hook menu2fon sprite Search renderer (2.1.4-testing.registry24). Switch back to Stable anytime.",
+        UpdateChannel.TestingSearchLegacyText => "Candidate A (Historical 4f0fdb3): 24-hook 66-Soul registry with legacy single-call 0.75x native_text Search labels (zero sprite mutation).",
+        UpdateChannel.TestingSearchAlignedText => "Candidate C (Repair): 24-hook 66-Soul registry with fixed-column aligned native_text Search labels (readable first, zero sprite mutation).",
         _ => "Stable channel delivers production-verified SoulspireXI client builds."
     };
 

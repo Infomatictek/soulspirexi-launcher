@@ -456,14 +456,40 @@ static void multi_job_checks() {
     pname_sheet_slot = &sheet_obj;
 
     sprite_calls = 0; text_calls = 0; recorded_sprite_count = 0;
+#if CRYSTALJOBS_SEARCH_RENDER_MODE == 1
     reset_menu2fon_banks_for_test();
+#endif
     make_row(row_a, 320, marker | 2, 1); state.decoded(row_a); // WAR branch 2 = BRZ
     assert(sprite_abi(reinterpret_cast<void*>(&normal_sprite_hook), row_a));
+#if CRYSTALJOBS_SEARCH_RENDER_MODE == 0
+    // Candidate A (Legacy 4f0fdb3): single native_text call, zero menu2fon sprite mutation.
+    assert(sprite_calls == 0 && text_calls == 1 && recorded_sprite_count == 0);
+    assert(last_text != nullptr && std::strcmp(last_text, label_for(1, 2, false)) == 0);
+#elif CRYSTALJOBS_SEARCH_RENDER_MODE == 1
     assert(sprite_calls == 3 && text_calls == 0 && recorded_sprite_count == 3);
+#else
+    // Candidate C (Aligned native_text): 3 per-glyph native_text calls, zero menu2fon sprite mutation.
+    assert(sprite_calls == 0 && text_calls == 3 && recorded_sprite_count == 0);
+#endif
     // Shared WAR template tile must NEVER be mutated in-place.
     assert(std::memcmp(mock_tile + 0xC0, war_corners, sizeof(war_corners)) == 0);
     assert(std::memcmp(mock_tile + 0x64, war_uv, sizeof(war_uv)) == 0);
 
+#if CRYSTALJOBS_SEARCH_RENDER_MODE == 2
+    // Verify draw_aligned_native_text_label produces 3 calls across all 66 Souls with zero sprite touches.
+    for (uint8_t j = 1; j <= 22; ++j) {
+        for (uint8_t b = 1; b <= 3; ++b) {
+            const char* abr = label_for(j, b, false);
+            assert(abr != nullptr && std::strlen(abr) == 3);
+            SpriteArgs sa{100, 200, 1.0f, 1.0f, 0xFFFFFFFFu, 0, 0, 1};
+            sprite_calls = 0; text_calls = 0;
+            draw_aligned_native_text_label(abr, &sa);
+            assert(sprite_calls == 0 && text_calls == 3);
+        }
+    }
+#endif
+
+#if CRYSTALJOBS_SEARCH_RENDER_MODE == 1
     // Deferred multi-frame, multi-row Search regression exceeding old 192-slot capacity:
     // Queue 3 consecutive frames x 66 Souls x 3 glyphs = 594 deferred draws, then verify
     // EVERY queued sprite* pointer from Frame 1..3 remains intact, immutable, and non-aliasing.
@@ -614,6 +640,7 @@ static void multi_job_checks() {
     assert(sprite_abi(reinterpret_cast<void*>(&normal_sprite_hook), row_a));
     assert(sprite_calls == 3 && text_calls == 0);
     std::memcpy(mock_tile, orig_tile_copy, sizeof(orig_tile_copy));
+#endif // CRYSTALJOBS_SEARCH_RENDER_MODE == 1
     pname_sheet_slot = nullptr;
 
     selftest_alive = false;

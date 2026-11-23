@@ -100,7 +100,9 @@ public sealed class FfxiInstallDetector
         {
             UpdateChannel.Stable => "Stable",
             UpdateChannel.Testing => "Testing (27-Hook Weapon Templates)",
-            UpdateChannel.TestingRegistry24Hook => "Testing — Registry 24-Hook (Search Fix)",
+            UpdateChannel.TestingRegistry24Hook => "Testing B — Registry 24-Hook (Current menu2fon)",
+            UpdateChannel.TestingSearchLegacyText => "Testing A — Search Legacy native_text (4f0fdb3)",
+            UpdateChannel.TestingSearchAlignedText => "Testing C — Search Aligned native_text (Repair)",
             _ => settings.UpdateChannel.ToString()
         };
 

@@ -148,6 +148,15 @@ static_assert(sizeof(SpriteArgs) == 32);
 struct SimpleSpriteArgs { int x, y; uint32_t color; int center, first; };
 static_assert(sizeof(SimpleSpriteArgs) == 20);
 
+// Search 3-letter job badge rendering mode (compile-time selectable for isolated Testing candidates):
+//   0 = Legacy historical native_text (4f0fdb3 baseline: single-call 0.75x native_text; zero sprite mutation)
+//   1 = Experimental menu2fon immutable bank sprite renderer (d74fef7; failed live Windows visual check)
+//   2 = Safe aligned native_text (per-character fixed-column 0x1CAD80 native_text; zero sprite mutation)
+#ifndef CRYSTALJOBS_SEARCH_RENDER_MODE
+#define CRYSTALJOBS_SEARCH_RENDER_MODE 2
+#endif
+
+#if CRYSTALJOBS_SEARCH_RENDER_MODE == 1
 struct MenuGlyph { uint8_t u, v, w; };
 // 8x10 job-abbreviation glyphs on 'menu    menu2fon' (256x256 texture in ROM/118/111.DAT).
 static constexpr MenuGlyph menu_glyphs[26] = {
@@ -350,17 +359,47 @@ static bool draw_menu2fon_label(const char* custom, const SpriteArgs* args) noex
     }
     return true;
 }
+#endif // CRYSTALJOBS_SEARCH_RENDER_MODE == 1
+
+#if CRYSTALJOBS_SEARCH_RENDER_MODE == 2
+static void draw_aligned_native_text_label(const char* custom, const SpriteArgs* args) noexcept {
+    // Render each uppercase letter into a fixed column inside the 23px Search job badge slot
+    // using FFXI's safe text pipeline (0x1CAD80) with zero menu2fon sprite/tile manipulation.
+    if (custom[0] >= 0x21 && custom[0] <= 0x7E &&
+        custom[1] >= 0x21 && custom[1] <= 0x7E &&
+        custom[2] >= 0x21 && custom[2] <= 0x7E &&
+        custom[3] == '\0') {
+        const float sx = 0.72f * args->scale_x;
+        const float sy = 0.78f * args->scale_y;
+        const int y = args->y + static_cast<int>(1.0f * args->scale_y + 0.5f);
+        for (int i = 0; i < 3; ++i) {
+            const char glyph[2] = {custom[i], '\0'};
+            const int x = args->x + static_cast<int>(static_cast<float>(i) * 7.5f * args->scale_x + 0.5f);
+            native_text(x, y, glyph, args->color, sx, sy, 0);
+        }
+        return;
+    }
+    native_text(args->x, args->y, custom, args->color, 0.75f * args->scale_x, 0.75f * args->scale_y, 0);
+}
+#endif
 
 static bool __stdcall draw_branch(const uint8_t* row, const SpriteArgs* args) noexcept {
     const uint8_t branch = branch_for(row);
     if (branch == 0 || row == nullptr) return false;
     const char* custom = label_for(row[32], branch, false);
     if (custom == nullptr) return false;
-    // Render 3-letter Soul Job label using the native 'menu    menu2fon' job sprite sheet across 24px (0, 8, 16)
-    // so the font matches stock job abbreviations (WAR..RUN) and sits flush against the level digits at +23.
+#if CRYSTALJOBS_SEARCH_RENDER_MODE == 0
+    // Historical working baseline (4f0fdb3): fit FFXI's native_text into the 23px job column.
+    native_text(args->x, args->y, custom, args->color, 0.75f * args->scale_x, 0.75f * args->scale_y, 0);
+#elif CRYSTALJOBS_SEARCH_RENDER_MODE == 1
+    // Experimental menu2fon job sprite sheet renderer (24px: 0, 8, 16) with native_text fallback.
     if (!draw_menu2fon_label(custom, args)) {
         native_text(args->x, args->y, custom, args->color, 0.75f * args->scale_x, 0.75f * args->scale_y, 0);
     }
+#else
+    // Safe default: per-character fixed-column native_text (readable first, zero sprite mutation).
+    draw_aligned_native_text_label(custom, args);
+#endif
     ++short_draws;
     return true;
 }
