@@ -799,6 +799,178 @@ function F.drawActionButton(imgui, dl, id, x, y, w, h, label, variant, opts)
     return clicked, hovered
 end
 
+-- Ornate beveled-hex RPG pill (used for active Core navigation tab & Gold CTA button)
+function F.drawBeveledPill(dl, x, y, w, h, opts)
+    if not dl then return end
+    opts = opts or {}
+    local bevel   = math.min(opts.bevel or math.floor(h * 0.34), math.floor(w * 0.22))
+    local midY    = y + h * 0.5
+    local fillTop = opts.fillTop or F.u32.midnight_selected
+    local fillBot = opts.fillBot or F.u32.midnight_deep
+    local border  = opts.border or F.u32.aether_cyan
+    local glow    = opts.glow
+    local thick   = opts.thickness or 1.6
+
+    -- Soft outer glow halo
+    if glow and dl.AddRectFilled then
+        dl:AddRectFilled({ x + bevel * 0.4, y - 2 }, { x + w - bevel * 0.4, y + h + 2 }, glow, 6)
+    end
+
+    -- Fill body + beveled left/right end-caps
+    F.drawGradRect(dl, x + bevel, y, x + w - bevel, y + h, fillTop, fillBot)
+    if dl.AddTriangleFilled and bevel > 0 then
+        dl:AddTriangleFilled({ x, midY }, { x + bevel, y }, { x + bevel, y + h }, fillBot)
+        dl:AddTriangleFilled({ x + w, midY }, { x + w - bevel, y }, { x + w - bevel, y + h }, fillBot)
+    end
+
+    -- Crisp beveled perimeter outline
+    if dl.AddLine then
+        dl:AddLine({ x + bevel, y }, { x + w - bevel, y }, border, thick)
+        dl:AddLine({ x + w - bevel, y }, { x + w, midY }, border, thick)
+        dl:AddLine({ x + w, midY }, { x + w - bevel, y + h }, border, thick)
+        dl:AddLine({ x + w - bevel, y + h }, { x + bevel, y + h }, border, thick)
+        dl:AddLine({ x + bevel, y + h }, { x, midY }, border, thick)
+        dl:AddLine({ x, midY }, { x + bevel, y }, border, thick)
+        -- Luminous top & bottom highlight lines
+        if opts.highlight then
+            dl:AddLine({ x + bevel + 4, y + 1 }, { x + w - bevel - 4, y + 1 }, opts.highlight, 1.3)
+            dl:AddLine({ x + bevel + 4, y + h - 1 }, { x + w - bevel - 4, y + h - 1 }, opts.highlight, 1.3)
+        end
+    end
+end
+
+-- Rotated 45-degree diamond Mastery Slot socket (lit = active WS, unlit = open/locked slot)
+function F.drawDiamondSocket(dl, cx, cy, r, opts)
+    if not dl then return end
+    opts = opts or {}
+    local lit     = opts.lit == true
+    local active  = opts.active == true
+    local fillCol = opts.fill or (lit and F.abgr(F.rgba.crystal_violet_wash, 0.92) or F.u32.abyss_solid)
+    local rimCol  = opts.rim or (active and F.u32.soul_gold_bright or (lit and F.u32.soul_gold or F.u32.border_strong))
+    local thick   = active and 2.0 or (lit and 1.5 or 1.1)
+
+    if lit and dl.AddCircleFilled then
+        dl:AddCircleFilled({ cx, cy }, r + 3, F.abgr(opts.glowRgba or F.rgba.soul_gold, 0.16), 16)
+    end
+    if dl.AddQuadFilled then
+        dl:AddQuadFilled({ cx, cy - r }, { cx + r, cy }, { cx, cy + r }, { cx - r, cy }, fillCol)
+    end
+    if lit and opts.texId and dl.AddImage then
+        local ir = r * 0.56
+        dl:AddImage(opts.texId, { cx - ir, cy - ir }, { cx + ir, cy + ir })
+    elseif lit and dl.AddQuadFilled then
+        local ir = r * 0.44
+        dl:AddQuadFilled({ cx, cy - ir }, { cx + ir, cy }, { cx, cy + ir }, { cx - ir, cy },
+            opts.coreU32 or F.u32.soul_gold_bright)
+    elseif dl.AddRect then
+        -- Minimal lock silhouette inside open/locked diamond
+        local lw, lh = r * 0.34, r * 0.30
+        dl:AddRect({ cx - lw, cy - lh * 0.2 }, { cx + lw, cy + lh }, F.u32.text_muted, 1, 0, 1.1)
+        if dl.AddCircle then
+            dl:AddCircle({ cx, cy - lh * 0.35 }, lw * 0.65, F.u32.text_muted, 10, 1.0)
+        end
+    end
+    if dl.AddQuad then
+        dl:AddQuad({ cx, cy - r }, { cx + r, cy }, { cx, cy + r }, { cx - r, cy }, rimCol, thick)
+    end
+end
+
+-- Glowing 8-point crystal star (used for Talent Points & Point Cost)
+function F.drawCrystalStar(dl, cx, cy, r, colU32, coreU32)
+    if not dl then return end
+    local col  = colU32 or F.u32.crystal_violet_bright
+    local core = coreU32 or F.u32.white
+    if dl.AddCircleFilled then
+        dl:AddCircleFilled({ cx, cy }, r * 1.15, F.abgr(F.rgba.crystal_violet, 0.26), 16)
+    end
+    if dl.AddQuadFilled then
+        local w = r * 0.26
+        dl:AddQuadFilled({ cx, cy - r }, { cx + w, cy }, { cx, cy + r }, { cx - w, cy }, col)
+        dl:AddQuadFilled({ cx - r, cy }, { cx, cy - w }, { cx + r, cy }, { cx, cy + w }, col)
+        local d = r * 0.58
+        local dw = r * 0.16
+        dl:AddQuadFilled({ cx - d, cy - d }, { cx + dw, cy - dw }, { cx + d, cy + d }, { cx - dw, cy + dw }, col)
+        dl:AddQuadFilled({ cx + d, cy - d }, { cx + dw, cy + dw }, { cx - d, cy + d }, { cx - dw, cy - dw }, col)
+    end
+    if dl.AddCircleFilled then
+        dl:AddCircleFilled({ cx, cy }, r * 0.24, core, 10)
+    end
+end
+
+-- Atmospheric Soulforge Astral Ring backdrop behind the Talent Tree
+function F.drawAstralRing(dl, cx, cy, r, opts)
+    if not dl or r < 40 then return end
+    opts = opts or {}
+    local alpha = opts.alpha or 1.0
+    if dl.AddCircleFilled then
+        dl:AddCircleFilled({ cx, cy }, r * 0.94, F.abgr(F.rgba.crystal_violet, 0.08 * alpha), 48)
+        dl:AddCircleFilled({ cx, cy }, r * 0.62, F.abgr(F.rgba.aether_cyan, 0.06 * alpha), 40)
+        dl:AddCircleFilled({ cx, cy }, r * 0.36, F.abgr(F.rgba.crystal_violet_bright, 0.10 * alpha), 32)
+    end
+    if dl.AddCircle then
+        dl:AddCircle({ cx, cy }, r, F.abgr(F.rgba.soul_gold_dim, 0.42 * alpha), 56, 2.0)
+        dl:AddCircle({ cx, cy }, r * 0.88, F.abgr(F.rgba.soul_gold, 0.26 * alpha), 48, 1.2)
+        dl:AddCircle({ cx, cy }, r * 0.66, F.abgr(F.rgba.crystal_violet_bright, 0.30 * alpha), 40, 1.1)
+    end
+    if dl.AddLine then
+        -- Cardinal astral rays
+        for _, dir in ipairs({ { 0, -1 }, { 1, 0 }, { 0, 1 }, { -1, 0 } }) do
+            dl:AddLine(
+                { cx + dir[1] * r * 0.88, cy + dir[2] * r * 0.88 },
+                { cx + dir[1] * r * 1.03, cy + dir[2] * r * 1.03 },
+                F.abgr(F.rgba.soul_gold, 0.55 * alpha), 1.6
+            )
+        end
+    end
+end
+
+-- Circular gilded icon button (? / Settings / X in top-right Core header)
+function F.drawCircleIconBtn(imgui, dl, id, cx, cy, r, symbol, opts)
+    opts = opts or {}
+    local clicked = false
+    local hovered = false
+    if imgui and imgui.SetCursorScreenPos and imgui.InvisibleButton then
+        imgui.SetCursorScreenPos({ cx - r, cy - r })
+        if imgui.InvisibleButton(id, { r * 2, r * 2 }) then
+            clicked = true
+        end
+        hovered = imgui.IsItemHovered and imgui.IsItemHovered() or false
+    end
+    local active = opts.active == true
+    local fill   = active and F.u32.midnight_selected or (hovered and F.u32.midnight_alt or F.u32.abyss_solid)
+    local rim    = active and F.u32.aether_cyan or (hovered and F.u32.soul_gold_bright or F.u32.soul_gold_dim)
+    if dl then
+        if dl.AddCircleFilled then dl:AddCircleFilled({ cx, cy }, r, fill, 24) end
+        if dl.AddCircle then dl:AddCircle({ cx, cy }, r, rim, 24, (active or hovered) and 1.6 or 1.2) end
+    end
+    local fs = opts.fontScale or 0.86
+    F.drawShadowText(imgui, dl, cx, cy - 7 * fs, symbol,
+        (active or hovered) and F.u32.soul_gold_bright or F.u32.text_primary, fs, 'c')
+    return clicked, hovered
+end
+
+-- Crisp keycap / gamepad badge + label pair for the bottom controls legend bar
+function F.drawPromptPill(imgui, dl, x, y, keyLabel, descLabel, opts)
+    opts = opts or {}
+    local fs = opts.fontScale or 0.74
+    local padX = math.floor(6 * fs + 0.5)
+    local h = math.floor(20 * fs + 0.5)
+    local kw = F.measureText(imgui, keyLabel, fs)
+    local pillW = math.max(math.floor(20 * fs), math.floor(kw + padX * 2 + 0.5))
+    local dw = F.measureText(imgui, descLabel, fs)
+
+    if dl then
+        dl:AddRectFilled({ x, y }, { x + pillW, y + h }, F.u32.abyss_solid, 4)
+        dl:AddRect({ x, y }, { x + pillW, y + h }, opts.keyBorder or F.u32.soul_gold_dim, 4, 0, 1.1)
+    end
+    F.drawShadowText(imgui, dl, x + pillW * 0.5, y + (h - 13 * fs) * 0.5, keyLabel,
+        opts.keyCol or F.u32.soul_gold_bright, fs, 'c')
+    F.drawShadowText(imgui, dl, x + pillW + math.floor(6 * fs), y + (h - 13 * fs) * 0.5, descLabel,
+        opts.descCol or F.u32.text_secondary, fs, 'l')
+
+    return pillW + math.floor(6 * fs) + dw + math.floor(14 * fs)
+end
+
 -- Unified SoulspireXI tooltip card (Abyss/Midnight + Gold/Cyan/Violet accents)
 function F.drawTooltipCard(imgui, title, lines, opts)
     if not imgui or not imgui.BeginTooltip then return end

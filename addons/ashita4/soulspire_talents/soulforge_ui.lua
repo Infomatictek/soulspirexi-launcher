@@ -79,6 +79,36 @@ function UI.isSkillchainNode(node)
     return k:match('^evsc_t%d+$') ~= nil or k:match('^sc_t%d+$') ~= nil
 end
 
+-- Build a deterministic 2D tier/column grid of navigable talent nodes for gamepad navigation.
+function UI.getTreeGrid(detail)
+    local tiers = {}
+    if not detail or not detail.nodes then return tiers end
+    local isEvo = UI.isEvolutionTree(detail)
+    local byTier = {}
+    local maxTier = 0
+    for _, n in ipairs(detail.nodes) do
+        if not (isEvo and UI.isSkillchainNode(n)) then
+            local t = tonumber(n.tier) or 1
+            if t > maxTier then maxTier = t end
+            byTier[t] = byTier[t] or {}
+            byTier[t][#byTier[t] + 1] = n
+        end
+    end
+    for t = 1, maxTier do
+        local arr = byTier[t]
+        if arr and #arr > 0 then
+            table.sort(arr, function(a, b)
+                if (a.col or 0) ~= (b.col or 0) then
+                    return (a.col or 0) < (b.col or 0)
+                end
+                return (a.idx or 0) < (b.idx or 0)
+            end)
+            tiers[#tiers + 1] = { tier = t, nodes = arr }
+        end
+    end
+    return tiers
+end
+
 -- Extract the 4 Skillchain Forging slots (T1/T2 Lv1, T3 Lv2, T4 Lv3) from real server nodes,
 -- accurately reflecting server unlock rules (Evo: wsSpent >= tier; Legacy: sc_tX.rank > 0).
 local SC_TIER_LEVEL = { 'Lv1', 'Lv1', 'Lv2', 'Lv3' }
@@ -413,25 +443,29 @@ end
 -- ---------------------------------------------------------------------------
 -- 2. Left Rail: Arsenal Navigation
 -- ---------------------------------------------------------------------------
-local function drawArsenal(state, action, L, x, y, w, h)
+local function drawArsenal(state, action, L, x, y, w, h, nav)
     local dl = imgui.GetWindowDrawList()
     local s  = L.uiScale
     local ui = ensureUiState(state)
+    local regionFocused = (nav ~= nil and nav.region == 'arsenal')
 
     F.drawPanelFrame(dl, x, y, w, h, {
         fillTop  = F.u32.midnight,
         fillBot  = F.u32.abyss,
-        border   = F.u32.border_subtle,
-        accent   = F.u32.soul_gold_dim,
+        border   = regionFocused and F.u32.aether_cyan or F.u32.border_subtle,
+        accent   = regionFocused and F.u32.aether_cyan or F.u32.soul_gold_dim,
+        thickness = regionFocused and 1.6 or 1.1,
         corners  = (L.ornamentLevel >= 1),
         shadow   = false,
     })
 
     local pad = math.floor(12 * s)
-    F.drawShadowText(imgui, dl, x + pad, y + 10 * s, 'ARSENAL', F.u32.soul_gold, 0.94 * s, 'l')
+    F.drawShadowText(imgui, dl, x + pad, y + 10 * s,
+        regionFocused and '> ARSENAL' or 'ARSENAL',
+        regionFocused and F.u32.aether_cyan or F.u32.soul_gold, 0.94 * s, 'l')
     local rows = action.filtered()
     F.drawShadowText(imgui, dl, x + w - pad, y + 12 * s, string.format('%d WS', #rows), F.u32.text_muted, 0.78 * s, 'r')
-    F.drawDivider(dl, x + pad, y + 32 * s, w - pad * 2, F.u32.soul_gold_dim)
+    F.drawDivider(dl, x + pad, y + 32 * s, w - pad * 2, regionFocused and F.u32.aether_cyan or F.u32.soul_gold_dim)
 
     -- Weapon family filter combo
     local ctrlW = w - pad * 2
@@ -458,7 +492,8 @@ local function drawArsenal(state, action, L, x, y, w, h)
     imgui.Checkbox('Invested only##sf_inv', state.investedOnly)
 
     local listTop = y + 126 * s
-    local listH   = math.max(80, (y + h) - listTop - pad)
+    local overviewH = (L.mode ~= 'focused' and h >= 380 * s) and math.floor(84 * s) or 0
+    local listH   = math.max(80, (y + h) - listTop - pad - (overviewH > 0 and (overviewH + math.floor(8 * s)) or 0))
     imgui.SetCursorScreenPos({ x + pad, listTop })
 
     if imgui.BeginChild('##sf_arsenal_list', { ctrlW, listH }, ImGuiChildFlags_None or 0) then
@@ -466,9 +501,10 @@ local function drawArsenal(state, action, L, x, y, w, h)
         local rowH = math.floor(52 * s)
         local rowW = math.max(120, ctrlW - 14 * s)
 
-        for _, ws in ipairs(rows) do
+        for idx, ws in ipairs(rows) do
             local rx, ry = F.toXY(imgui.GetCursorScreenPos())
             local selected = (state.selectedWsId == ws.id)
+            local padFocused = regionFocused and (nav.arsenal_index == idx)
             local pts      = tonumber(state.spentByWs[ws.id]) or 0
             local unlocked = state.unlockedByWs[ws.id] == true
             local isEvoWs  = (ws.id == 1 or ws.id == 47)
@@ -482,20 +518,23 @@ local function drawArsenal(state, action, L, x, y, w, h)
                 ui.confirmAction = nil
                 ui.panX, ui.panY = 0, 0
                 action.requestWS(ws.id)
+                if nav and nav.on_focus then nav.on_focus('arsenal', idx, ws.id) end
                 if L.drawerMode then ui.drawerOpen = nil end
             end
 
-            local bg = selected and F.u32.midnight_selected
+            local bg = (selected or padFocused) and F.u32.midnight_selected
                 or (hovered and F.u32.midnight_alt or F.u32.midnight_deep)
-            local border = selected and F.u32.soul_gold
+            local border = padFocused and F.u32.aether_cyan
+                or (selected and F.u32.soul_gold
                 or (mastered and F.u32.soul_gold_dim
                 or (unlocked and F.u32.aether_cyan_dim
-                or (hovered and F.u32.aether_cyan or F.u32.border_subtle)))
+                or (hovered and F.u32.aether_cyan or F.u32.border_subtle))))
 
             cdl:AddRectFilled({ rx, ry }, { rx + rowW, ry + rowH - 4 }, bg, 5)
-            cdl:AddRect({ rx, ry }, { rx + rowW, ry + rowH - 4 }, border, 5, 0, selected and 1.6 or 1.0)
-            if selected then
-                cdl:AddRectFilled({ rx + 1, ry + 4 }, { rx + 4, ry + rowH - 8 }, F.u32.soul_gold, 1)
+            cdl:AddRect({ rx, ry }, { rx + rowW, ry + rowH - 4 }, border, 5, 0, (selected or padFocused) and 1.8 or 1.0)
+            if selected or padFocused then
+                cdl:AddRectFilled({ rx + 1, ry + 4 }, { rx + 4, ry + rowH - 8 },
+                    padFocused and F.u32.aether_cyan or F.u32.soul_gold, 1)
             end
 
             -- Mini framed WS icon
@@ -539,24 +578,62 @@ local function drawArsenal(state, action, L, x, y, w, h)
         end
     end
     imgui.EndChild()
+
+    -- Bottom Mastery Overview card with 4 rotated diamond sockets (matching approved Soulforge art)
+    if overviewH > 0 then
+        local oy = y + h - pad - overviewH
+        local ow = w - pad * 2
+        local investedList = UI.getInvestedWeaponskills(state)
+        dl:AddRectFilled({ x + pad, oy }, { x + pad + ow, oy + overviewH }, F.u32.midnight_deep, 5)
+        dl:AddRect({ x + pad, oy }, { x + pad + ow, oy + overviewH }, F.u32.soul_gold_dim, 5, 0, 1.0)
+        F.drawShadowText(imgui, dl, x + pad + 10 * s, oy + 6 * s,
+            string.format('MASTERY OVERVIEW  (%d / %d)', #investedList, UI.MAX_SPEC_WS_SLOTS),
+            F.u32.soul_gold, 0.72 * s, 'l')
+        local dr = math.floor(15 * s)
+        local pitch = math.floor((ow - 24 * s) / UI.MAX_SPEC_WS_SLOTS)
+        local startCx = x + pad + 12 * s + pitch * 0.5
+        local dCy = oy + math.floor(54 * s)
+        for i = 1, UI.MAX_SPEC_WS_SLOTS do
+            local item = investedList[i]
+            local dCx = startCx + (i - 1) * pitch
+            local tex = item and art and art.get and art.get('ws_' .. tostring(item.id)) or nil
+            F.drawDiamondSocket(dl, dCx, dCy, dr, {
+                lit    = (item ~= nil),
+                active = (item ~= nil and state.selectedWsId == item.id),
+                texId  = tex,
+                coreU32 = (item and item.mastered) and F.u32.soul_gold_bright or F.u32.crystal_violet_bright,
+            })
+            if item and imgui.SetCursorScreenPos and imgui.InvisibleButton then
+                imgui.SetCursorScreenPos({ dCx - dr, dCy - dr })
+                if imgui.InvisibleButton('##sf_ov_slot_' .. i, { dr * 2, dr * 2 }) then
+                    state.inspectedNodeKey = nil
+                    ui.confirmAction = nil
+                    action.requestWS(item.id)
+                end
+            end
+        end
+    end
 end
 
 -- ---------------------------------------------------------------------------
 -- 3. Centerpiece: The Soulforge Canvas (WS Centerpiece + 4 Mastery Slots + Tree)
 -- ---------------------------------------------------------------------------
-local function drawSoulforgeCanvas(state, action, L, x, y, w, h)
+local function drawSoulforgeCanvas(state, action, L, x, y, w, h, nav)
     local dl  = imgui.GetWindowDrawList()
     local s   = L.uiScale
     local ui  = ensureUiState(state)
     local d   = state.wsDetail
     local pad = math.floor(12 * s)
     local now = os.clock()
+    local treeFocused = (nav ~= nil and nav.region == 'tree')
+    local scFocused   = (nav ~= nil and nav.region == 'skillchains')
 
     F.drawPanelFrame(dl, x, y, w, h, {
         fillTop  = F.u32.midnight,
         fillBot  = F.u32.abyss,
-        border   = F.u32.soul_gold_dim,
-        accent   = F.u32.soul_gold,
+        border   = (treeFocused or scFocused) and F.u32.aether_cyan or F.u32.soul_gold_dim,
+        accent   = (treeFocused or scFocused) and F.u32.aether_cyan or F.u32.soul_gold,
+        thickness = (treeFocused or scFocused) and 1.6 or 1.1,
         corners  = (L.ornamentLevel >= 1),
         shadow   = false,
     })
@@ -695,11 +772,14 @@ local function drawSoulforgeCanvas(state, action, L, x, y, w, h)
 
         for idx, sl in ipairs(slots) do
             local sx = slotsX + (idx - 1) * (slotW + slotGap)
-            local border = sl.active and F.u32.soul_gold
-                or (sl.unlocked and F.u32.aether_cyan_dim or F.u32.border_subtle)
-            local fill   = sl.active and F.abgr(F.rgba.soul_gold_wash, 0.90) or F.u32.abyss_solid
+            local slotFocused = scFocused and (nav.sc_slot == idx)
+            local border = slotFocused and F.u32.aether_cyan
+                or (sl.active and F.u32.soul_gold
+                or (sl.unlocked and F.u32.aether_cyan_dim or F.u32.border_subtle))
+            local fill   = slotFocused and F.u32.midnight_selected
+                or (sl.active and F.abgr(F.rgba.soul_gold_wash, 0.90) or F.u32.abyss_solid)
             dl:AddRectFilled({ sx, slotY }, { sx + slotW, slotY + slotH }, fill, 4)
-            dl:AddRect({ sx, slotY }, { sx + slotW, slotY + slotH }, border, 4, 0, sl.active and 1.3 or 1.0)
+            dl:AddRect({ sx, slotY }, { sx + slotW, slotY + slotH }, border, 4, 0, (slotFocused or sl.active) and 1.7 or 1.0)
 
             local headerStr = string.format('T%d %s%s', sl.tier, sl.scLevel, sl.unlocked and '' or (' [' .. sl.lockHint .. ']'))
             F.drawShadowText(imgui, dl, sx + 6 * s, slotY + 3 * s,
@@ -737,6 +817,12 @@ local function drawSoulforgeCanvas(state, action, L, x, y, w, h)
     if imgui.BeginChild('##sf_forge_map', { hw, mapH }, ImGuiChildFlags_None or 0) then
         local mdl = imgui.GetWindowDrawList()
         local originX, originY = F.toXY(imgui.GetCursorScreenPos())
+
+        -- Atmospheric concentric Astral Ring backdrop behind the Soulforge tree
+        if F.drawAstralRing and L.ornamentLevel >= 1 then
+            local ringR = math.min(hw, mapH) * 0.44
+            F.drawAstralRing(mdl, originX + hw * 0.5, originY + mapH * 0.48, ringR, { alpha = 0.90 })
+        end
 
         -- Allow middle-mouse drag panning on the map
         if imgui.IsWindowHovered() and imgui.IsMouseDragging and imgui.IsMouseDragging(2) then
@@ -867,14 +953,16 @@ local function drawSoulforgeCanvas(state, action, L, x, y, w, h)
                 if imgui.IsItemClicked(0) then
                     state.inspectedNodeKey = n.key
                     ui.confirmAction = nil
+                    if nav and nav.on_focus then nav.on_focus('tree', n.key) end
                     if L.drawerMode then ui.drawerOpen = 'inspector' end
                 end
 
                 local sp = eval.spec
+                local padNodeFocused = treeFocused and (nav.node_key == n.key)
                 local fillU32   = F.abgr(sp.fill)
-                local borderU32 = selected and F.u32.aether_cyan
+                local borderU32 = (padNodeFocused or selected) and F.u32.aether_cyan
                     or (hovered and F.u32.soul_gold_bright or F.abgr(sp.border))
-                local thick     = selected and 2.2 or (hovered and 1.8 or sp.thickness)
+                local thick     = padNodeFocused and 2.5 or (selected and 2.2 or (hovered and 1.8 or sp.thickness))
 
                 mdl:AddRectFilled({ r.x, r.y }, { r.x + r.w, r.y + r.h }, fillU32, 6)
                 mdl:AddRect({ r.x, r.y }, { r.x + r.w, r.y + r.h }, borderU32, 6, 0, thick)
@@ -958,25 +1046,29 @@ end
 -- ---------------------------------------------------------------------------
 -- 4. Right Panel: Talent Inspector & Deliberate Upgrade Confirmation
 -- ---------------------------------------------------------------------------
-local function drawInspector(state, action, L, x, y, w, h)
+local function drawInspector(state, action, L, x, y, w, h, nav)
     local dl  = imgui.GetWindowDrawList()
     local s   = L.uiScale
     local ui  = ensureUiState(state)
     local d   = state.wsDetail
     local pad = math.floor(14 * s)
     local now = os.clock()
+    local inspFocused = (nav ~= nil and (nav.region == 'inspector' or nav.region == 'confirm'))
 
     F.drawPanelFrame(dl, x, y, w, h, {
         fillTop  = F.u32.midnight,
         fillBot  = F.u32.abyss,
-        border   = F.u32.border_subtle,
-        accent   = F.u32.aether_cyan_dim,
+        border   = inspFocused and F.u32.aether_cyan or F.u32.border_subtle,
+        accent   = inspFocused and F.u32.aether_cyan or F.u32.aether_cyan_dim,
+        thickness = inspFocused and 1.6 or 1.1,
         corners  = (L.ornamentLevel >= 1),
         shadow   = false,
     })
 
-    F.drawShadowText(imgui, dl, x + pad, y + 10 * s, 'TALENT INSPECTOR', F.u32.soul_gold, 0.94 * s, 'l')
-    F.drawDivider(dl, x + pad, y + 32 * s, w - pad * 2, F.u32.soul_gold_dim)
+    F.drawShadowText(imgui, dl, x + pad, y + 10 * s,
+        inspFocused and '> TALENT DETAILS' or 'TALENT DETAILS',
+        inspFocused and F.u32.aether_cyan or F.u32.soul_gold, 0.94 * s, 'l')
+    F.drawDivider(dl, x + pad, y + 32 * s, w - pad * 2, inspFocused and F.u32.aether_cyan or F.u32.soul_gold_dim)
 
     if not d then
         F.drawShadowText(imgui, dl, x + pad, y + 48 * s, 'Select a Weapon Skill to inspect its techniques.', F.u32.text_secondary, 0.84 * s, 'l')
@@ -1059,25 +1151,31 @@ local function drawInspector(state, action, L, x, y, w, h)
         eval.availOk and F.u32.aether_cyan or F.u32.danger, 0.74 * s, 'l')
     cy = cy + cardH + 12 * s
 
-    -- Effect Description (exact server-provided copy)
-    F.drawShadowText(imgui, dl, x + pad, cy, 'EFFECT', F.u32.soul_gold, 0.78 * s, 'l')
-    cy = cy + 18 * s
-    local charsPerLine = math.max(20, math.floor(innerW / (7.6 * s)))
-    local descLines = F.wrapLines(node.desc ~= '' and node.desc or 'No description provided by server.', charsPerLine, 6)
-    for _, line in ipairs(descLines) do
-        F.drawShadowText(imgui, dl, x + pad, cy, line, F.u32.text_primary, 0.82 * s, 'l')
-        cy = cy + math.floor(17 * s)
+    -- Current Effect & Highlighted Next-Rank Preview Cards (approved Soulforge visual direction)
+    local charsPerLine = math.max(20, math.floor((innerW - 16 * s) / (7.6 * s)))
+    local descLines = F.wrapLines(node.desc ~= '' and node.desc or 'No description provided by server.', charsPerLine, 4)
+    local curBoxH = math.floor(26 * s + #descLines * 16 * s)
+    dl:AddRectFilled({ x + pad, cy }, { x + w - pad, cy + curBoxH }, F.u32.midnight_deep, 5)
+    dl:AddRect({ x + pad, cy }, { x + w - pad, cy + curBoxH }, F.u32.border_strong, 5, 0, 1.0)
+    F.drawShadowText(imgui, dl, x + pad + 8 * s, cy + 5 * s,
+        string.format('Current Effect (Rank %d)', eval.rank), F.u32.soul_gold, 0.76 * s, 'l')
+    for i, line in ipairs(descLines) do
+        F.drawShadowText(imgui, dl, x + pad + 8 * s, cy + 21 * s + (i - 1) * 16 * s, line, F.u32.text_primary, 0.78 * s, 'l')
     end
-    cy = cy + 8 * s
+    cy = cy + curBoxH + 8 * s
 
-    -- Next-Rank Preview
+    -- Highlighted Gold Next-Rank Preview Card
     if eval.rank < eval.maxRank then
-        F.drawShadowText(imgui, dl, x + pad, cy, 'NEXT RANK PREVIEW', F.u32.aether_cyan, 0.76 * s, 'l')
-        cy = cy + 17 * s
+        local nxtBoxH = math.floor(42 * s)
+        dl:AddRectFilled({ x + pad, cy }, { x + w - pad, cy + nxtBoxH }, F.abgr(F.rgba.soul_gold_wash, 0.85), 5)
+        dl:AddRect({ x + pad, cy }, { x + w - pad, cy + nxtBoxH }, F.u32.soul_gold, 5, 0, 1.3)
+        F.drawShadowText(imgui, dl, x + pad + 8 * s, cy + 5 * s,
+            string.format('-> Next Rank (Rank %d)', eval.rank + 1), F.u32.soul_gold_bright, 0.78 * s, 'l')
         local nextLine = string.format('Rank %d -> %d  (-%d pt, %d remaining)',
             eval.rank, eval.rank + 1, eval.cost, math.max(0, (state.avail or 0) - eval.cost))
-        F.drawShadowText(imgui, dl, x + pad, cy, F.fitText(imgui, nextLine, innerW, 0.78 * s), F.u32.text_secondary, 0.78 * s, 'l')
-        cy = cy + 22 * s
+        F.drawShadowText(imgui, dl, x + pad + 8 * s, cy + 22 * s,
+            F.fitText(imgui, nextLine, innerW - 16 * s, 0.76 * s), F.u32.text_primary, 0.76 * s, 'l')
+        cy = cy + nxtBoxH + 10 * s
     end
 
     -- Prerequisites Checklist
@@ -1101,6 +1199,17 @@ local function drawInspector(state, action, L, x, y, w, h)
     end
     if eval.rank < eval.maxRank then
         reqRow(eval.availOk, string.format('%d Talent Point(s) Available', eval.cost))
+        -- Point Cost footer row with glowing crystal star
+        cy = cy + 4 * s
+        F.drawDivider(dl, x + pad, cy, innerW, F.u32.border_subtle)
+        cy = cy + 8 * s
+        F.drawShadowText(imgui, dl, x + pad, cy + 2 * s, 'Point Cost', F.u32.text_secondary, 0.80 * s, 'l')
+        if F.drawCrystalStar then
+            F.drawCrystalStar(dl, x + w - pad - 24 * s, cy + 9 * s, 8 * s, F.u32.crystal_violet_bright, F.u32.white)
+        end
+        F.drawShadowText(imgui, dl, x + w - pad - 2 * s, cy + 1 * s, tostring(eval.cost),
+            eval.availOk and F.u32.soul_gold_bright or F.u32.danger, 0.90 * s, 'r')
+        cy = cy + 22 * s
     end
 
     -- Unavailability / Rejection Explanation Card
@@ -1140,8 +1249,10 @@ local function drawInspector(state, action, L, x, y, w, h)
         local halfW = math.floor((innerW - 22 * s) * 0.5)
         local bY = cTop + confirmH - math.floor(30 * s) - 6 * s
         local bH = math.floor(28 * s)
+        local cGoFocused = (nav ~= nil and nav.region == 'confirm' and (nav.confirm_btn or 1) == 1)
+        local cNoFocused = (nav ~= nil and nav.region == 'confirm' and nav.confirm_btn == 2)
         if F.drawActionButton(imgui, dl, '##sf_confirm_go', x + pad + 6 * s, bY, halfW, bH,
-            ui.confirmAction.kind == 'refund' and 'CONFIRM REFUND' or 'CONFIRM FORGE',
+            (cGoFocused and '> ' or '') .. (ui.confirmAction.kind == 'refund' and 'CONFIRM REFUND' or 'CONFIRM FORGE'),
             ui.confirmAction.kind == 'refund' and 'danger' or 'gold', { fontScale = 0.78 * s }) then
             local kind = ui.confirmAction.kind
             ui.confirmAction = nil
@@ -1151,12 +1262,19 @@ local function drawInspector(state, action, L, x, y, w, h)
                 action.investNode(d.id, node)
             end
         end
+        if cGoFocused and dl then
+            dl:AddRect({ x + pad + 5 * s, bY - 1 }, { x + pad + 7 * s + halfW, bY + bH + 1 }, F.u32.aether_cyan, 5, 0, 2.0)
+        end
         if F.drawActionButton(imgui, dl, '##sf_confirm_cancel', x + pad + 12 * s + halfW, bY, halfW, bH,
-            'CANCEL', 'neutral', { fontScale = 0.78 * s }) then
+            (cNoFocused and '> ' or '') .. 'CANCEL', 'neutral', { fontScale = 0.78 * s }) then
             ui.confirmAction = nil
+        end
+        if cNoFocused and dl then
+            dl:AddRect({ x + pad + 11 * s + halfW, bY - 1 }, { x + pad + 13 * s + halfW * 2, bY + bH + 1 }, F.u32.aether_cyan, 5, 0, 2.0)
         end
     else
         -- Primary Upgrade / Unlock button + optional Refund button
+        local inspBtn = (nav ~= nil and nav.region == 'inspector') and (nav.inspector_btn or 1) or 0
         if eval.stateKey == 'pending' then
             F.drawActionButton(imgui, dl, '##sf_pending', x + pad, actY, innerW, actBtnH,
                 'CONFIRMING WITH SERVER...', 'cyan', { disabled = true, fontScale = 0.82 * s })
@@ -1165,20 +1283,54 @@ local function drawInspector(state, action, L, x, y, w, h)
             local lbl = firstUnlock and ('UNLOCK ' .. string.upper(d.name))
                 or (eval.rank > 0 and string.format('UPGRADE TO RANK %d (-%d PT)', eval.rank + 1, eval.cost)
                 or string.format('FORGE TECHNIQUE (-%d PT)', eval.cost))
-            if F.drawActionButton(imgui, dl, '##sf_upgrade', x + pad, actY, innerW, actBtnH, lbl, 'gold', { fontScale = 0.82 * s }) then
+            -- Ornate beveled Gold CTA button matching approved Soulforge visual direction
+            local clickedUp, hoveredUp = false, false
+            if imgui and imgui.SetCursorScreenPos and imgui.InvisibleButton then
+                imgui.SetCursorScreenPos({ x + pad, actY })
+                clickedUp = imgui.InvisibleButton('##sf_upgrade', { innerW, actBtnH })
+                hoveredUp = imgui.IsItemHovered and imgui.IsItemHovered() or false
+            end
+            if F.drawBeveledPill then
+                F.drawBeveledPill(dl, x + pad, actY, innerW, actBtnH, {
+                    bevel     = math.floor(12 * s),
+                    fillTop   = F.abgr(hoveredUp and F.hex('#5E4822', 0.98) or F.hex('#3E3018', 0.96)),
+                    fillBot   = F.abgr(F.hex('#1F180B', 0.98)),
+                    border    = (inspBtn == 1) and F.u32.aether_cyan or (hoveredUp and F.u32.soul_gold_bright or F.u32.soul_gold),
+                    glow      = F.abgr(F.rgba.soul_gold, hoveredUp and 0.24 or 0.14),
+                    highlight = F.abgr(F.rgba.soul_gold_bright, 0.45),
+                    thickness = (inspBtn == 1) and 2.0 or 1.5,
+                })
+                F.drawShadowText(imgui, dl, x + pad + innerW * 0.5, actY + (actBtnH - 14 * 0.84 * s) * 0.5,
+                    F.fitText(imgui, (inspBtn == 1 and '> ' or '') .. lbl, innerW - 24 * s, 0.84 * s),
+                    F.u32.soul_gold_bright, 0.84 * s, 'c')
+            else
+                clickedUp = F.drawActionButton(imgui, dl, '##sf_upgrade_fb', x + pad, actY, innerW, actBtnH,
+                    (inspBtn == 1 and '> ' or '') .. lbl, 'gold', { fontScale = 0.82 * s })
+            end
+            if clickedUp then
                 ui.confirmAction = { kind = 'invest', wsId = d.id, nodeKey = node.key }
+                if nav and nav.on_focus then nav.on_focus('confirm', 1) end
             end
             if eval.canRefund then
                 local refY = actY - actBtnH - 6 * s
-                if F.drawActionButton(imgui, dl, '##sf_refund_sec', x + pad, refY, innerW, math.floor(28 * s),
-                    'REFUND 1 RANK', 'danger', { fontScale = 0.76 * s }) then
+                local refH = math.floor(28 * s)
+                if F.drawActionButton(imgui, dl, '##sf_refund_sec', x + pad, refY, innerW, refH,
+                    (inspBtn == 2 and '> ' or '') .. 'REFUND 1 RANK', 'danger', { fontScale = 0.76 * s }) then
                     ui.confirmAction = { kind = 'refund', wsId = d.id, nodeKey = node.key }
+                    if nav and nav.on_focus then nav.on_focus('confirm', 1) end
+                end
+                if inspBtn == 2 and dl then
+                    dl:AddRect({ x + pad - 1, refY - 1 }, { x + pad + innerW + 1, refY + refH + 1 }, F.u32.aether_cyan, 5, 0, 2.0)
                 end
             end
         elseif eval.canRefund then
             if F.drawActionButton(imgui, dl, '##sf_refund', x + pad, actY, innerW, actBtnH,
-                'REFUND TECHNIQUE', 'danger', { fontScale = 0.82 * s }) then
+                (inspBtn == 1 and '> ' or '') .. 'REFUND TECHNIQUE', 'danger', { fontScale = 0.82 * s }) then
                 ui.confirmAction = { kind = 'refund', wsId = d.id, nodeKey = node.key }
+                if nav and nav.on_focus then nav.on_focus('confirm', 1) end
+            end
+            if inspBtn == 1 and dl then
+                dl:AddRect({ x + pad - 1, actY - 1 }, { x + pad + innerW + 1, actY + actBtnH + 1 }, F.u32.aether_cyan, 5, 0, 2.0)
             end
         else
             F.drawActionButton(imgui, dl, '##sf_locked_btn', x + pad, actY, innerW, actBtnH,
@@ -1271,6 +1423,190 @@ function UI.computeLayout(state, viewW, viewH)
         maxLogicalW = 1920,
         maxLogicalH = 1160,
     })
+end
+
+-- Embedded entry point for SoulspireXI Core (renders inside Core's central content area
+-- beneath the Dynamic Module Header, aligned to the approved Soulforge visual direction).
+function UI.drawEmbedded(state, action, L, x, y, w, h, nav)
+    local ui = ensureUiState(state)
+    local dl = imgui.GetWindowDrawList()
+    local s  = L.uiScale or 1.0
+    local gap = L.gap or math.floor(8 * s)
+
+    -- Ornate Gilded Soulforge Sub-Header Banner:
+    --   Left: Job & Soul Identity | Center: THE SOULFORGE / WEAPON SKILL TALENTS
+    --   Right: Mastery Slots (X / 4) Diamond Sockets + Glowing Talent Points Star
+    local subH = math.floor(((L.mode == 'focused' and 52) or 68) * s)
+    F.drawPanelFrame(dl, x, y, w, subH, {
+        fillTop  = F.u32.midnight_alt,
+        fillBot  = F.u32.midnight_deep,
+        border   = F.u32.soul_gold_dim,
+        accent   = F.u32.soul_gold,
+        rounding = 6,
+        corners  = true,
+        shadow   = false,
+    })
+
+    local avail  = tonumber(state.avail) or 0
+    local spent  = tonumber(state.spent) or 0
+    local earned = math.max(1, tonumber(state.earned) or (avail + spent))
+    local investedList = UI.getInvestedWeaponskills(state)
+    local now = os.clock()
+
+    -- Left: Job Crest + Job Lv & Active Soul Identity
+    local medR = math.floor(math.min(20 * s, (subH - 14) * 0.5))
+    local medX = x + 16 * s + medR
+    local medY = y + subH * 0.5
+    F.drawCrystalMedallion(dl, medX, medY, medR, {
+        rim   = F.u32.soul_gold,
+        core  = F.rgba.crystal_violet,
+        studs = (L.ornamentLevel >= 1),
+    })
+    local idX = medX + medR + 12 * s
+    F.drawShadowText(imgui, dl, idX, y + 10 * s,
+        string.format('%s  Lv.%d', state.jobKey or '---', state.jobLevel or 1),
+        F.u32.text_primary, 0.98 * s, 'l')
+    F.drawShadowText(imgui, dl, idX, y + 32 * s,
+        F.fitText(imgui, 'Soul: ' .. tostring(state.specName or 'Base'), math.floor(w * 0.24), 0.80 * s),
+        F.u32.crystal_violet_bright, 0.80 * s, 'l')
+
+    -- Center: "THE SOULFORGE / — WEAPON SKILL TALENTS —"
+    local midX = x + w * 0.5
+    if L.mode ~= 'focused' then
+        F.drawShadowText(imgui, dl, midX, y + 10 * s, 'THE SOULFORGE', F.u32.soul_gold_bright, 1.24 * s, 'c')
+        local subTitleY = y + 38 * s
+        F.drawShadowText(imgui, dl, midX, subTitleY, 'WEAPON SKILL TALENTS', F.u32.soul_gold_dim, 0.74 * s, 'c')
+        if dl and dl.AddLine then
+            dl:AddLine({ midX - 104 * s, subTitleY + 6 * s }, { midX - 72 * s, subTitleY + 6 * s }, F.u32.soul_gold_dim, 1.0)
+            dl:AddLine({ midX + 72 * s, subTitleY + 6 * s }, { midX + 104 * s, subTitleY + 6 * s }, F.u32.soul_gold_dim, 1.0)
+        end
+    else
+        F.drawShadowText(imgui, dl, midX, y + 14 * s, 'THE SOULFORGE', F.u32.soul_gold_bright, 1.02 * s, 'c')
+    end
+
+    -- Far Right: Talent Points Star + Number, then Mastery Slots (X / 4) Diamond Sockets
+    local rx = x + w - 16 * s
+    local tpBlockW = math.floor(88 * s)
+    local tpX = rx - tpBlockW
+    F.drawShadowText(imgui, dl, tpX + tpBlockW * 0.5, y + 6 * s, 'Talent Points', F.u32.soul_gold, 0.70 * s, 'c')
+    if F.drawCrystalStar then
+        F.drawCrystalStar(dl, tpX + 22 * s, y + subH * 0.62, 11 * s, F.u32.crystal_violet_bright, F.u32.white)
+    end
+    F.drawShadowText(imgui, dl, tpX + 42 * s, y + subH * 0.44, tostring(avail),
+        avail > 0 and F.u32.white or F.u32.text_muted, 1.28 * s, 'l')
+
+    -- Vertical divider between Talent Points and Mastery Slots
+    local divX = tpX - 10 * s
+    if dl and dl.AddLine then
+        dl:AddLine({ divX, y + 10 * s }, { divX, y + subH - 10 * s }, F.u32.border_strong, 1.0)
+    end
+
+    if L.mode ~= 'focused' then
+        local msW = math.floor(168 * s)
+        local msX = divX - msW - 12 * s
+        F.drawShadowText(imgui, dl, msX + msW * 0.5, y + 6 * s,
+            string.format('Mastery Slots (%d / %d)', #investedList, UI.MAX_SPEC_WS_SLOTS),
+            F.u32.text_primary, 0.72 * s, 'c')
+        local dr = math.floor(14 * s)
+        local dPitch = math.floor(38 * s)
+        local dStartX = msX + 26 * s
+        local dY = y + math.floor(42 * s)
+        for i = 1, UI.MAX_SPEC_WS_SLOTS do
+            local item = investedList[i]
+            local dCx = dStartX + (i - 1) * dPitch
+            local tex = item and art and art.get and art.get('ws_' .. tostring(item.id)) or nil
+            if F.drawDiamondSocket then
+                F.drawDiamondSocket(dl, dCx, dY, dr, {
+                    lit     = (item ~= nil),
+                    active  = (item ~= nil and state.selectedWsId == item.id),
+                    texId   = tex,
+                    coreU32 = (item and item.mastered) and F.u32.soul_gold_bright or F.u32.crystal_violet_bright,
+                })
+            end
+            if item and imgui.SetCursorScreenPos and imgui.InvisibleButton then
+                imgui.SetCursorScreenPos({ dCx - dr, dY - dr })
+                if imgui.InvisibleButton('##sf_hdr_slot_' .. i, { dr * 2, dr * 2 }) then
+                    state.inspectedNodeKey = nil
+                    ui.confirmAction = nil
+                    action.requestWS(item.id)
+                end
+            end
+        end
+
+        -- Compact Sync / Reset WS utility controls to the left of Mastery Slots (only when space allows)
+        local utilRight = msX - 14 * s
+        local btnH = math.floor(20 * s)
+        local btnY = y + subH - btnH - math.floor(8 * s)
+        if utilRight > midX + 125 * s then
+            local syncW = math.floor(46 * s)
+            utilRight = utilRight - syncW
+            if F.drawActionButton(imgui, dl, '##sf_emb_sync', utilRight, btnY, syncW, btnH, 'SYNC', 'cyan', { fontScale = 0.66 * s }) then
+                action.sync()
+            end
+            if state.wsDetail and (state.wsDetail.spent or 0) > 0 and (utilRight - 72 * s) > midX + 110 * s then
+                local wsBtnW = math.floor(68 * s)
+                utilRight = utilRight - wsBtnW - 4 * s
+                if not ui.confirmResetWs then
+                    if F.drawActionButton(imgui, dl, '##sf_emb_reset_ws', utilRight, btnY, wsBtnW, btnH, 'RESPEC WS', 'neutral', { fontScale = 0.64 * s }) then
+                        ui.confirmResetWs   = true
+                        ui.confirmResetWsAt = now
+                    end
+                elseif (now - (ui.confirmResetWsAt or 0)) > 5.0 then
+                    ui.confirmResetWs = false
+                else
+                    if F.drawActionButton(imgui, dl, '##sf_emb_reset_ws_ok', utilRight, btnY, wsBtnW, btnH, 'CONFIRM', 'danger', { fontScale = 0.64 * s }) then
+                        ui.confirmResetWs = false
+                        action.resetWS(state.wsDetail.id)
+                    end
+                end
+            end
+        end
+    else
+        -- Focused 720p drawer toggles
+        local dBtnW = math.floor(66 * s)
+        local btnH  = math.floor(22 * s)
+        local btnY  = y + math.floor((subH - btnH) * 0.5)
+        local dx    = divX - dBtnW - 8 * s
+        if F.drawActionButton(imgui, dl, '##sf_emb_tog_insp', dx, btnY, dBtnW, btnH,
+            ui.drawerOpen == 'inspector' and 'DETAILS*' or 'DETAILS',
+            ui.drawerOpen == 'inspector' and 'gold' or 'neutral', { fontScale = 0.68 * s }) then
+            ui.drawerOpen = (ui.drawerOpen == 'inspector') and nil or 'inspector'
+        end
+        dx = dx - dBtnW - 4 * s
+        if F.drawActionButton(imgui, dl, '##sf_emb_tog_ars', dx, btnY, dBtnW, btnH,
+            ui.drawerOpen == 'arsenal' and 'ARSENAL*' or 'ARSENAL',
+            ui.drawerOpen == 'arsenal' and 'gold' or 'neutral', { fontScale = 0.68 * s }) then
+            ui.drawerOpen = (ui.drawerOpen == 'arsenal') and nil or 'arsenal'
+        end
+    end
+
+    local contentY = y + subH + gap
+    local contentH = math.max(180, h - subH - gap)
+    local arsW = L.arsenalW or math.floor(w * 0.22)
+    local insW = L.inspectorW or math.floor(w * 0.27)
+    local fgW  = math.max(300, w - arsW - insW - gap * 2)
+
+    if not L.drawerMode then
+        drawArsenal(state, action, L, x, contentY, arsW, contentH, nav)
+        drawSoulforgeCanvas(state, action, L, x + arsW + gap, contentY, fgW, contentH, nav)
+        drawInspector(state, action, L, x + arsW + fgW + gap * 2, contentY, insW, contentH, nav)
+    else
+        local drawer = ui.drawerOpen
+        if nav and nav.region == 'arsenal' then
+            drawer = 'arsenal'
+        elseif nav and (nav.region == 'inspector' or nav.region == 'confirm') then
+            drawer = 'inspector'
+        end
+        if drawer == 'arsenal' then
+            drawArsenal(state, action, L, x, contentY, arsW, contentH, nav)
+            drawSoulforgeCanvas(state, action, L, x + arsW + gap, contentY, math.max(200, w - arsW - gap), contentH, nav)
+        elseif drawer == 'inspector' then
+            drawSoulforgeCanvas(state, action, L, x, contentY, math.max(200, w - insW - gap), contentH, nav)
+            drawInspector(state, action, L, x + (w - insW), contentY, insW, contentH, nav)
+        else
+            drawSoulforgeCanvas(state, action, L, x, contentY, w, contentH, nav)
+        end
+    end
 end
 
 function UI.draw(state, action)

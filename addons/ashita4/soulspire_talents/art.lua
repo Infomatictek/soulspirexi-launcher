@@ -8,6 +8,14 @@ local function validName(name)
     return type(name) == 'string' and name:match('^[%w_%-]+$') ~= nil
 end
 
+function A.setRoot(path)
+    if type(path) == 'string' and path ~= '' then
+        A.root = path:gsub('[/\\]+$', '')
+    else
+        A.root = nil
+    end
+end
+
 function A.get(name)
     if not validName(name) then return nil end
     local cached = A.textures[name]
@@ -16,8 +24,14 @@ function A.get(name)
     end
     if A.status[name] ~= nil then return nil end
     local ok, why, texture = pcall(function()
-        if type(addon.path) ~= 'string' then return 'no addon path', nil end
-        local filename = addon.path:gsub('[/\\]+$', '') .. '/assets/' .. name .. '.png'
+        local base = A.root
+        if type(base) ~= 'string' or base == '' then
+            if type(addon) == 'table' and type(addon.path) == 'string' then
+                base = addon.path:gsub('[/\\]+$', '')
+            end
+        end
+        if type(base) ~= 'string' or base == '' then return 'no addon path', nil end
+        local filename = base .. '/assets/' .. name .. '.png'
         local f = io.open(filename, 'rb')
         if not f then return 'missing', nil end
         local bytes = f:read('*a')
