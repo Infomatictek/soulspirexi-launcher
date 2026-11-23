@@ -352,9 +352,12 @@ public sealed class ManagedUpdateAndChannelTests
                 new ManifestFileEntry { Category = "plugin", TargetPath = "crystaljobs.dll", Sha256 = new string('c', 64) }
             };
 
-            using var lockStream = new FileStream(dllPath, FileMode.Open, FileAccess.Read, FileShare.None);
-            var ex = Assert.Throws<IOException>(() => ManifestUpdateService.EnsureTargetFilesWritable(pending, settings));
-            Assert.Contains("locked", ex.Message, StringComparison.OrdinalIgnoreCase);
+            using (var lockStream = new FileStream(dllPath, FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                var ex = Assert.Throws<IOException>(() => ManifestUpdateService.EnsureTargetFilesWritable(pending, settings));
+                Assert.Contains("locked", ex.Message, StringComparison.OrdinalIgnoreCase);
+            }
+
             Assert.Equal("OLD_DLL_CONTENT", File.ReadAllText(dllPath));
         }
         finally
