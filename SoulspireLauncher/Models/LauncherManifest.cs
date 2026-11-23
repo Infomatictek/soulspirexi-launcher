@@ -10,6 +10,9 @@ public sealed class LauncherManifest
     [JsonPropertyName("channel")]
     public string Channel { get; set; } = "stable";
 
+    [JsonPropertyName("candidateId")]
+    public string? CandidateId { get; set; }
+
     [JsonPropertyName("manifestVersion")]
     public string ManifestVersion { get; set; } = "2.1.0";
 
@@ -18,6 +21,9 @@ public sealed class LauncherManifest
 
     [JsonPropertyName("serverCompatibility")]
     public ManifestServerCompatibility? ServerCompatibility { get; set; }
+
+    [JsonPropertyName("registry")]
+    public ManifestRegistryMetadata? Registry { get; set; }
 
     [JsonPropertyName("serverName")]
     public string ServerName { get; set; } = "SoulspireXI";
@@ -146,16 +152,49 @@ public sealed class ManifestServerCompatibility
     public string Notes { get; set; } = string.Empty;
 }
 
+public sealed class ManifestRegistryMetadata
+{
+    [JsonPropertyName("version")]
+    public string Version { get; set; } = string.Empty;
+
+    [JsonPropertyName("hash")]
+    public string Hash { get; set; } = string.Empty;
+
+    [JsonPropertyName("idLockStatus")]
+    public string IdLockStatus { get; set; } = string.Empty;
+
+    [JsonPropertyName("nativeDllCompiledHash")]
+    public string NativeDllCompiledHash { get; set; } = string.Empty;
+
+    [JsonPropertyName("nativeDllSha256")]
+    public string NativeDllSha256 { get; set; } = string.Empty;
+
+    [JsonPropertyName("nativeDllClientVerified")]
+    public bool NativeDllClientVerified { get; set; }
+
+    [JsonPropertyName("crystalJobsHooks")]
+    public int CrystalJobsHooks { get; set; } = 24;
+}
+
 public sealed class InstalledClientState
 {
     [JsonPropertyName("channel")]
     public string Channel { get; set; } = "stable";
+
+    [JsonPropertyName("candidateId")]
+    public string? CandidateId { get; set; }
 
     [JsonPropertyName("manifestVersion")]
     public string ManifestVersion { get; set; } = string.Empty;
 
     [JsonPropertyName("serverVersion")]
     public string ServerVersion { get; set; } = string.Empty;
+
+    [JsonPropertyName("registryVersion")]
+    public string RegistryVersion { get; set; } = string.Empty;
+
+    [JsonPropertyName("registryHash")]
+    public string RegistryHash { get; set; } = string.Empty;
 
     [JsonPropertyName("lastSyncedUtc")]
     public DateTimeOffset LastSyncedUtc { get; set; } = DateTimeOffset.UtcNow;

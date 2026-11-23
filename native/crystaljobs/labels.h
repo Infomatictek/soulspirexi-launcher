@@ -1,171 +1,67 @@
 #pragma once
+#include <atomic>
 #include <cstdint>
 #include <cstring>
+#include "labels_generated.h"
+#include "runtime_identity.h"
 
 namespace crystaljobs {
 constexpr uint32_t capability = 0x43525901;
 constexpr uint32_t marker = 0x43525900;
 constexpr uint32_t lease_ms = 2500;
 
+// Immutable double-buffered runtime identity snapshot (published once at initialize/test;
+// lock-free reads during per-frame rendering; never points to temporary or unloaded memory).
+inline RuntimeIdentityTable g_runtime_identity_slots[2]{};
+inline std::atomic<uint32_t> g_runtime_identity_slot_idx{0};
+inline std::atomic<const RuntimeIdentityTable*> g_active_runtime_identity{nullptr};
+inline uint32_t g_last_identity_status = IDENTITY_STATUS_COMPILED_FALLBACK;
+inline char g_last_identity_warning[128]{};
+inline SearchPresentationConfig g_search_presentation_slots[2]{
+    default_presentation_config(),
+    default_presentation_config(),
+};
+inline std::atomic<uint32_t> g_search_presentation_slot_idx{0};
+inline std::atomic<const SearchPresentationConfig*> g_active_search_presentation{&g_search_presentation_slots[0]};
+
+inline void publish_runtime_identity_snapshot(const RuntimeIdentityTable& table) noexcept {
+    const uint32_t next = (g_runtime_identity_slot_idx.fetch_add(1, std::memory_order_relaxed) + 1u) & 1u;
+    g_runtime_identity_slots[next] = table;
+    g_last_identity_status = table.status;
+    std::snprintf(g_last_identity_warning, sizeof(g_last_identity_warning), "%s", table.warning);
+    g_active_runtime_identity.store(&g_runtime_identity_slots[next], std::memory_order_release);
+}
+
+inline void clear_runtime_identity_snapshot(uint32_t status, const char* warning) noexcept {
+    g_active_runtime_identity.store(nullptr, std::memory_order_release);
+    g_last_identity_status = status;
+    std::snprintf(g_last_identity_warning, sizeof(g_last_identity_warning), "%s", warning ? warning : "");
+}
+
+inline void publish_search_presentation(const SearchPresentationConfig& cfg) noexcept {
+    const uint32_t next = (g_search_presentation_slot_idx.fetch_add(1, std::memory_order_relaxed) + 1u) & 1u;
+    g_search_presentation_slots[next] = cfg;
+    g_active_search_presentation.store(&g_search_presentation_slots[next], std::memory_order_release);
+}
+
+inline const SearchPresentationConfig& active_search_presentation() noexcept {
+    const auto* ptr = g_active_search_presentation.load(std::memory_order_acquire);
+    return ptr != nullptr ? *ptr : g_search_presentation_slots[0];
+}
+
+// Runtime Soul labels (primary: validated plugins/data/soul-identities.json;
+// fallback: compiled labels_generated.h from soulspirexi-src/registry/souls.json).
 inline const char* label_for(uint8_t job, uint8_t branch, bool full = false) noexcept {
-    switch (job) {
-        case 1: // WAR
-            switch (branch) {
-                case 1: return full ? "Commander" : "CDR";
-                case 2: return full ? "Berserker" : "BRZ";
-                case 3: return full ? "Spartan" : "SPT";
-                default: return nullptr;
+    if (job >= 1 && job <= 22 && branch >= 1 && branch <= 3) {
+        const auto* snap = g_active_runtime_identity.load(std::memory_order_acquire);
+        if (snap != nullptr && snap->active) {
+            const auto& entry = snap->entries[job][branch];
+            if (entry.present) {
+                return full ? entry.name : entry.abbr;
             }
-        case 2: // MNK
-            switch (branch) {
-                case 1: return full ? "Sensei" : "SEN";
-                case 2: return full ? "Chi Weaver" : "CWV";
-                case 3: return full ? "Black Belt" : "BLK";
-                default: return nullptr;
-            }
-        case 3: // WHM
-            switch (branch) {
-                case 1: return full ? "Bishop" : "BSH";
-                case 2: return full ? "Zealot" : "ZEL";
-                case 3: return full ? "Valkyrie" : "VLK";
-                default: return nullptr;
-            }
-        case 4: // BLM
-            switch (branch) {
-                case 1: return full ? "Astromancer" : "AST";
-                case 2: return full ? "Channeler" : "CHN";
-                case 3: return full ? "Necromancer" : "NEC";
-                default: return nullptr;
-            }
-        case 5: // RDM
-            switch (branch) {
-                case 1: return full ? "Crimson Duelist" : "DLS";
-                case 2: return full ? "Royal Tactician" : "RYT";
-                case 3: return full ? "Scarlet Weaver" : "SCW";
-                default: return nullptr;
-            }
-        case 6: // THF
-            switch (branch) {
-                case 1: return full ? "Trickster" : "TRK";
-                case 2: return full ? "Bandit" : "BND";
-                case 3: return full ? "Phantom" : "PHN";
-                default: return nullptr;
-            }
-        case 7: // PLD
-            switch (branch) {
-                case 1: return full ? "Templar" : "TMP";
-                case 2: return full ? "Defender" : "DFN";
-                case 3: return full ? "Oathbreaker" : "OTB";
-                default: return nullptr;
-            }
-        case 8: // DRK
-            switch (branch) {
-                case 1: return full ? "Reaper" : "RPR";
-                case 2: return full ? "Dreadnought" : "DRN";
-                case 3: return full ? "Scourge" : "SCR";
-                default: return nullptr;
-            }
-        case 9: // BST
-            switch (branch) {
-                case 1: return full ? "Untamed" : "UNT";
-                case 2: return full ? "Soulbeast" : "SLB";
-                case 3: return full ? "Beastspeaker" : "BSP";
-                default: return nullptr;
-            }
-        case 10: // BRD
-            switch (branch) {
-                case 1: return full ? "Adventurer" : "ADV";
-                case 2: return full ? "Musician" : "MUS";
-                case 3: return full ? "Minstrel" : "MIN";
-                default: return nullptr;
-            }
-        case 11: // RNG
-            switch (branch) {
-                case 1: return full ? "Sniper" : "SNP";
-                case 2: return full ? "Huntsman" : "HNT";
-                case 3: return full ? "Arcane Archer" : "ACA";
-                default: return nullptr;
-            }
-        case 12: // SAM
-            switch (branch) {
-                case 1: return full ? "Ronin" : "RON";
-                case 2: return full ? "Imperial Archer" : "IMP";
-                case 3: return full ? "Warlord" : "WRL";
-                default: return nullptr;
-            }
-        case 13: // NIN
-            switch (branch) {
-                case 1: return full ? "Shinobi" : "KRG";
-                case 2: return full ? "Kagemusha" : "KGM";
-                case 3: return full ? "Nightblade" : "NGB";
-                default: return nullptr;
-            }
-        case 14: // DRG
-            switch (branch) {
-                case 1: return full ? "Lancer" : "LNC";
-                case 2: return full ? "Skyborn" : "SKY";
-                case 3: return full ? "Wyvernheart" : "WYV";
-                default: return nullptr;
-            }
-        case 15: // SMN
-            switch (branch) {
-                case 1: return full ? "Primalist" : "PRM";
-                case 2: return full ? "Celestial" : "CEL";
-                case 3: return full ? "Herald" : "HLD";
-                default: return nullptr;
-            }
-        case 16: // BLU
-            switch (branch) {
-                case 1: return full ? "Warmage" : "WMG";
-                case 2: return full ? "Magus" : "MAG";
-                case 3: return full ? "Azure Bastion" : "AZB";
-                default: return nullptr;
-            }
-        case 17: // COR
-            switch (branch) {
-                case 1: return full ? "Flintlock" : "FLT";
-                case 2: return full ? "Gambler" : "GMB";
-                case 3: return full ? "Buccaneer" : "BUC";
-                default: return nullptr;
-            }
-        case 18: // PUP
-            switch (branch) {
-                case 1: return full ? "Vanguard" : "VNG";
-                case 2: return full ? "Pugilist" : "PGL";
-                case 3: return full ? "Animist" : "ANM";
-                default: return nullptr;
-            }
-        case 19: // DNC
-            switch (branch) {
-                case 1: return full ? "Mirage Sentinel" : "MRS";
-                case 2: return full ? "Vampire" : "VMP";
-                case 3: return full ? "Bladewheel" : "BLW";
-                default: return nullptr;
-            }
-        case 20: // SCH
-            switch (branch) {
-                case 1: return full ? "Medic" : "MDC";
-                case 2: return full ? "Sage" : "SAG";
-                case 3: return full ? "Archivist" : "ARC";
-                default: return nullptr;
-            }
-        case 21: // GEO
-            switch (branch) {
-                case 1: return full ? "Diviner" : "DIV";
-                case 2: return full ? "Verdant" : "VRD";
-                case 3: return full ? "Terramancer" : "TRM";
-                default: return nullptr;
-            }
-        case 22: // RUN
-            switch (branch) {
-                case 1: return full ? "Spellblade" : "SPB";
-                case 2: return full ? "Lifebinder" : "LFB";
-                case 3: return full ? "Inquisitor" : "INQ";
-                default: return nullptr;
-            }
-        default:
-            return nullptr;
+        }
     }
+    return generated_label_for(job, branch, full);
 }
 
 inline bool has_soul_labels(uint8_t job) noexcept {

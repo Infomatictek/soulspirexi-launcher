@@ -84,14 +84,14 @@ jobs:
           echo "Changed files:"
           echo "$changed"
 
-          if echo "$changed" | grep -Eq '^(SoulspireLauncher/|SoulspireLauncher\.Tests/|SoulspireLauncher\.sln|manifest\.json|dat-overlay/|addons/|plugins/|scripts/|tests/|\.github/workflows/build-launcher\.yml)'; then
+          if echo "$changed" | grep -Eq '^(SoulspireLauncher/|SoulspireLauncher\.Tests/|SoulspireLauncher\.sln|manifest\.json|dat-overlay/|addons/|plugins/|native/crystaljobs/|scripts/|tests/|\.github/workflows/build-launcher\.yml)'; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
           else
             echo "No launcher/client/manifest files changed; skipping redundant Windows launcher build."
             echo "should_build=false" >> "$GITHUB_OUTPUT"
           fi
 
-          if echo "$changed" | grep -Eq '^(native/crystaljobs/.*\.(c|cc|cpp|cxx|h|hh|hpp|hxx|def|cmd|bat|ps1)|\.github/workflows/build-launcher\.yml)$'; then
+          if echo "$changed" | grep -Eq '^(native/crystaljobs/.*\.(c|cc|cpp|cxx|h|hh|hpp|hxx|def|cmd|bat|ps1)|\.github/workflows/build-launcher\.yml|scripts/publish-testing-channel\.py|scripts/verify-launcher-manifest\.py)$'; then
             echo "should_build_crystaljobs=true" >> "$GITHUB_OUTPUT"
           else
             echo "No native/crystaljobs C++ source files changed; skipping crystaljobs.dll build."
@@ -190,24 +190,39 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Build and self-test crystaljobs.dll (Win32 / x86)
+      - name: Build and self-test Candidate C (aligned native_text) and Candidate A (legacy 4f0fdb3 native_text)
         shell: pwsh
         env:
           CRYSTALJOBS_KEEP_SELFTEST: "1"
         run: |
-          $ErrorActionPreference = 'Continue'
-          & cmd.exe /c "native\crystaljobs\build.cmd 2>&1" | Tee-Object -FilePath "crystaljobs-build.log"
-          $rc = $LASTEXITCODE
-          if ($rc -ne 0) {
-            $tail = (Get-Content "crystaljobs-build.log" -Tail 40) -join "`n"
-            foreach ($line in (Get-Content "crystaljobs-build.log" | Select-String -Pattern '(error |ERROR:|Assertion failed|fatal error)' | Select-Object -First 10)) {
-              Write-Host "::error::$($line.Line)"
+          $ErrorActionPreference = 'Stop'
+          function Invoke-CrystalJobsBuild([string]$extraFlags, [string]$outDir, [string]$logFile) {
+            $env:CRYSTALJOBS_EXTRA_CXXFLAGS = $extraFlags
+            $ErrorActionPreference = 'Continue'
+            & cmd.exe /c "native\crystaljobs\build.cmd 2>&1" | Tee-Object -FilePath $logFile
+            $rc = $LASTEXITCODE
+            $ErrorActionPreference = 'Stop'
+            if ($rc -ne 0) {
+              $tail = (Get-Content $logFile -Tail 40) -join "`n"
+              foreach ($line in (Get-Content $logFile | Select-String -Pattern '(error |ERROR:|Assertion failed|fatal error)' | Select-Object -First 10)) {
+                Write-Host "::error::$($line.Line)"
+              }
+              if (-not (Get-Content $logFile | Select-String -Pattern '(error |ERROR:|Assertion failed|fatal error)')) {
+                Write-Host "::error::build.cmd ($extraFlags) exited with code $rc. Last lines: $tail"
+              }
+              exit $rc
             }
-            if (-not (Get-Content "crystaljobs-build.log" | Select-String -Pattern '(error |ERROR:|Assertion failed|fatal error)')) {
-              Write-Host "::error::build.cmd exited with code $rc. Last lines: $tail"
-            }
-            exit $rc
+            New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+            Copy-Item -Force "plugins/ashita4/crystaljobs.dll" (Join-Path $outDir "crystaljobs.dll")
+            Copy-Item -Force "native/crystaljobs/selftest.exe" (Join-Path $outDir "selftest.exe")
           }
+
+          # Candidate A: Historical working implementation (4f0fdb3 single-call native_text)
+          Invoke-CrystalJobsBuild "/DCRYSTALJOBS_SEARCH_RENDER_MODE=0" "ci-builds/search-legacy-text" "crystaljobs-legacy-build.log"
+          # Candidate B: Fixed native menu2fon sprite renderer (SoA x[4]/y[4] quad corners at tile+0xC0)
+          Invoke-CrystalJobsBuild "/DCRYSTALJOBS_SEARCH_RENDER_MODE=1" "ci-builds/registry-24hook" "crystaljobs-menu2fon-build.log"
+          # Candidate C: Safe fallback (fixed-column aligned native_text)
+          Invoke-CrystalJobsBuild "/DCRYSTALJOBS_SEARCH_RENDER_MODE=2" "ci-builds/search-aligned-text" "crystaljobs-build.log"
 
       - name: Verify built 32-bit binaries and write build metadata
         shell: pwsh
@@ -229,19 +244,56 @@ jobs:
             return @{ Size = $bytes.Length; Sha256 = $hash }
           }
 
-          $dllInfo = Assert-Win32PE "plugins/ashita4/crystaljobs.dll"
-          $testInfo = Assert-Win32PE "native/crystaljobs/selftest.exe"
+          $regHash = "unknown"
+          if (Test-Path "native/crystaljobs/labels_generated.h") {
+            $m = Select-String -Path "native/crystaljobs/labels_generated.h" -Pattern 'kRegistryHash\s*=\s*"([^"]+)"'
+            if ($m) { $regHash = $m.Matches[0].Groups[1].Value }
+          }
 
-          @(
-            "commit_sha=${{ github.sha }}"
-            "ref=${{ github.ref }}"
-            "branch=${{ github.ref_name }}"
-            "run_id=${{ github.run_id }}"
-            "crystaljobs_dll_size=$($dllInfo.Size)"
-            "crystaljobs_dll_sha256=$($dllInfo.Sha256)"
-            "selftest_exe_size=$($testInfo.Size)"
-            "selftest_exe_sha256=$($testInfo.Sha256)"
-          ) | Set-Content -Path "crystaljobs-build-info.txt" -Encoding UTF8
+          function Write-CandidateMetadata([string]$dllPath, [string]$testPath, [string]$modeLabel, [string]$provOut, [string]$infoOut) {
+            $dllInfo = Assert-Win32PE $dllPath
+            $testInfo = Assert-Win32PE $testPath
+            $provenance = [ordered]@{
+              dllPath              = "plugins/ashita4/crystaljobs.dll"
+              dllSha256            = $dllInfo.Sha256
+              dllSize              = $dllInfo.Size
+              compiledRegistryHash = $regHash
+              runtimeIdentityLoader = $true
+              identitySchemaVersion = 1
+              searchRenderMode     = $modeLabel
+              sourceCommit         = "${{ github.sha }}"
+              branch               = "${{ github.ref_name }}"
+              ciRunId              = "${{ github.run_id }}"
+              ciRunUrl             = "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+              buildTarget          = "Win32-x86-MSVC"
+              ciVerified           = $true
+              clientVerified       = $false
+              notes                = "CI-built crystaljobs.dll provenance ($modeLabel). Never set clientVerified=true until verified in the Windows FFXI client."
+            }
+            $provenance | ConvertTo-Json -Depth 4 | Set-Content -Path $provOut -Encoding UTF8
+            @(
+              "commit_sha=${{ github.sha }}"
+              "ref=${{ github.ref }}"
+              "branch=${{ github.ref_name }}"
+              "run_id=${{ github.run_id }}"
+              "registry_hash=$regHash"
+              "search_render_mode=$modeLabel"
+              "crystaljobs_dll_size=$($dllInfo.Size)"
+              "crystaljobs_dll_sha256=$($dllInfo.Sha256)"
+              "selftest_exe_size=$($testInfo.Size)"
+              "selftest_exe_sha256=$($testInfo.Sha256)"
+            ) | Set-Content -Path $infoOut -Encoding UTF8
+            return $dllInfo
+          }
+
+          $alignedInfo  = Write-CandidateMetadata "ci-builds/search-aligned-text/crystaljobs.dll" "ci-builds/search-aligned-text/selftest.exe" "aligned-native-text (mode 2)" "ci-builds/search-aligned-text/crystaljobs-provenance.json" "ci-builds/search-aligned-text/crystaljobs-build-info.txt"
+          $legacyInfo   = Write-CandidateMetadata "ci-builds/search-legacy-text/crystaljobs.dll" "ci-builds/search-legacy-text/selftest.exe" "legacy-native-text-4f0fdb3 (mode 0)" "ci-builds/search-legacy-text/crystaljobs-provenance.json" "ci-builds/search-legacy-text/crystaljobs-build-info.txt"
+          $menu2fonInfo = Write-CandidateMetadata "ci-builds/registry-24hook/crystaljobs.dll" "ci-builds/registry-24hook/selftest.exe" "menu2fon-soa-corners (mode 1)" "ci-builds/registry-24hook/crystaljobs-provenance.json" "ci-builds/registry-24hook/crystaljobs-build-info.txt"
+          if ($alignedInfo.Sha256 -eq $legacyInfo.Sha256 -or $alignedInfo.Sha256 -eq $menu2fonInfo.Sha256 -or $legacyInfo.Sha256 -eq $menu2fonInfo.Sha256) {
+            throw "Candidates A, B, and C must produce distinct DLL SHA-256 hashes!"
+          }
+          Copy-Item -Force "ci-builds/registry-24hook/crystaljobs-provenance.json" "crystaljobs-provenance.json"
+          Copy-Item -Force "ci-builds/registry-24hook/crystaljobs-build-info.txt" "crystaljobs-build-info.txt"
           Get-Content "crystaljobs-build-info.txt"
 
       - name: Upload crystaljobs.dll and selftest.exe build artifacts
@@ -253,7 +305,13 @@ jobs:
             plugins/ashita4/crystaljobs.dll
             native/crystaljobs/selftest.exe
             crystaljobs-build-info.txt
+            crystaljobs-provenance.json
             crystaljobs-build.log
+            crystaljobs-legacy-build.log
+            crystaljobs-menu2fon-build.log
+            ci-builds/search-legacy-text/
+            ci-builds/registry-24hook/
+            ci-builds/search-aligned-text/
 
   build-testing-channel:
     needs: [verify-manifest, build-and-test]
@@ -333,6 +391,130 @@ jobs:
             channels/testing/payload/plugins/ashita4/crystaljobs.dll
             crystaljobs-testing-build-info.txt
             crystaljobs-testing-build.log
+
+  publish-registry-24hook-candidate:
+    needs: [verify-manifest, build-crystaljobs, build-and-test]
+    if: (github.ref == 'refs/heads/feat/soul-identity-registry-integration' || github.ref == 'refs/heads/feat/runtime-soul-identity-and-spacing') && !startsWith(github.event.head_commit.message, 'chore(testing-candidate):')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Download verified Windows x86 crystaljobs-win-x86 artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: crystaljobs-win-x86
+          path: ci-crystaljobs
+
+      - name: Verify DLL provenance, registry hash, architecture, and exports for Candidates A, B, and C
+        shell: bash
+        run: |
+          set -euo pipefail
+          for cand in search-legacy-text registry-24hook search-aligned-text; do
+            python scripts/verify-crystaljobs-dll.py \
+              "ci-crystaljobs/ci-builds/${cand}/crystaljobs.dll" \
+              --allow-24-hook \
+              --build-info "ci-crystaljobs/ci-builds/${cand}/crystaljobs-build-info.txt"
+          done
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          reg = json.loads(Path("registry_sync.json").read_text(encoding="utf-8"))
+          ident_path = Path("plugins/ashita4/data/soul-identities.json")
+          runtime_identities = json.loads(ident_path.read_text(encoding="utf-8")) if ident_path.is_file() else None
+          seen_shas = set()
+          for cand in ("search-legacy-text", "registry-24hook", "search-aligned-text"):
+              prov = json.loads(Path(f"ci-crystaljobs/ci-builds/{cand}/crystaljobs-provenance.json").read_text(encoding="utf-8-sig"))
+              if runtime_identities is not None:
+                  assert runtime_identities["registryHash"] == reg["registryHash"], (
+                      f"{cand} runtime identity hash mismatch: data={runtime_identities['registryHash']} vs sync={reg['registryHash']}"
+                  )
+              else:
+                  assert prov["compiledRegistryHash"] == reg["registryHash"], (
+                      f"{cand} registry hash mismatch: dll={prov['compiledRegistryHash']} vs sync={reg['registryHash']}"
+                  )
+              assert prov["clientVerified"] is False, f"{cand} provenance must keep clientVerified=false"
+              assert prov["dllSha256"] not in seen_shas, f"Duplicate DLL sha256 across candidates: {prov['dllSha256']}"
+              seen_shas.add(prov["dllSha256"])
+              rhash = runtime_identities["registryHash"] if runtime_identities else prov["compiledRegistryHash"]
+              print(f"Verified {cand}: sha256={prov['dllSha256']} mode={prov.get('searchRenderMode')} compiledHash={prov['compiledRegistryHash']} runtimeHash={rhash}")
+          PY
+
+      - name: Publish isolated Candidate A, B (fixed menu2fon), and C manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/publish-testing-channel.py \
+            --candidate search-legacy-text \
+            --crystaljobs-dll ci-crystaljobs/ci-builds/search-legacy-text/crystaljobs.dll \
+            --build-info ci-crystaljobs/ci-builds/search-legacy-text/crystaljobs-build-info.txt \
+            --provenance-json ci-crystaljobs/ci-builds/search-legacy-text/crystaljobs-provenance.json \
+            --repo-branch "${{ github.ref_name }}" \
+            --manifest-version "2.1.12-testing.search-legacy-text" \
+            --server-version "feat/runtime-soul-identity-and-spacing (b28a7a3)" \
+            --server-branch "feat/runtime-soul-identity-and-spacing" \
+            --server-commit "b28a7a3" \
+            --server-image "soulspirexi/server:registry" \
+            --crystaljobs-hooks 24 \
+            --notes "Candidate A (Historical 4f0fdb3): 24-hook runtime identity loader + legacy 0.75x native_text fallback"
+
+          python scripts/publish-testing-channel.py \
+            --candidate registry-24hook \
+            --crystaljobs-dll ci-crystaljobs/ci-builds/registry-24hook/crystaljobs.dll \
+            --build-info ci-crystaljobs/ci-builds/registry-24hook/crystaljobs-build-info.txt \
+            --provenance-json ci-crystaljobs/ci-builds/registry-24hook/crystaljobs-provenance.json \
+            --repo-branch "${{ github.ref_name }}" \
+            --manifest-version "2.1.12-testing.runtime-identity" \
+            --server-version "feat/runtime-soul-identity-and-spacing (b28a7a3)" \
+            --server-branch "feat/runtime-soul-identity-and-spacing" \
+            --server-commit "b28a7a3" \
+            --server-image "soulspirexi/server:registry" \
+            --crystaljobs-hooks 24 \
+            --notes "Native H glyph repair ({118, 214, 7} from vanilla SCH in ROM/118/111.DAT) + Runtime Soul Identity Loader (66 approved Souls, cf86aa59ff8d16c6) + 7px uniform Search pitch"
+
+          python scripts/publish-testing-channel.py \
+            --candidate search-aligned-text \
+            --crystaljobs-dll ci-crystaljobs/ci-builds/search-aligned-text/crystaljobs.dll \
+            --build-info ci-crystaljobs/ci-builds/search-aligned-text/crystaljobs-build-info.txt \
+            --provenance-json ci-crystaljobs/ci-builds/search-aligned-text/crystaljobs-provenance.json \
+            --repo-branch "${{ github.ref_name }}" \
+            --manifest-version "2.1.12-testing.search-aligned-text" \
+            --server-version "feat/runtime-soul-identity-and-spacing (b28a7a3)" \
+            --server-branch "feat/runtime-soul-identity-and-spacing" \
+            --server-commit "b28a7a3" \
+            --server-image "soulspirexi/server:registry" \
+            --crystaljobs-hooks 24 \
+            --notes "Candidate C (Fallback): 24-hook runtime identity loader + fixed-column aligned native_text"
+
+          python scripts/verify-launcher-manifest.py --manifest channels/testing-search-legacy-text/manifest.json
+          python scripts/verify-launcher-manifest.py --manifest channels/testing-search-aligned-text/manifest.json
+          python scripts/verify-launcher-manifest.py --manifest channels/testing-registry-24hook/manifest.json
+          git diff --exit-code manifest.json
+
+      - name: Commit and push isolated Search testing candidates to feature branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add channels/testing-search-legacy-text/ channels/testing-registry-24hook/ channels/testing-search-aligned-text/
+          if git diff --cached --quiet; then
+            echo "No changes to Search testing candidates."
+            exit 0
+          fi
+          git commit -m "chore(testing-candidate): publish H-glyph fix crystaljobs.dll (2.1.12-testing.runtime-identity)"
+          git push origin "HEAD:${{ github.ref_name }}"
 
   publish-release:
     needs: [build-and-test, build-crystaljobs]

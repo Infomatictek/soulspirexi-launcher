@@ -19,10 +19,10 @@ if not "%VCVARS%"=="" (
     if errorlevel 1 exit /b 1
     cd /d "%CJ_DIR%"
 
-    cl /nologo /std:c++17 /W4 /WX /EHsc /O2 /MT /LD crystaljobs.cpp /link /DEF:crystaljobs.def /OUT:crystaljobs.dll
+    cl /nologo /std:c++17 /W4 /WX /EHsc /O2 /MT /LD %CRYSTALJOBS_EXTRA_CXXFLAGS% crystaljobs.cpp /link /DEF:crystaljobs.def /OUT:crystaljobs.dll
     if errorlevel 1 exit /b 1
 
-    cl /nologo /std:c++17 /W4 /WX /EHsc /O2 /MT selftest.cpp /Fe:selftest.exe
+    cl /nologo /std:c++17 /W4 /WX /EHsc /O2 /MT %CRYSTALJOBS_EXTRA_CXXFLAGS% selftest.cpp /Fe:selftest.exe
     if errorlevel 1 exit /b 1
 ) else (
     where i686-w64-mingw32-clang++ >nul 2>&1
@@ -52,6 +52,7 @@ if not "%VCVARS%"=="" (
         echo     CrystalJobsClearWeaponRules=CrystalJobsClearWeaponRules@0
         echo     CrystalJobsGetWeaponStatus=CrystalJobsGetWeaponStatus@8
         echo     CrystalJobsGetHookDiagnostics=CrystalJobsGetHookDiagnostics@8
+        echo     CrystalJobsGetIdentityDiagnostics=CrystalJobsGetIdentityDiagnostics@8
         echo     expCreatePlugin=expCreatePlugin@4
         echo     expDestroyPlugin=expDestroyPlugin@4
         echo     expGetInterfaceVersion=expGetInterfaceVersion@0

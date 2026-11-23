@@ -36,6 +36,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private double _progressPercent;
     private int _pendingUpdatesCount;
     private string _plainPassword = string.Empty;
+    private string? _manifestUnavailableError;
 
     public MainViewModel()
     {
@@ -584,7 +585,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public IReadOnlyList<UpdateChannel> UpdateChannelOptions { get; } =
     [
         UpdateChannel.Stable,
-        UpdateChannel.Testing
+        UpdateChannel.Testing,
+        UpdateChannel.TestingSearchLegacyText,
+        UpdateChannel.TestingRegistry24Hook,
+        UpdateChannel.TestingSearchAlignedText
     ];
 
     public UpdateChannel SelectedUpdateChannel
@@ -606,26 +610,50 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    public bool IsTestingChannel => _settings.UpdateChannel == UpdateChannel.Testing;
+    public bool IsTestingChannel => _settings.UpdateChannel is UpdateChannel.Testing
+        or UpdateChannel.TestingRegistry24Hook
+        or UpdateChannel.TestingSearchLegacyText
+        or UpdateChannel.TestingSearchAlignedText;
 
-    public string ChannelBadgeText => _settings.UpdateChannel == UpdateChannel.Testing
-        ? "TESTING CHANNEL"
-        : "STABLE";
+    public string ChannelBadgeText => _settings.UpdateChannel switch
+    {
+        UpdateChannel.Testing => "TESTING CHANNEL",
+        UpdateChannel.TestingRegistry24Hook => "TESTING B (MENU2FON)",
+        UpdateChannel.TestingSearchLegacyText => "TESTING A (LEGACY TEXT)",
+        UpdateChannel.TestingSearchAlignedText => "TESTING C (ALIGNED TEXT)",
+        _ => "STABLE"
+    };
 
-    public string ChannelDescriptionText => _settings.UpdateChannel == UpdateChannel.Testing
-        ? "Testing channel delivers verified preview DLLs, addons, and DAT overlays without affecting Stable players."
-        : "Stable channel delivers production-verified SoulspireXI client builds.";
+    public string ChannelDescriptionText => _settings.UpdateChannel switch
+    {
+        UpdateChannel.Testing => "Testing channel delivers verified 27-hook weapon-template preview DLLs, addons, and DAT overlays without affecting Stable players.",
+        UpdateChannel.TestingRegistry24Hook => "Candidate B (Control): Current 24-hook menu2fon sprite Search renderer (2.1.4-testing.registry24). Switch back to Stable anytime.",
+        UpdateChannel.TestingSearchLegacyText => "Candidate A (Historical 4f0fdb3): 24-hook 66-Soul registry with legacy single-call 0.75x native_text Search labels (zero sprite mutation).",
+        UpdateChannel.TestingSearchAlignedText => "Candidate C (Repair): 24-hook 66-Soul registry with fixed-column aligned native_text Search labels (readable first, zero sprite mutation).",
+        _ => "Stable channel delivers production-verified SoulspireXI client builds."
+    };
 
     public string ManifestVersionText
     {
         get
         {
+            if (!string.IsNullOrWhiteSpace(_manifestUnavailableError))
+            {
+                return $"{ChannelBadgeText} • Manifest unavailable (see status log)";
+            }
+
             var version = string.IsNullOrWhiteSpace(_manifest.ManifestVersion) ? "1.0.0" : _manifest.ManifestVersion.Trim();
             var channel = string.IsNullOrWhiteSpace(_manifest.Channel) ? "stable" : _manifest.Channel.Trim().ToUpperInvariant();
+            var candidateTag = !string.IsNullOrWhiteSpace(_manifest.CandidateId)
+                ? $" • {_manifest.CandidateId.Trim()}"
+                : string.Empty;
+            var registryInfo = _manifest.Registry is { } reg && !string.IsNullOrWhiteSpace(reg.Hash)
+                ? $" • Registry: {reg.Hash.Trim()}"
+                : string.Empty;
             var serverInfo = _manifest.ServerCompatibility is { } sc && !string.IsNullOrWhiteSpace(sc.Version)
                 ? $" • Server: {sc.Version}"
                 : string.Empty;
-            return $"Manifest {version} ({channel}){serverInfo}";
+            return $"Manifest {version} ({channel}{candidateTag}){registryInfo}{serverInfo}";
         }
     }
 
@@ -782,23 +810,34 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         try
         {
-            StatusMessage = $"Checking SoulspireXI {_settings.UpdateChannel} manifest...";
+            StatusMessage = $"Checking SoulspireXI {ChannelBadgeText} manifest...";
             var embedded = _manifestService.LoadEmbeddedManifest();
-            var (manifest, fromRemote) = await _manifestService.FetchManifestAsync(
+            var result = await _manifestService.FetchManifestDetailedAsync(
                 embedded,
                 _settingsService.LoadLocalServerOverride(),
                 _settings.UpdateChannel);
 
-            _manifest = manifest;
-            ApplyManifest(manifest);
+            if (result.Manifest is null)
+            {
+                _manifestUnavailableError = result.ErrorMessage ?? $"Could not load remote manifest for {_settings.UpdateChannel}.";
+                PendingUpdatesCount = 0;
+                OnPropertyChanged(nameof(ManifestVersionText));
+                StatusMessage = _manifestUnavailableError;
+                Log(StatusMessage);
+                return;
+            }
+
+            _manifestUnavailableError = null;
+            _manifest = result.Manifest;
+            ApplyManifest(result.Manifest);
 
             var pending = _manifestService.GetOutdatedFiles(_manifest, _settings);
             PendingUpdatesCount = pending.Count;
             RefreshDiagnostics();
 
-            StatusMessage = fromRemote
-                ? (pending.Count == 0 ? $"All SoulspireXI ({_settings.UpdateChannel}) client files are up to date." : $"{pending.Count} update(s) available on {_settings.UpdateChannel}.")
-                : "Using bundled manifest (offline or GitHub unreachable).";
+            StatusMessage = result.FromRemote
+                ? (pending.Count == 0 ? $"All SoulspireXI ({ChannelBadgeText}) client files are up to date." : $"{pending.Count} update(s) available on {ChannelBadgeText}.")
+                : "Using bundled Stable manifest (offline or GitHub unreachable).";
             Log(StatusMessage);
         }
         catch (Exception ex)
@@ -979,17 +1018,25 @@ public sealed class MainViewModel : INotifyPropertyChanged
         try
         {
             var embedded = _manifestService.LoadEmbeddedManifest();
-            var (manifest, fromRemote) = await _manifestService.FetchManifestAsync(
+            var result = await _manifestService.FetchManifestDetailedAsync(
                 embedded,
                 _settingsService.LoadLocalServerOverride(),
                 _settings.UpdateChannel);
-            ApplyManifest(manifest);
 
-            if (!fromRemote)
+            if (result.Manifest is null || !result.FromRemote)
             {
+                if (result.Manifest is null)
+                {
+                    _manifestUnavailableError = result.ErrorMessage ?? $"Could not download SoulspireXI ({ChannelBadgeText}) manifest.";
+                    OnPropertyChanged(nameof(ManifestVersionText));
+                }
+
                 throw new InvalidOperationException(
-                    $"Could not download the latest SoulspireXI ({_settings.UpdateChannel}) manifest from GitHub. Please check your internet connection and try again.");
+                    result.ErrorMessage ?? $"Could not download the latest SoulspireXI ({ChannelBadgeText}) manifest from GitHub. Please check your internet connection and try again.");
             }
+
+            _manifestUnavailableError = null;
+            ApplyManifest(result.Manifest);
 
             var progress = new Progress<SyncProgress>(p =>
             {
@@ -1028,14 +1075,22 @@ public sealed class MainViewModel : INotifyPropertyChanged
             });
 
             var embedded = _manifestService.LoadEmbeddedManifest();
-            var (manifest, fromRemote) = await _manifestService.FetchManifestAsync(
+            var result = await _manifestService.FetchManifestDetailedAsync(
                 embedded,
                 _settingsService.LoadLocalServerOverride(),
                 _settings.UpdateChannel);
-            ApplyManifest(manifest);
+            if (result.Manifest is null)
+            {
+                _manifestUnavailableError = result.ErrorMessage ?? $"Could not load manifest for {ChannelBadgeText}.";
+                OnPropertyChanged(nameof(ManifestVersionText));
+                throw new InvalidOperationException(_manifestUnavailableError);
+            }
+
+            _manifestUnavailableError = null;
+            ApplyManifest(result.Manifest);
 
             await _manifestService.EnsureAshitaAndToolsAsync(_manifest, _settings, progress);
-            if (fromRemote)
+            if (result.FromRemote)
             {
                 await _manifestService.SyncSoulspireFilesAsync(_manifest, _settings, forceAll: false, progress);
             }
@@ -1095,20 +1150,28 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 ProgressPercent = p.Percent;
             });
 
-            StatusMessage = $"Checking latest SoulspireXI ({_settings.UpdateChannel}) manifest...";
+            StatusMessage = $"Checking latest SoulspireXI ({ChannelBadgeText}) manifest...";
             var embedded = _manifestService.LoadEmbeddedManifest();
-            var (manifest, fromRemote) = await _manifestService.FetchManifestAsync(
+            var result = await _manifestService.FetchManifestDetailedAsync(
                 embedded,
                 _settingsService.LoadLocalServerOverride(),
                 _settings.UpdateChannel);
-            ApplyManifest(manifest);
+            if (result.Manifest is null)
+            {
+                _manifestUnavailableError = result.ErrorMessage ?? $"Could not load manifest for {ChannelBadgeText}.";
+                OnPropertyChanged(nameof(ManifestVersionText));
+                throw new InvalidOperationException(_manifestUnavailableError);
+            }
+
+            _manifestUnavailableError = null;
+            ApplyManifest(result.Manifest);
 
             StatusMessage = "Checking Ashita v4 prerequisites...";
             await _manifestService.EnsureAshitaAndToolsAsync(_manifest, _settings, progress);
 
-            if (fromRemote)
+            if (result.FromRemote)
             {
-                StatusMessage = $"Checking for SoulspireXI ({_settings.UpdateChannel}) file updates...";
+                StatusMessage = $"Checking for SoulspireXI ({ChannelBadgeText}) file updates...";
                 var updatedCount = await _manifestService.SyncSoulspireFilesAsync(_manifest, _settings, forceAll: false, progress);
                 PendingUpdatesCount = _manifestService.GetOutdatedFiles(_manifest, _settings).Count;
                 Log(updatedCount > 0

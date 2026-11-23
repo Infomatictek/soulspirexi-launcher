@@ -18,6 +18,7 @@ EXPORTS
     CrystalJobsClearWeaponRules=_CrystalJobsClearWeaponRules@0
     CrystalJobsGetWeaponStatus=_CrystalJobsGetWeaponStatus@8
     CrystalJobsGetHookDiagnostics=_CrystalJobsGetHookDiagnostics@8
+    CrystalJobsGetIdentityDiagnostics=_CrystalJobsGetIdentityDiagnostics@8
     expCreatePlugin=_expCreatePlugin@4
     expDestroyPlugin=_expDestroyPlugin@4
     expGetInterfaceVersion=_expGetInterfaceVersion@0

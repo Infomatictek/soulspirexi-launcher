@@ -48,10 +48,23 @@ local list = {
 
 local byKey = {}
 M.list = {}
-for _, r in ipairs(list) do
-    local e = { key = r[1], name = r[2], abr = r[3], role = r[4] }
-    byKey[e.key] = e
-    M.list[#M.list + 1] = e
+
+-- Prefer registry-generated roster (single source of truth: soulspirexi-src/registry/souls.json).
+local okGen, genEntries = pcall(require, 'soulhud_roster_generated')
+if okGen and type(genEntries) == 'table' and #genEntries > 0 then
+    for _, r in ipairs(genEntries) do
+        local e = { key = r.key, id = r.id, name = r.name, abr = r.abr, role = r.role }
+        byKey[e.key] = e
+        if r.primary then
+            M.list[#M.list + 1] = e
+        end
+    end
+else
+    for _, r in ipairs(list) do
+        local e = { key = r[1], name = r[2], abr = r[3], role = r[4] }
+        byKey[e.key] = e
+        M.list[#M.list + 1] = e
+    end
 end
 
 M.ROLE_LABEL = { tank = 'Tank', healer = 'Healer', support = 'Support', damage = 'Damage' }

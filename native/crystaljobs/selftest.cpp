@@ -5,17 +5,39 @@
 static uint8_t row_a[72]{}, row_b[72]{};
 static uint32_t sprite_calls, simple_sprite_calls, text_calls, persona_text_calls, last_persona_color;
 static const char* last_text;
+static char last_text_buf[32]{};
 static const char* last_persona_text;
 static int __cdecl fake_text(int x, int y, const char* text, uint32_t color, float sx, float sy, int center) {
+#if CRYSTALJOBS_SEARCH_RENDER_MODE == 2
+    assert(text != nullptr && color == 0x80808080u && center == 0);
+    if (std::strlen(text) == 1) {
+        assert(x >= 100 && x <= 116 && y == 51 && sx == 0.72f && sy == 0.78f);
+    } else {
+        assert(x == 100 && y == 50 && sx == 0.75f && sy == 0.75f);
+    }
+#else
     assert(x == 100 && y == 50 && color == 0x80808080 && sx == 0.75f && sy == 0.75f && center == 0);
-    ++text_calls; last_text = text; return x;
+#endif
+    ++text_calls;
+    if (text != nullptr) {
+        std::snprintf(last_text_buf, sizeof(last_text_buf), "%s", text);
+        last_text = last_text_buf;
+    } else {
+        last_text = nullptr;
+    }
+    return x;
 }
 static int __cdecl fake_persona_text(int x, int y, const char* text, uint32_t color, float sx, float sy, int center) {
     assert(x == 142 && y == 69 && sx == 1.0f && sy == 1.0f && center == 0);
     ++persona_text_calls; last_persona_text = text; last_persona_color = color; return x;
 }
-static int __fastcall fake_sprite(void*, void*, int x, int y, float sx, float sy, uint32_t color, int center, int first, int count) {
+static const uint8_t* recorded_sprites[1024]{};
+static size_t recorded_sprite_count = 0;
+static int __fastcall fake_sprite(void* self, void*, int x, int y, float sx, float sy, uint32_t color, int center, int first, int count) {
     assert(x == 100 && y == 50 && sx == 1.0f && sy == 1.0f && color == 0x80808080 && center == 0 && first == 0 && count == 0);
+    if (recorded_sprite_count < 1024) {
+        recorded_sprites[recorded_sprite_count++] = static_cast<const uint8_t*>(self);
+    }
     ++sprite_calls; return 1;
 }
 static void __fastcall fake_sprite_simple(void* self, void*, int x, int y, uint32_t color, int center, int first) {
@@ -378,73 +400,22 @@ static void transport_checks() {
 }
 
 static void multi_job_checks() {
-    // Check all 22 SoulspireXI jobs (66 soul specs).
-    assert(std::strcmp(label_for(1, 1, false), "CDR") == 0 && std::strcmp(label_for(1, 1, true), "Commander") == 0);
-    assert(std::strcmp(label_for(1, 2, false), "BRZ") == 0 && std::strcmp(label_for(1, 2, true), "Berserker") == 0);
-    assert(std::strcmp(label_for(1, 3, false), "SPT") == 0 && std::strcmp(label_for(1, 3, true), "Spartan") == 0);
-    assert(std::strcmp(label_for(2, 1, false), "SEN") == 0 && std::strcmp(label_for(2, 1, true), "Sensei") == 0);
-    assert(std::strcmp(label_for(2, 2, false), "CWV") == 0 && std::strcmp(label_for(2, 2, true), "Chi Weaver") == 0);
-    assert(std::strcmp(label_for(2, 3, false), "BLK") == 0 && std::strcmp(label_for(2, 3, true), "Black Belt") == 0);
-    assert(std::strcmp(label_for(3, 1, false), "BSH") == 0 && std::strcmp(label_for(3, 1, true), "Bishop") == 0);
-    assert(std::strcmp(label_for(3, 2, false), "ZEL") == 0 && std::strcmp(label_for(3, 2, true), "Zealot") == 0);
-    assert(std::strcmp(label_for(3, 3, false), "VLK") == 0 && std::strcmp(label_for(3, 3, true), "Valkyrie") == 0);
-    assert(std::strcmp(label_for(4, 1, false), "AST") == 0 && std::strcmp(label_for(4, 1, true), "Astromancer") == 0);
-    assert(std::strcmp(label_for(4, 2, false), "CHN") == 0 && std::strcmp(label_for(4, 2, true), "Channeler") == 0);
-    assert(std::strcmp(label_for(4, 3, false), "NEC") == 0 && std::strcmp(label_for(4, 3, true), "Necromancer") == 0);
-    assert(std::strcmp(label_for(5, 1, false), "DLS") == 0 && std::strcmp(label_for(5, 1, true), "Crimson Duelist") == 0);
-    assert(std::strcmp(label_for(5, 2, false), "RYT") == 0 && std::strcmp(label_for(5, 2, true), "Royal Tactician") == 0);
-    assert(std::strcmp(label_for(5, 3, false), "SCW") == 0 && std::strcmp(label_for(5, 3, true), "Scarlet Weaver") == 0);
-    assert(std::strcmp(label_for(6, 1, false), "TRK") == 0 && std::strcmp(label_for(6, 1, true), "Trickster") == 0);
-    assert(std::strcmp(label_for(6, 2, false), "BND") == 0 && std::strcmp(label_for(6, 2, true), "Bandit") == 0);
-    assert(std::strcmp(label_for(6, 3, false), "PHN") == 0 && std::strcmp(label_for(6, 3, true), "Phantom") == 0);
-    assert(std::strcmp(label_for(7, 1, false), "TMP") == 0 && std::strcmp(label_for(7, 1, true), "Templar") == 0);
-    assert(std::strcmp(label_for(7, 2, false), "DFN") == 0 && std::strcmp(label_for(7, 2, true), "Defender") == 0);
-    assert(std::strcmp(label_for(7, 3, false), "OTB") == 0 && std::strcmp(label_for(7, 3, true), "Oathbreaker") == 0);
-    assert(std::strcmp(label_for(8, 1, false), "RPR") == 0 && std::strcmp(label_for(8, 1, true), "Reaper") == 0);
-    assert(std::strcmp(label_for(8, 2, false), "DRN") == 0 && std::strcmp(label_for(8, 2, true), "Dreadnought") == 0);
-    assert(std::strcmp(label_for(8, 3, false), "SCR") == 0 && std::strcmp(label_for(8, 3, true), "Scourge") == 0);
-    assert(std::strcmp(label_for(9, 1, false), "UNT") == 0 && std::strcmp(label_for(9, 1, true), "Untamed") == 0);
-    assert(std::strcmp(label_for(9, 2, false), "SLB") == 0 && std::strcmp(label_for(9, 2, true), "Soulbeast") == 0);
-    assert(std::strcmp(label_for(9, 3, false), "BSP") == 0 && std::strcmp(label_for(9, 3, true), "Beastspeaker") == 0);
-    assert(std::strcmp(label_for(10, 1, false), "ADV") == 0 && std::strcmp(label_for(10, 1, true), "Adventurer") == 0);
-    assert(std::strcmp(label_for(10, 2, false), "MUS") == 0 && std::strcmp(label_for(10, 2, true), "Musician") == 0);
-    assert(std::strcmp(label_for(10, 3, false), "MIN") == 0 && std::strcmp(label_for(10, 3, true), "Minstrel") == 0);
-    assert(std::strcmp(label_for(11, 1, false), "SNP") == 0 && std::strcmp(label_for(11, 1, true), "Sniper") == 0);
-    assert(std::strcmp(label_for(11, 2, false), "HNT") == 0 && std::strcmp(label_for(11, 2, true), "Huntsman") == 0);
-    assert(std::strcmp(label_for(11, 3, false), "ACA") == 0 && std::strcmp(label_for(11, 3, true), "Arcane Archer") == 0);
-    assert(std::strcmp(label_for(12, 1, false), "RON") == 0 && std::strcmp(label_for(12, 1, true), "Ronin") == 0);
-    assert(std::strcmp(label_for(12, 2, false), "IMP") == 0 && std::strcmp(label_for(12, 2, true), "Imperial Archer") == 0);
-    assert(std::strcmp(label_for(12, 3, false), "WRL") == 0 && std::strcmp(label_for(12, 3, true), "Warlord") == 0);
-    assert(std::strcmp(label_for(13, 1, false), "KRG") == 0 && std::strcmp(label_for(13, 1, true), "Shinobi") == 0);
-    assert(std::strcmp(label_for(13, 2, false), "KGM") == 0 && std::strcmp(label_for(13, 2, true), "Kagemusha") == 0);
-    assert(std::strcmp(label_for(13, 3, false), "NGB") == 0 && std::strcmp(label_for(13, 3, true), "Nightblade") == 0);
-    assert(std::strcmp(label_for(14, 1, false), "LNC") == 0 && std::strcmp(label_for(14, 1, true), "Lancer") == 0);
-    assert(std::strcmp(label_for(14, 2, false), "SKY") == 0 && std::strcmp(label_for(14, 2, true), "Skyborn") == 0);
-    assert(std::strcmp(label_for(14, 3, false), "WYV") == 0 && std::strcmp(label_for(14, 3, true), "Wyvernheart") == 0);
-    assert(std::strcmp(label_for(15, 1, false), "PRM") == 0 && std::strcmp(label_for(15, 1, true), "Primalist") == 0);
-    assert(std::strcmp(label_for(15, 2, false), "CEL") == 0 && std::strcmp(label_for(15, 2, true), "Celestial") == 0);
-    assert(std::strcmp(label_for(15, 3, false), "HLD") == 0 && std::strcmp(label_for(15, 3, true), "Herald") == 0);
-    assert(std::strcmp(label_for(16, 1, false), "WMG") == 0 && std::strcmp(label_for(16, 1, true), "Warmage") == 0);
-    assert(std::strcmp(label_for(16, 2, false), "MAG") == 0 && std::strcmp(label_for(16, 2, true), "Magus") == 0);
-    assert(std::strcmp(label_for(16, 3, false), "AZB") == 0 && std::strcmp(label_for(16, 3, true), "Azure Bastion") == 0);
-    assert(std::strcmp(label_for(17, 1, false), "FLT") == 0 && std::strcmp(label_for(17, 1, true), "Flintlock") == 0);
-    assert(std::strcmp(label_for(17, 2, false), "GMB") == 0 && std::strcmp(label_for(17, 2, true), "Gambler") == 0);
-    assert(std::strcmp(label_for(17, 3, false), "BUC") == 0 && std::strcmp(label_for(17, 3, true), "Buccaneer") == 0);
-    assert(std::strcmp(label_for(18, 1, false), "VNG") == 0 && std::strcmp(label_for(18, 1, true), "Vanguard") == 0);
-    assert(std::strcmp(label_for(18, 2, false), "PGL") == 0 && std::strcmp(label_for(18, 2, true), "Pugilist") == 0);
-    assert(std::strcmp(label_for(18, 3, false), "ANM") == 0 && std::strcmp(label_for(18, 3, true), "Animist") == 0);
-    assert(std::strcmp(label_for(19, 1, false), "MRS") == 0 && std::strcmp(label_for(19, 1, true), "Mirage Sentinel") == 0);
-    assert(std::strcmp(label_for(19, 2, false), "VMP") == 0 && std::strcmp(label_for(19, 2, true), "Vampire") == 0);
-    assert(std::strcmp(label_for(19, 3, false), "BLW") == 0 && std::strcmp(label_for(19, 3, true), "Bladewheel") == 0);
-    assert(std::strcmp(label_for(20, 1, false), "MDC") == 0 && std::strcmp(label_for(20, 1, true), "Medic") == 0);
-    assert(std::strcmp(label_for(20, 2, false), "SAG") == 0 && std::strcmp(label_for(20, 2, true), "Sage") == 0);
-    assert(std::strcmp(label_for(20, 3, false), "ARC") == 0 && std::strcmp(label_for(20, 3, true), "Archivist") == 0);
-    assert(std::strcmp(label_for(21, 1, false), "DIV") == 0 && std::strcmp(label_for(21, 1, true), "Diviner") == 0);
-    assert(std::strcmp(label_for(21, 2, false), "VRD") == 0 && std::strcmp(label_for(21, 2, true), "Verdant") == 0);
-    assert(std::strcmp(label_for(21, 3, false), "TRM") == 0 && std::strcmp(label_for(21, 3, true), "Terramancer") == 0);
-    assert(std::strcmp(label_for(22, 1, false), "SPB") == 0 && std::strcmp(label_for(22, 1, true), "Spellblade") == 0);
-    assert(std::strcmp(label_for(22, 2, false), "LFB") == 0 && std::strcmp(label_for(22, 2, true), "Lifebinder") == 0);
-    assert(std::strcmp(label_for(22, 3, false), "INQ") == 0 && std::strcmp(label_for(22, 3, true), "Inquisitor") == 0);
+    // Verify all 22 SoulspireXI jobs x 3 branches against registry-generated labels.
+    for (uint8_t j = 1; j <= 22; ++j) {
+        assert(label_for(j, 0, false) == nullptr);
+        assert(label_for(j, 4, false) == nullptr);
+        for (uint8_t b = 1; b <= 3; ++b) {
+            const char* abr = label_for(j, b, false);
+            const char* full = label_for(j, b, true);
+            assert(abr != nullptr && std::strlen(abr) == 3);
+            assert(full != nullptr && std::strlen(full) >= 2);
+            const char* fb_abr = generated_label_for(j, b, false);
+            const char* fb_full = generated_label_for(j, b, true);
+            assert(fb_abr != nullptr && std::strlen(fb_abr) == 3);
+            assert(fb_full != nullptr && std::strlen(fb_full) >= 2);
+        }
+    }
+    assert(label_for(0, 1, false) == nullptr);
     assert(label_for(23, 1, false) == nullptr);
 
     original_lookup = &fake_lookup;
@@ -452,41 +423,41 @@ static void multi_job_checks() {
     native_text = &fake_text;
     selftest_alive = true;
 
-    // Test Search rows for MNK, BLM, SAM, DNC, SCH, RUN.
+    // Test Search rows for MNK, BLM, SAM, DNC, SCH, RUN against registry-generated labels.
     state = {};
     make_row(row_a, 301, marker | 1, 2); state.decoded(row_a);
-    assert(state.row_branch(row_a) == 1 && std::strcmp(full_abi(row_a, 2), "Sensei") == 0);
+    assert(state.row_branch(row_a) == 1 && std::strcmp(full_abi(row_a, 2), label_for(2, 1, true)) == 0);
     make_row(row_a, 306, marker | 2, 2); state.decoded(row_a);
-    assert(state.row_branch(row_a) == 2 && std::strcmp(full_abi(row_a, 2), "Chi Weaver") == 0);
+    assert(state.row_branch(row_a) == 2 && std::strcmp(full_abi(row_a, 2), label_for(2, 2, true)) == 0);
     make_row(row_a, 307, marker | 3, 2); state.decoded(row_a);
-    assert(state.row_branch(row_a) == 3 && std::strcmp(full_abi(row_a, 2), "Black Belt") == 0);
+    assert(state.row_branch(row_a) == 3 && std::strcmp(full_abi(row_a, 2), label_for(2, 3, true)) == 0);
     make_row(row_a, 302, marker | 3, 4); state.decoded(row_a);
-    assert(state.row_branch(row_a) == 3 && std::strcmp(full_abi(row_a, 4), "Necromancer") == 0);
+    assert(state.row_branch(row_a) == 3 && std::strcmp(full_abi(row_a, 4), label_for(4, 3, true)) == 0);
     make_row(row_a, 308, marker | 1, 12); state.decoded(row_a);
-    assert(state.row_branch(row_a) == 1 && std::strcmp(full_abi(row_a, 12), "Ronin") == 0);
+    assert(state.row_branch(row_a) == 1 && std::strcmp(full_abi(row_a, 12), label_for(12, 1, true)) == 0);
     make_row(row_a, 309, marker | 2, 12); state.decoded(row_a);
-    assert(state.row_branch(row_a) == 2 && std::strcmp(full_abi(row_a, 12), "Imperial Archer") == 0);
+    assert(state.row_branch(row_a) == 2 && std::strcmp(full_abi(row_a, 12), label_for(12, 2, true)) == 0);
     make_row(row_a, 310, marker | 3, 12); state.decoded(row_a);
-    assert(state.row_branch(row_a) == 3 && std::strcmp(full_abi(row_a, 12), "Warlord") == 0);
+    assert(state.row_branch(row_a) == 3 && std::strcmp(full_abi(row_a, 12), label_for(12, 3, true)) == 0);
     make_row(row_a, 303, marker | 3, 19); state.decoded(row_a);
-    assert(state.row_branch(row_a) == 3 && std::strcmp(full_abi(row_a, 19), "Bladewheel") == 0);
+    assert(state.row_branch(row_a) == 3 && std::strcmp(full_abi(row_a, 19), label_for(19, 3, true)) == 0);
     make_row(row_a, 304, marker | 2, 20); state.decoded(row_a);
-    assert(state.row_branch(row_a) == 2 && std::strcmp(full_abi(row_a, 20), "Sage") == 0);
+    assert(state.row_branch(row_a) == 2 && std::strcmp(full_abi(row_a, 20), label_for(20, 2, true)) == 0);
     make_row(row_a, 305, marker | 1, 22); state.decoded(row_a);
-    assert(state.row_branch(row_a) == 1 && std::strcmp(full_abi(row_a, 22), "Spellblade") == 0);
+    assert(state.row_branch(row_a) == 1 && std::strcmp(full_abi(row_a, 22), label_for(22, 1, true)) == 0);
 
-    // Test item_label for RUN Lifebinder and SAM Imperial Archer.
+    // Test item_label for RUN and SAM against registry-generated abbreviations.
     uint8_t run_event[8] = {1, 1, 22, 2, 100, 0, 0, 0};
     state.update(run_event, 8, GetTickCount());
-    assert(std::strcmp(item_label(2, 22), "LFB") == 0);
+    assert(std::strcmp(item_label(2, 22), label_for(22, 2, false)) == 0);
     assert(std::strcmp(item_label(2, 1), "WAR") == 0);
     uint8_t sam_event[8] = {1, 1, 12, 2, 100, 0, 0, 0};
     state.update(sam_event, 8, GetTickCount());
-    assert(std::strcmp(item_label(2, 12), "IMP") == 0);
+    assert(std::strcmp(item_label(2, 12), label_for(12, 2, false)) == 0);
 
     // Test menu2fon 3-glyph sprite rendering (24px wide: x0 = 0, 8, 16) and tile restoration.
     uint8_t mock_tile[0xE0]{}, mock_node[0x20]{}, mock_sprite[0x30]{};
-    const int16_t war_corners[8] = {0, -1, 24, -1, 0, 9, 24, 9};
+    const int16_t war_corners[8] = {0, 24, 0, 24, -1, -1, 9, 9};
     const float war_uv[2] = {0.0f, 184.0f / 256.0f};
     std::memcpy(mock_tile + 0xC0, war_corners, sizeof(war_corners));
     std::memcpy(mock_tile + 0x64, war_uv, sizeof(war_uv));
@@ -494,6 +465,8 @@ static void multi_job_checks() {
     std::memcpy(mock_node + 0x10, &tile_ptr, sizeof(tile_ptr));
     uint8_t* node_ptr = mock_node;
     std::memcpy(mock_sprite + 0x04, &node_ptr, sizeof(node_ptr));
+    std::memcpy(mock_sprite + 0x08, &node_ptr, sizeof(node_ptr)); // CYyList tail
+    std::memcpy(mock_sprite + 0x0C, &node_ptr, sizeof(node_ptr)); // CYyList cursor
     const uint32_t one_tile = 1;
     std::memcpy(mock_sprite + 0x14, &one_tile, sizeof(one_tile));
     uint8_t* sprite_entries[2] = {nullptr, mock_sprite};
@@ -501,12 +474,207 @@ static void multi_job_checks() {
     void* sheet_obj = &sprite_table;
     pname_sheet_slot = &sheet_obj;
 
-    sprite_calls = 0; text_calls = 0;
+    sprite_calls = 0; text_calls = 0; recorded_sprite_count = 0;
+#if CRYSTALJOBS_SEARCH_RENDER_MODE == 1
+    reset_menu2fon_banks_for_test();
+#endif
     make_row(row_a, 320, marker | 2, 1); state.decoded(row_a); // WAR branch 2 = BRZ
     assert(sprite_abi(reinterpret_cast<void*>(&normal_sprite_hook), row_a));
-    assert(sprite_calls == 3 && text_calls == 0);
+#if CRYSTALJOBS_SEARCH_RENDER_MODE == 0
+    // Candidate A (Legacy 4f0fdb3): single native_text call, zero menu2fon sprite mutation.
+    assert(sprite_calls == 0 && text_calls == 1 && recorded_sprite_count == 0);
+    assert(last_text != nullptr && std::strcmp(last_text, label_for(1, 2, false)) == 0);
+#elif CRYSTALJOBS_SEARCH_RENDER_MODE == 1
+    assert(sprite_calls == 3 && text_calls == 0 && recorded_sprite_count == 3);
+#else
+    // Candidate C (Aligned native_text): 3 per-glyph native_text calls, zero menu2fon sprite mutation.
+    assert(sprite_calls == 0 && text_calls == 3 && recorded_sprite_count == 0);
+#endif
+    // Shared WAR template tile must NEVER be mutated in-place.
     assert(std::memcmp(mock_tile + 0xC0, war_corners, sizeof(war_corners)) == 0);
     assert(std::memcmp(mock_tile + 0x64, war_uv, sizeof(war_uv)) == 0);
+
+#if CRYSTALJOBS_SEARCH_RENDER_MODE == 2
+    // Verify draw_aligned_native_text_label produces 3 calls across all 66 Souls with zero sprite touches.
+    for (uint8_t j = 1; j <= 22; ++j) {
+        for (uint8_t b = 1; b <= 3; ++b) {
+            const char* abr = label_for(j, b, false);
+            assert(abr != nullptr && std::strlen(abr) == 3);
+            SpriteArgs sa{100, 50, 1.0f, 1.0f, 0x80808080u, 0, 0, 1};
+            sprite_calls = 0; text_calls = 0;
+            draw_aligned_native_text_label(abr, &sa);
+            assert(sprite_calls == 0 && text_calls == 3);
+        }
+    }
+#endif
+
+#if CRYSTALJOBS_SEARCH_RENDER_MODE == 1
+    // Set legacy pos*8 presentation for the 594-draw deferred regression check.
+    SearchPresentationConfig legacy_pres = default_presentation_config();
+    legacy_pres.tracking_px = 0;
+    legacy_pres.offset_x_px = 0;
+    legacy_pres.use_glyph_widths = false;
+    publish_search_presentation(legacy_pres);
+
+    // Deferred multi-frame, multi-row Search regression exceeding old 192-slot capacity:
+    // Queue 3 consecutive frames x 66 Souls x 3 glyphs = 594 deferred draws, then verify
+    // EVERY queued sprite* pointer from Frame 1..3 remains intact, immutable, and non-aliasing.
+    uint8_t orig_sprite_copy[0x30], orig_node_copy[0x20], orig_tile_copy[0xE0];
+    std::memcpy(orig_sprite_copy, mock_sprite, sizeof(orig_sprite_copy));
+    std::memcpy(orig_node_copy, mock_node, sizeof(orig_node_copy));
+    std::memcpy(orig_tile_copy, mock_tile, sizeof(orig_tile_copy));
+
+    struct DeferredExpectation {
+        const uint8_t* sprite;
+        char letter;
+        int pos;
+    };
+    static DeferredExpectation deferred_queue[3 * 66 * 3]{};
+    size_t deferred_count = 0;
+    recorded_sprite_count = 0;
+    reset_menu2fon_banks_for_test();
+
+    for (int frame = 0; frame < 3; ++frame) {
+        for (uint8_t j = 1; j <= 22; ++j) {
+            for (uint8_t b = 1; b <= 3; ++b) {
+                sprite_calls = 0; text_calls = 0;
+                const size_t rec_start = recorded_sprite_count;
+                make_row(row_a, 400 + j * 4 + b, marker | b, j);
+                state.decoded(row_a);
+                assert(sprite_abi(reinterpret_cast<void*>(&normal_sprite_hook), row_a));
+                assert(sprite_calls == 3 && text_calls == 0);
+                assert(recorded_sprite_count == rec_start + 3);
+
+                const char* abr = label_for(j, b, false);
+                assert(abr != nullptr && std::strlen(abr) == 3);
+                for (int gi = 0; gi < 3; ++gi) {
+                    deferred_queue[deferred_count++] = {recorded_sprites[rec_start + gi], abr[gi], gi};
+                }
+            }
+        }
+    }
+    assert(deferred_count == 3 * 66 * 3); // 594 > 192
+
+    // Simulate deferred D3D8 consumption AFTER all 3 consecutive frames have been queued.
+    for (size_t idx = 0; idx < deferred_count; ++idx) {
+        const uint8_t* spr = deferred_queue[idx].sprite;
+        assert(spr != nullptr && spr != mock_sprite);
+        const uint8_t* node = *reinterpret_cast<uint8_t* const*>(spr + 0x04);
+        assert(node != nullptr && node != mock_node);
+        const uint8_t* tile = *reinterpret_cast<uint8_t* const*>(node + 0x10);
+        assert(tile != nullptr && tile != mock_tile);
+
+        const MenuGlyph g = menu_glyphs[deferred_queue[idx].letter - 'A'];
+        const int16_t expected_x0 = static_cast<int16_t>(deferred_queue[idx].pos * 8);
+        const int16_t expected_x1 = static_cast<int16_t>(expected_x0 + g.w);
+        int16_t obs_corners[8]{};
+        std::memcpy(obs_corners, tile + 0xC0, sizeof(obs_corners));
+        assert(obs_corners[0] == expected_x0 && obs_corners[1] == expected_x1 &&
+               obs_corners[2] == expected_x0 && obs_corners[3] == expected_x1 &&
+               obs_corners[4] == -1 && obs_corners[5] == -1 &&
+               obs_corners[6] == 9 && obs_corners[7] == 9);
+        float obs_uv0[2]{};
+        std::memcpy(obs_uv0, tile + 0x64, sizeof(obs_uv0));
+        assert(obs_uv0[0] == static_cast<float>(g.u) * (1.0f / 256.0f));
+        assert(obs_uv0[1] == static_cast<float>(g.v) * (1.0f / 256.0f));
+    }
+    // Consecutive frames must reuse the exact same immutable slot pointers (zero churn/overwrite).
+    for (size_t i = 0; i < 66 * 3; ++i) {
+        assert(deferred_queue[i].sprite == deferred_queue[i + 66 * 3].sprite);
+        assert(deferred_queue[i].sprite == deferred_queue[i + 2 * 66 * 3].sprite);
+    }
+    // Verify shared template (*sheet)[1] remained 100% untouched across all 594 draws.
+    assert(std::memcmp(mock_sprite, orig_sprite_copy, sizeof(orig_sprite_copy)) == 0);
+    assert(std::memcmp(mock_node, orig_node_copy, sizeof(orig_node_copy)) == 0);
+    assert(std::memcmp(mock_tile, orig_tile_copy, sizeof(orig_tile_copy)) == 0);
+
+    // Flintlock (COR job 17, branch 1 = "FLT") reproduction + CYyList tail/cursor repointing
+    // + simulated FFXI WAR TLVERTEX [0x50..0xBF] mutations across 25 scrolls/searches.
+    reset_menu2fon_banks_for_test();
+    recorded_sprite_count = 0;
+    make_row(row_a, 650, marker | 1, 17); state.decoded(row_a); // COR branch 1 = FLT
+    const char* flt_abr = label_for(17, 1, false);
+    assert(flt_abr != nullptr && std::strcmp(flt_abr, "FLT") == 0);
+    for (int scroll = 0; scroll < 25; ++scroll) {
+        // Simulate FFXI 0x121110 updating screen Y and diffuse color in WAR's TLVERTEX buffer [0x50..0xBF]
+        const float fake_y = 100.0f + static_cast<float>(scroll * 16);
+        const uint32_t fake_color = 0x80808080u + static_cast<uint32_t>(scroll);
+        std::memcpy(mock_tile + 0x54, &fake_y, sizeof(fake_y));
+        std::memcpy(mock_tile + 0x60, &fake_color, sizeof(fake_color));
+        sprite_calls = 0; text_calls = 0;
+        const size_t rec_start = recorded_sprite_count;
+        assert(sprite_abi(reinterpret_cast<void*>(&normal_sprite_hook), row_a));
+        assert(sprite_calls == 3 && text_calls == 0); // Must NEVER exhaust banks or fall back to native_text!
+        for (int gi = 0; gi < 3; ++gi) {
+            const uint8_t* spr = recorded_sprites[rec_start + gi];
+            const uint8_t* head = *reinterpret_cast<uint8_t* const*>(spr + 0x04);
+            const uint8_t* tail = *reinterpret_cast<uint8_t* const*>(spr + 0x08);
+            const uint8_t* cur  = *reinterpret_cast<uint8_t* const*>(spr + 0x0C);
+            assert(head != mock_node && tail == head && cur == head);
+            const uint8_t* tile = *reinterpret_cast<uint8_t* const*>(head + 0x10);
+            const MenuGlyph g = menu_glyphs[flt_abr[gi] - 'A'];
+            int16_t obs_corners[8]{};
+            std::memcpy(obs_corners, tile + 0xC0, sizeof(obs_corners));
+            assert(obs_corners[0] == static_cast<int16_t>(gi * 8));
+            assert(obs_corners[1] == static_cast<int16_t>(gi * 8 + g.w));
+            assert(obs_corners[2] == static_cast<int16_t>(gi * 8));
+            assert(obs_corners[3] == static_cast<int16_t>(gi * 8 + g.w));
+            assert(obs_corners[4] == -1 && obs_corners[5] == -1 && obs_corners[6] == 9 && obs_corners[7] == 9);
+            assert(obs_corners[1] <= 23); // Fits flush before level digits at +23
+        }
+    }
+    // Confirm only 1 bank was claimed across all 25 TLVERTEX mutations!
+    size_t active_banks = 0;
+    for (size_t bi = 0; bi < kMaxMenu2fonBanks; ++bi) if (g_menu2fon_banks[bi].active) ++active_banks;
+    assert(active_banks == 1);
+    std::memcpy(mock_tile, orig_tile_copy, sizeof(orig_tile_copy));
+
+    // Safe capacity exhaustion test: exhaust all kMaxMenu2fonBanks distinct sheet reloads,
+    // verify the (kMaxMenu2fonBanks + 1)-th reload falls back cleanly to native_text WITHOUT
+    // mutating any previously queued GlyphSlot from generations 0..kMaxMenu2fonBanks-1.
+    reset_menu2fon_banks_for_test();
+    recorded_sprite_count = 0;
+    const uint8_t* bank_sprites[kMaxMenu2fonBanks][3]{};
+    make_row(row_a, 700, marker | 2, 1); state.decoded(row_a); // WAR branch 2 = BRZ
+    const char* war_b2 = label_for(1, 2, false);
+    assert(war_b2 != nullptr);
+    for (size_t gen = 0; gen < kMaxMenu2fonBanks; ++gen) {
+        mock_tile[0x08] = static_cast<uint8_t>(0x10u + gen);
+        sprite_calls = 0; text_calls = 0;
+        const size_t rec_start = recorded_sprite_count;
+        assert(sprite_abi(reinterpret_cast<void*>(&normal_sprite_hook), row_a));
+        assert(sprite_calls == 3 && text_calls == 0);
+        for (int gi = 0; gi < 3; ++gi) {
+            bank_sprites[gen][gi] = recorded_sprites[rec_start + gi];
+        }
+    }
+    // Reload #9 exceeds safe bank capacity: must fall back to native_text, never recycle slots.
+    mock_tile[0x08] = static_cast<uint8_t>(0x10u + kMaxMenu2fonBanks);
+    sprite_calls = 0; text_calls = 0; last_text = nullptr;
+    assert(sprite_abi(reinterpret_cast<void*>(&normal_sprite_hook), row_a));
+    assert(sprite_calls == 0 && text_calls == 1 && last_text != nullptr && std::strcmp(last_text, war_b2) == 0);
+    // Verify all previously queued sprites from generations 0..7 are still 100% intact.
+    for (size_t gen = 0; gen < kMaxMenu2fonBanks; ++gen) {
+        for (int gi = 0; gi < 3; ++gi) {
+            const uint8_t* spr = bank_sprites[gen][gi];
+            const uint8_t* node = *reinterpret_cast<uint8_t* const*>(spr + 0x04);
+            const uint8_t* tile = *reinterpret_cast<uint8_t* const*>(node + 0x10);
+            assert(tile[0x08] == static_cast<uint8_t>(0x10u + gen));
+            const MenuGlyph g = menu_glyphs[war_b2[gi] - 'A'];
+            float obs_uv0[2]{};
+            std::memcpy(obs_uv0, tile + 0x64, sizeof(obs_uv0));
+            assert(obs_uv0[0] == static_cast<float>(g.u) * (1.0f / 256.0f));
+            assert(obs_uv0[1] == static_cast<float>(g.v) * (1.0f / 256.0f));
+        }
+    }
+    // Returning to an already-cached generation (gen 0) still hits its immutable bank.
+    mock_tile[0x08] = 0x10u;
+    sprite_calls = 0; text_calls = 0;
+    assert(sprite_abi(reinterpret_cast<void*>(&normal_sprite_hook), row_a));
+    assert(sprite_calls == 3 && text_calls == 0);
+    std::memcpy(mock_tile, orig_tile_copy, sizeof(orig_tile_copy));
+    publish_search_presentation(default_presentation_config());
+#endif // CRYSTALJOBS_SEARCH_RENDER_MODE == 1
     pname_sheet_slot = nullptr;
 
     selftest_alive = false;
@@ -550,15 +718,15 @@ static void equipment_persona_checks() {
     assert(persona_text_calls == 4 && std::strcmp(last_persona_text, "Kagemusha") == 0);
     ev[3] = 3; state.update(ev, 8, GetTickCount());
     assert(persona_abi(reinterpret_cast<void*>(&persona_job_hook), 0x80808080u));
-    assert(persona_text_calls == 5 && std::strcmp(last_persona_text, "Nightblade") == 0);
+    assert(persona_text_calls == 5 && std::strcmp(last_persona_text, "Fuin") == 0);
 
-    // Other jobs (e.g., BLM Astromancer, RDM Crimson Duelist).
+    // Other jobs (e.g., BLM Goetist, RDM Thornveil).
     mock_main_job = 4; ev[2] = 4; ev[3] = 1; state.update(ev, 8, GetTickCount());
     assert(persona_abi(reinterpret_cast<void*>(&persona_job_hook), 0x80808080u));
-    assert(persona_text_calls == 6 && std::strcmp(last_persona_text, "Astromancer") == 0);
+    assert(persona_text_calls == 6 && std::strcmp(last_persona_text, "Goetist") == 0);
     mock_main_job = 5; ev[2] = 5; ev[3] = 1; state.update(ev, 8, GetTickCount());
     assert(persona_abi(reinterpret_cast<void*>(&persona_job_hook), 0x80808080u));
-    assert(persona_text_calls == 7 && std::strcmp(last_persona_text, "Crimson Duelist") == 0);
+    assert(persona_text_calls == 7 && std::strcmp(last_persona_text, "Thornveil") == 0);
 
     // Fallback to stock sprite on job mismatch, no Soul, explicit revoke, or disabled session.
     mock_main_job = 13; // state.job is still 5
@@ -1151,7 +1319,131 @@ static void weapon_rule_checks() {
     selftest_alive = false;
 }
 
+static void runtime_identity_and_spacing_checks() {
+    // 1. Load real generated plugins/ashita4/data/soul-identities.json and verify all 66 Souls.
+    static char raw_buf[kMaxIdentityFileBytes + 1]{};
+    size_t raw_len = 0;
+    assert(read_bounded_file_w(L"..\\..\\plugins\\ashita4\\data\\soul-identities.json", raw_buf, kMaxIdentityFileBytes, raw_len));
+    static RuntimeIdentityTable t1{};
+    assert(parse_runtime_identity_json(raw_buf, raw_len, t1));
+    assert(t1.active && t1.soul_count == 66 && t1.schema_version == 1);
+    assert(std::strcmp(t1.registry_hash, "cf86aa59ff8d16c6") == 0);
+    publish_runtime_identity_snapshot(t1);
+    assert(std::strcmp(label_for(4, 1, false), "GOE") == 0);
+    assert(std::strcmp(label_for(4, 1, true), "Goetist") == 0);
+    assert(std::strcmp(label_for(13, 3, true), "Fuin") == 0);
+
+    CrystalJobsIdentityDiagnostics idiag{};
+    assert(CrystalJobsGetIdentityDiagnostics(&idiag, sizeof(idiag)) == 0);
+    assert(idiag.source == 1 && idiag.soul_count == 66 && std::strcmp(idiag.active_registry_hash, t1.registry_hash) == 0);
+
+    // 2. Same binary, second valid 66-Soul fixture renaming BLM branch 1 (GOE -> GTZ) without DLL rebuild!
+    static RuntimeIdentityTable t2 = t1;
+    std::snprintf(t2.entries[4][1].abbr, sizeof(t2.entries[4][1].abbr), "GTZ");
+    const uint64_t t2_fnv = detail::compute_table_fnv1a64(t2);
+    static char renamed_json[kMaxIdentityFileBytes]{};
+    int pos = std::snprintf(renamed_json, sizeof(renamed_json),
+        "{\"schemaVersion\":1,\"registryVersion\":\"test-rename\",\"registryHash\":\"1122334455667788\","
+        "\"integrityFnv1a64\":\"%016llx\",\"soulCount\":66,\"souls\":[",
+        static_cast<unsigned long long>(t2_fnv));
+    assert(pos > 0);
+    bool first = true;
+    for (uint8_t j = 1; j <= 22; ++j) {
+        for (uint8_t b = 1; b <= 3; ++b) {
+            const auto& e = t2.entries[j][b];
+            const int n = std::snprintf(renamed_json + pos, sizeof(renamed_json) - static_cast<size_t>(pos),
+                "%s{\"jobId\":%u,\"branch\":%u,\"name\":\"%s\",\"abbr\":\"%s\"}",
+                first ? "" : ",", static_cast<unsigned>(j), static_cast<unsigned>(b), e.name, e.abbr);
+            assert(n > 0);
+            pos += n;
+            first = false;
+        }
+    }
+    pos += std::snprintf(renamed_json + pos, sizeof(renamed_json) - static_cast<size_t>(pos), "]}");
+    static RuntimeIdentityTable parsed_t2{};
+    assert(parse_runtime_identity_json(renamed_json, static_cast<size_t>(pos), parsed_t2));
+    publish_runtime_identity_snapshot(parsed_t2);
+    assert(std::strcmp(label_for(4, 1, false), "GTZ") == 0);
+    assert(CrystalJobsGetIdentityDiagnostics(&idiag, sizeof(idiag)) == 0);
+    assert(idiag.source == 1 && std::strcmp(idiag.active_registry_hash, "1122334455667788") == 0);
+
+    // 3. Reject corrupted / tampered / bad-schema / duplicate / overlong identity payloads & verify safe fallback.
+    static RuntimeIdentityTable bad{};
+    assert(!parse_runtime_identity_json("", 0, bad) && bad.status == IDENTITY_STATUS_FILE_MISSING);
+    const char* bad_schema = "{\"schemaVersion\":99,\"registryHash\":\"0e3278fac7296cb3\",\"integrityFnv1a64\":\"0000000000000000\",\"soulCount\":66,\"souls\":[]}";
+    assert(!parse_runtime_identity_json(bad_schema, std::strlen(bad_schema), bad) && bad.status == IDENTITY_STATUS_BAD_SCHEMA);
+    // Tamper 1 byte in renamed_json integrity hash
+    renamed_json[std::strstr(renamed_json, "integrityFnv1a64") - renamed_json + 19] ^= 1;
+    assert(!parse_runtime_identity_json(renamed_json, static_cast<size_t>(pos), bad) && bad.status == IDENTITY_STATUS_BAD_INTEGRITY);
+
+    clear_runtime_identity_snapshot(IDENTITY_STATUS_BAD_INTEGRITY, "tampered fixture");
+    assert(std::strcmp(label_for(4, 1, false), generated_label_for(4, 1, false)) == 0); // Safe compiled fallback
+    assert(CrystalJobsGetIdentityDiagnostics(&idiag, sizeof(idiag)) == 0);
+    assert(idiag.source == 0 && idiag.status == IDENTITY_STATUS_BAD_INTEGRITY && idiag.warning[0] != '\0');
+
+    // 4. Presentation config parsing, bounds validation, and glyph spacing algorithm.
+    SearchPresentationConfig pres{};
+    size_t pres_len = 0;
+    assert(read_bounded_file_w(L"..\\..\\plugins\\ashita4\\data\\crystaljobs-presentation.json", raw_buf, kMaxPresentationFileBytes, pres_len));
+    assert(parse_presentation_config_json(raw_buf, pres_len, pres));
+    assert(pres.from_file && pres.tracking_px == -1 && pres.offset_x_px == 1 && !pres.use_glyph_widths);
+
+    const char* bad_pres = "{\"schemaVersion\":1,\"searchBadge\":{\"trackingPx\":-9,\"offsetXPx\":0,\"useGlyphWidths\":true}}";
+    SearchPresentationConfig bad_p{};
+    assert(!parse_presentation_config_json(bad_pres, std::strlen(bad_pres), bad_p));
+    assert(!bad_p.from_file && bad_p.tracking_px == -1);
+
+#if CRYSTALJOBS_SEARCH_RENDER_MODE == 1
+    // AST widths: A=7, S=8, T=7. Shipped uniform 7px pitch (tracking=-1, offsetX=1, useGlyphWidths=false) -> {1, 8, 15}, right edge = 22 <= 23.
+    const uint8_t ast_w[3] = {menu_glyphs['A' - 'A'].w, menu_glyphs['S' - 'A'].w, menu_glyphs['T' - 'A'].w};
+    int16_t ast_x[3]{};
+    compute_search_glyph_positions(ast_w, pres, ast_x);
+    assert(ast_x[0] == 1 && ast_x[1] == 8 && ast_x[2] == 15 && (ast_x[2] + ast_w[2]) == 22);
+
+    // Proportional glyph-width mode: tracking=-1, offsetX=0, useGlyphWidths=true -> {0, 6, 13}, right edge = 20 <= 23.
+    SearchPresentationConfig prop = default_presentation_config();
+    prop.tracking_px = -1; prop.offset_x_px = 0; prop.use_glyph_widths = true;
+    compute_search_glyph_positions(ast_w, prop, ast_x);
+    assert(ast_x[0] == 0 && ast_x[1] == 6 && ast_x[2] == 13 && (ast_x[2] + ast_w[2]) == 20);
+
+    // Legacy spacing mode without recompiling: tracking=0, offsetX=0, useGlyphWidths=false -> {0, 8, 16}.
+    SearchPresentationConfig leg = default_presentation_config();
+    leg.tracking_px = 0; leg.offset_x_px = 0; leg.use_glyph_widths = false;
+    compute_search_glyph_positions(ast_w, leg, ast_x);
+    assert(ast_x[0] == 0 && ast_x[1] == 8 && ast_x[2] == 16);
+
+    // Max-width WWW (8,8,8) with max tracking=+2 and max offsetX=+3 still stays <= 24px (badge column).
+    const uint8_t www_w[3] = {8, 8, 8};
+    SearchPresentationConfig wide = default_presentation_config();
+    wide.tracking_px = 2; wide.offset_x_px = 3; wide.use_glyph_widths = true;
+    int16_t www_x[3]{};
+    compute_search_glyph_positions(www_w, wide, www_x);
+    assert(www_x[0] >= kMinGlyphX0 && (www_x[2] + www_w[2]) <= 24);
+
+    // Regression check: H glyph must map to clean vanilla SCH H {118, 214, 7} (not legacy WHM {59, 184, 7}),
+    // and HRB / HEL / HLC must preserve uniform 7px pitch at {1, 8, 15} under production spacing config.
+    const MenuGlyph h_glyph = menu_glyphs['H' - 'A'];
+    assert(h_glyph.u == 118 && h_glyph.v == 214 && h_glyph.w == 7);
+    SearchPresentationConfig prod_pres = default_presentation_config();
+    prod_pres.tracking_px = -1; prod_pres.offset_x_px = 1; prod_pres.use_glyph_widths = false;
+    const char* h_abbrs[3] = {"HRB", "HEL", "HLC"};
+    for (const char* abbr : h_abbrs) {
+        const uint8_t hw[3] = {
+            menu_glyphs[abbr[0] - 'A'].w,
+            menu_glyphs[abbr[1] - 'A'].w,
+            menu_glyphs[abbr[2] - 'A'].w,
+        };
+        int16_t hx[3]{};
+        compute_search_glyph_positions(hw, prod_pres, hx);
+        assert(hx[0] == 1 && hx[1] == 8 && hx[2] == 15 && (hx[2] + hw[2]) <= 23);
+    }
+#endif
+    publish_runtime_identity_snapshot(t1);
+    publish_search_presentation(pres);
+}
+
 int main() {
+    runtime_identity_and_spacing_checks();
     uint8_t event[8] = {1, 1, 1, 2, 100, 0, 0, 0};
     state.update(event, 8, 0xffffff00);
     assert(state.alive(0xffffff10, 100, 1));
@@ -1180,7 +1472,11 @@ int main() {
     selftest_alive = true;
     assert(sprite_abi(reinterpret_cast<void*>(&normal_sprite_hook), row_a));
     assert(sprite_abi(reinterpret_cast<void*>(&master_sprite_hook), row_a));
+#if CRYSTALJOBS_SEARCH_RENDER_MODE == 2
+    assert(text_calls == 6 && sprite_calls == 0 && std::strcmp(last_text, "R") == 0);
+#else
     assert(text_calls == 2 && sprite_calls == 0 && std::strcmp(last_text, "CDR") == 0);
+#endif
     assert(std::strcmp(full_abi(row_a, 1), "Commander") == 0);
     assert(std::strcmp(full_abi(row_a, 2), "Monk") == 0);
     selftest_alive = false;
@@ -1300,6 +1596,10 @@ int main() {
     const auto get_diag = reinterpret_cast<uint32_t(__stdcall*)(CrystalJobsHookDiagnostics*, uint32_t)>(GetProcAddress(dll, "CrystalJobsGetHookDiagnostics"));
     assert(get_diag != nullptr);
     CrystalJobsHookDiagnostics dll_diag{};
+    const auto get_id_diag = reinterpret_cast<uint32_t(__stdcall*)(CrystalJobsIdentityDiagnostics*, uint32_t)>(GetProcAddress(dll, "CrystalJobsGetIdentityDiagnostics"));
+    assert(get_id_diag != nullptr);
+    CrystalJobsIdentityDiagnostics dll_id_diag{};
+    assert(get_id_diag(&dll_id_diag, sizeof(dll_id_diag)) == 0 && dll_id_diag.version == 1 && dll_id_diag.soul_count == 66);
     assert(get_diag(&dll_diag, sizeof(dll_diag)) == 0 && dll_diag.size == 60 && dll_diag.version == 1 &&
            dll_diag.expected_hooks == 24 && dll_diag.total_hooks == 0 && dll_diag.init_stage == CRYSTALJOBS_INIT_NOT_RUN);
     const auto get_vis_st = reinterpret_cast<uint32_t(__stdcall*)(CrystalJobsVisibilityStatus*, uint32_t)>(GetProcAddress(dll, "CrystalJobsGetVisibilityStatus"));

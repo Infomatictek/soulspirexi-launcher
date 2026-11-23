@@ -257,6 +257,8 @@ public sealed class AshitaConfigGenerator
                     trimmed.Equals("/addon unload overlords_soulhud", StringComparison.OrdinalIgnoreCase) ||
                     trimmed.Equals("/addon load soulspire_flintlock", StringComparison.OrdinalIgnoreCase) ||
                     trimmed.Equals("/addon unload soulspire_flintlock", StringComparison.OrdinalIgnoreCase) ||
+                    trimmed.Equals("/addon load soulspire_core", StringComparison.OrdinalIgnoreCase) ||
+                    trimmed.Equals("/addon unload soulspire_core", StringComparison.OrdinalIgnoreCase) ||
                     trimmed.StartsWith("/fps ", StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
@@ -337,6 +339,9 @@ public sealed class AshitaConfigGenerator
         // Soul Actions is client-only and starts hidden; launch it automatically for everyone.
         // Normalize existing script entries above to prevent duplicate loads on repeat launches.
         EnsureLine(lines, "/addon load soulspire_soul_actions", insertAtTop: false);
+
+        // SoulspireXI Core (Phase 1A): modular UI shell and native-styled Main Menu entry.
+        EnsureLine(lines, "/addon load soulspire_core", insertAtTop: false);
 
         if (settings.FpsCap is 30 or 60 or 0)
         {

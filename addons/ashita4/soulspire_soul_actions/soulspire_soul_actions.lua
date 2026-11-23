@@ -496,7 +496,7 @@ ashita.events.register('d3d_present', 'osa_render', function()
     if not state.visible then return end
     local open = { true }
     if imgui.Begin('SoulspireXI Soul Actions', open) then
-        imgui.Text('Soul: ' .. (state.soul or 'Not synchronized'))
+        imgui.Text('Soul: ' .. (soulBridge.displayName(state.soul) or 'Not synchronized'))
         imgui.TextDisabled('Identity: ' .. state.source)
         local ast = nativeActions.readStatus()
         state.lastActionStatus = ast

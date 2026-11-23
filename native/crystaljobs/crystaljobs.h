@@ -185,6 +185,25 @@ typedef struct CrystalJobsHookDiagnostics {
 
 uint32_t CRYSTALJOBS_CALL CrystalJobsGetHookDiagnostics(CrystalJobsHookDiagnostics* diag, uint32_t size);
 
+/* Runtime Soul identity loader & Search badge presentation diagnostics (version 1). */
+typedef struct CrystalJobsIdentityDiagnostics {
+    uint32_t size;
+    uint32_t version;
+    uint32_t source;               /* 0=compiled-fallback, 1=runtime-json */
+    uint32_t status;               /* IdentityLoadStatus */
+    uint32_t schema_version;
+    uint32_t soul_count;
+    int32_t  tracking_px;
+    int32_t  offset_x_px;
+    uint32_t use_glyph_widths;
+    uint32_t presentation_from_file;
+    char     active_registry_hash[24];
+    char     compiled_registry_hash[24];
+    char     warning[128];
+} CrystalJobsIdentityDiagnostics;
+
+uint32_t CRYSTALJOBS_CALL CrystalJobsGetIdentityDiagnostics(CrystalJobsIdentityDiagnostics* diag, uint32_t size);
+
 #ifdef __cplusplus
 }
 #endif

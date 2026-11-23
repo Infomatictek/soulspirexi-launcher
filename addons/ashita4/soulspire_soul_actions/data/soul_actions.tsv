@@ -1,14 +1,7 @@
-# SoulspireXI External Soul Action Definitions
+# SoulspireXI External Soul Action Definitions (AUTO-GENERATED from registry/entities.json)
+# Registry version: 2026.11.22-phase4-complete
 # Format (TSV): soul<TAB>kind<TAB>id<TAB>name<TAB>description[<TAB>icon_id<TAB>icon_id_v2]
-#   soul        : canonical lowercase Soul key (e.g. shinobi, kagemusha, astromancer)
-#   kind        : spell | ability | weaponskill
-#   id          : vanilla FFXI resource ID (spell 0..1023, weaponskill 0..511, ability 512..2047)
-#   name        : Soul-specific display name (max 79 chars)
-#   description : Soul-specific help description (max 180 chars)
-#   icon_id     : optional classic icon ID (0..65534, or 65535 to keep vanilla)
-#   icon_id_v2  : optional HD icon ID (0..65534, or 65535 to keep vanilla)
-#
-# Editing this file and running /soulactions reload updates native menus immediately without rebuilding crystaljobs.dll.
+# Do not edit directly; edit registry/entities.json and run tools/registry_compiler.py --generate
 zealot	spell	28	Dawnfire	Strike one enemy with light. Costs 8% max MP. 6s recast.
 zealot	spell	29	Sunbrand	Burn one enemy with concentrated light. Costs 12% max MP. 8s recast.
 zealot	spell	30	Pillar of Day	Smite one enemy with a pillar of light. Costs 16% max MP. 12s recast.

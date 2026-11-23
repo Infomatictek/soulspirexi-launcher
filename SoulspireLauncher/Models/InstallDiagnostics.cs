@@ -22,4 +22,17 @@ public sealed class InstallDiagnostics
 
     public bool DirectPlayEnabled { get; set; }
     public bool VcRedistX86Present { get; set; }
+
+    // Read-only native crystaljobs.dll diagnostics (Phase 1)
+    public string NativeSelectedChannel { get; set; } = "UNKNOWN";
+    public string NativeExpectedDllSha256 { get; set; } = "UNKNOWN";
+    public string NativeInstalledDllSha256 { get; set; } = "UNKNOWN";
+    public string NativeDllSha256Status { get; set; } = "UNKNOWN";
+    public string NativeDllArchitecture { get; set; } = "UNKNOWN";
+    public string NativeDllArchitectureStatus { get; set; } = "UNKNOWN";
+    public string NativeRegistryCompiledHash { get; set; } = "UNKNOWN";
+    public string NativeHookCount { get; set; } = "UNKNOWN";
+    public string NativeDllFilePath { get; set; } = "UNKNOWN";
+    public string NativeLoadedModuleStatus { get; set; } = "UNKNOWN";
+    public string NativeLoadedModuleDetail { get; set; } = "FFXI / pol.exe not inspected";
 }

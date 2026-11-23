@@ -193,6 +193,26 @@ def main(argv: list[str] | None = None) -> int:
     else:
         manifest.pop("optionalOverlays", None)
 
+    # Embed coordinated registry version/hash and native DLL provenance metadata when present.
+    reg_sync_path = repo_root / "registry_sync.json"
+    dll_state_path = repo_root / "native" / "crystaljobs" / "dll_sync_state.json"
+    if reg_sync_path.is_file():
+        reg_sync = json.loads(reg_sync_path.read_text(encoding="utf-8"))
+        dll_state = json.loads(dll_state_path.read_text(encoding="utf-8")) if dll_state_path.is_file() else {}
+        dll_entry = next(
+            (e for e in entries if e["category"] == "plugin" and str(e["targetPath"]).lower().endswith("crystaljobs.dll")),
+            None,
+        )
+        manifest["registry"] = {
+            "version": str(reg_sync.get("registryVersion") or ""),
+            "hash": str(reg_sync.get("registryHash") or ""),
+            "idLockStatus": str(reg_sync.get("idLockStatus") or ""),
+            "nativeDllCompiledHash": str(dll_state.get("compiledRegistryHash") or ""),
+            "nativeDllSha256": str(dll_entry["sha256"]) if dll_entry else str(dll_state.get("dllSha256") or ""),
+            "nativeDllClientVerified": bool(dll_state.get("clientVerified", False)),
+            "crystalJobsHooks": 24,
+        }
+
     with manifest_path.open("w", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(manifest, indent=2) + "\n")
     opt_count = sum(len(o["files"]) for o in optional_overlays)  # type: ignore[arg-type]

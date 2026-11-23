@@ -15,10 +15,25 @@ public sealed class SyncProgress
     public double Percent { get; init; }
 }
 
+public sealed class ManifestFetchResult
+{
+    public LauncherManifest? Manifest { get; init; }
+    public bool FromRemote { get; init; }
+    public bool UsedBundledFallback { get; init; }
+    public UpdateChannel RequestedChannel { get; init; }
+    public string? RequestedUrl { get; init; }
+    public int? HttpStatusCode { get; init; }
+    public string? ErrorMessage { get; init; }
+}
+
 public sealed class ManifestUpdateService
 {
     public const string StableManifestRelativePath = "manifest.json";
     public const string TestingManifestRelativePath = "channels/testing/manifest.json";
+    public const string TestingRegistry24HookManifestRelativePath = "channels/testing-registry-24hook/manifest.json";
+    public const string TestingSearchLegacyTextManifestRelativePath = "channels/testing-search-legacy-text/manifest.json";
+    public const string TestingSearchAlignedTextManifestRelativePath = "channels/testing-search-aligned-text/manifest.json";
+    public const string TestingRegistry24HookBranch = "feat/runtime-soul-identity-and-spacing";
     public const string InstalledStateFileName = ".soulspire-state.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -34,8 +49,21 @@ public sealed class ManifestUpdateService
         _http = httpClient ?? CreateDefaultHttpClient();
     }
 
-    public static string GetManifestRelativePath(UpdateChannel channel) =>
-        channel == UpdateChannel.Testing ? TestingManifestRelativePath : StableManifestRelativePath;
+    public static string GetManifestRelativePath(UpdateChannel channel) => channel switch
+    {
+        UpdateChannel.Testing => TestingManifestRelativePath,
+        UpdateChannel.TestingRegistry24Hook => TestingRegistry24HookManifestRelativePath,
+        UpdateChannel.TestingSearchLegacyText => TestingSearchLegacyTextManifestRelativePath,
+        UpdateChannel.TestingSearchAlignedText => TestingSearchAlignedTextManifestRelativePath,
+        _ => StableManifestRelativePath
+    };
+
+    public static string GetManifestBranch(LauncherManifest fallback, UpdateChannel channel) =>
+        channel is UpdateChannel.TestingRegistry24Hook
+            or UpdateChannel.TestingSearchLegacyText
+            or UpdateChannel.TestingSearchAlignedText
+            ? TestingRegistry24HookBranch
+            : (string.IsNullOrWhiteSpace(fallback.Repo.Branch) ? "main" : fallback.Repo.Branch.Trim());
 
     public static HttpClient CreateDefaultHttpClient()
     {
@@ -85,23 +113,51 @@ public sealed class ManifestUpdateService
         UpdateChannel channel,
         CancellationToken cancellationToken = default)
     {
-        var manifest = fallback;
-        var fromRemote = false;
+        var result = await FetchManifestDetailedAsync(fallback, localOverride, channel, cancellationToken)
+            .ConfigureAwait(false);
+        if (result.Manifest is not null)
+        {
+            return (result.Manifest, result.FromRemote);
+        }
+
+        throw new InvalidOperationException(
+            result.ErrorMessage ?? $"Could not load remote manifest for channel {channel}.");
+    }
+
+    public async Task<ManifestFetchResult> FetchManifestDetailedAsync(
+        LauncherManifest fallback,
+        LocalServerOverride? localOverride,
+        UpdateChannel channel,
+        CancellationToken cancellationToken = default)
+    {
         var manifestRelativePath = GetManifestRelativePath(channel);
+        var manifestBranch = GetManifestBranch(fallback, channel);
 
         var rawBase = fallback.Repo.RawBaseUrl.TrimEnd('/');
+        if (IsGitHubRawBaseUrl(rawBase) &&
+            !string.IsNullOrWhiteSpace(fallback.Repo.Owner) &&
+            !string.IsNullOrWhiteSpace(fallback.Repo.Name) &&
+            !string.IsNullOrWhiteSpace(manifestBranch))
+        {
+            rawBase = $"https://raw.githubusercontent.com/{fallback.Repo.Owner.Trim()}/{fallback.Repo.Name.Trim()}/{manifestBranch}";
+        }
+
+        string? lastUrl = null;
+        int? lastStatusCode = null;
+        string? lastError = null;
+
         if (!string.IsNullOrWhiteSpace(rawBase))
         {
             string? pinnedRawBase = null;
             if (IsGitHubRawBaseUrl(rawBase) &&
                 !string.IsNullOrWhiteSpace(fallback.Repo.Owner) &&
                 !string.IsNullOrWhiteSpace(fallback.Repo.Name) &&
-                !string.IsNullOrWhiteSpace(fallback.Repo.Branch))
+                !string.IsNullOrWhiteSpace(manifestBranch))
             {
                 var commitSha = await TryResolveBranchCommitShaAsync(
                     fallback.Repo.Owner.Trim(),
                     fallback.Repo.Name.Trim(),
-                    fallback.Repo.Branch.Trim(),
+                    manifestBranch,
                     cancellationToken).ConfigureAwait(false);
                 if (!string.IsNullOrWhiteSpace(commitSha))
                 {
@@ -111,54 +167,260 @@ public sealed class ManifestUpdateService
 
             if (!string.IsNullOrWhiteSpace(pinnedRawBase))
             {
-                var remote = await TryFetchManifestFromUrlAsync($"{pinnedRawBase}/{manifestRelativePath}", cancellationToken)
+                var pinnedUrl = $"{pinnedRawBase}/{manifestRelativePath}";
+                var attempt = await TryFetchManifestFromUrlDetailedAsync(pinnedUrl, cancellationToken)
                     .ConfigureAwait(false);
-                if (IsValidManifestForChannel(remote, channel))
+                lastUrl = pinnedUrl;
+                lastStatusCode = attempt.StatusCode;
+                lastError = attempt.Error;
+
+                if (attempt.Manifest is not null)
                 {
-                    remote!.ResolvedRawBaseUrl = !string.IsNullOrWhiteSpace(remote.Repo.RawBaseUrl) &&
-                                                 !string.Equals(remote.Repo.RawBaseUrl.TrimEnd('/'), rawBase, StringComparison.OrdinalIgnoreCase)
-                        ? remote.Repo.RawBaseUrl.TrimEnd('/')
-                        : pinnedRawBase;
-                    manifest = remote;
-                    fromRemote = true;
+                    if (ValidateManifestForChannel(attempt.Manifest, channel, out var validationError))
+                    {
+                        attempt.Manifest.ResolvedRawBaseUrl =
+                            !string.IsNullOrWhiteSpace(attempt.Manifest.Repo.RawBaseUrl) &&
+                            !string.Equals(attempt.Manifest.Repo.RawBaseUrl.TrimEnd('/'), rawBase, StringComparison.OrdinalIgnoreCase)
+                                ? attempt.Manifest.Repo.RawBaseUrl.TrimEnd('/')
+                                : pinnedRawBase;
+                        ApplyLocalOverride(attempt.Manifest, localOverride);
+                        return new ManifestFetchResult
+                        {
+                            Manifest = attempt.Manifest,
+                            FromRemote = true,
+                            UsedBundledFallback = false,
+                            RequestedChannel = channel,
+                            RequestedUrl = pinnedUrl,
+                            HttpStatusCode = attempt.StatusCode
+                        };
+                    }
+
+                    lastError = validationError;
                 }
             }
 
-            if (!fromRemote)
+            var directUrl = $"{rawBase}/{manifestRelativePath}?t={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
+            var directAttempt = await TryFetchManifestFromUrlDetailedAsync(directUrl, cancellationToken)
+                .ConfigureAwait(false);
+            lastUrl = directUrl;
+            lastStatusCode = directAttempt.StatusCode ?? lastStatusCode;
+            lastError = directAttempt.Error ?? lastError;
+
+            if (directAttempt.Manifest is not null)
             {
-                var url = $"{rawBase}/{manifestRelativePath}?t={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
-                var remote = await TryFetchManifestFromUrlAsync(url, cancellationToken).ConfigureAwait(false);
-                if (IsValidManifestForChannel(remote, channel))
+                if (ValidateManifestForChannel(directAttempt.Manifest, channel, out var validationError))
                 {
-                    remote!.ResolvedRawBaseUrl = !string.IsNullOrWhiteSpace(remote.Repo.RawBaseUrl)
-                        ? remote.Repo.RawBaseUrl.TrimEnd('/')
-                        : rawBase;
-                    manifest = remote;
-                    fromRemote = true;
+                    directAttempt.Manifest.ResolvedRawBaseUrl =
+                        !string.IsNullOrWhiteSpace(directAttempt.Manifest.Repo.RawBaseUrl)
+                            ? directAttempt.Manifest.Repo.RawBaseUrl.TrimEnd('/')
+                            : rawBase;
+                    ApplyLocalOverride(directAttempt.Manifest, localOverride);
+                    return new ManifestFetchResult
+                    {
+                        Manifest = directAttempt.Manifest,
+                        FromRemote = true,
+                        UsedBundledFallback = false,
+                        RequestedChannel = channel,
+                        RequestedUrl = directUrl,
+                        HttpStatusCode = directAttempt.StatusCode
+                    };
                 }
+
+                lastError = validationError;
             }
         }
+        else
+        {
+            lastError = "No remote repository RawBaseUrl configured.";
+        }
 
-        ApplyLocalOverride(manifest, localOverride);
-        return (manifest, fromRemote);
+        // Only Stable may fall back to the bundled Stable manifest.json when offline.
+        // Never display or apply the bundled Stable manifest as though it belongs to Testing or Registry Testing.
+        if (channel == UpdateChannel.Stable)
+        {
+            ApplyLocalOverride(fallback, localOverride);
+            return new ManifestFetchResult
+            {
+                Manifest = fallback,
+                FromRemote = false,
+                UsedBundledFallback = true,
+                RequestedChannel = channel,
+                RequestedUrl = lastUrl,
+                HttpStatusCode = lastStatusCode,
+                ErrorMessage = lastError
+            };
+        }
+
+        var channelLabel = channel switch
+        {
+            UpdateChannel.TestingRegistry24Hook => "Testing B — Registry 24-Hook (Current menu2fon)",
+            UpdateChannel.TestingSearchLegacyText => "Testing A — Search Legacy native_text (4f0fdb3)",
+            UpdateChannel.TestingSearchAlignedText => "Testing C — Search Aligned native_text (Repair)",
+            _ => "Testing (27-Hook)"
+        };
+        var statusDetail = lastStatusCode.HasValue ? $"HTTP {lastStatusCode.Value}: " : string.Empty;
+        var reason = string.IsNullOrWhiteSpace(lastError) ? "Remote manifest could not be retrieved." : lastError;
+        var urlSuffix = string.IsNullOrWhiteSpace(lastUrl) ? string.Empty : $" ({lastUrl})";
+
+        return new ManifestFetchResult
+        {
+            Manifest = null,
+            FromRemote = false,
+            UsedBundledFallback = false,
+            RequestedChannel = channel,
+            RequestedUrl = lastUrl,
+            HttpStatusCode = lastStatusCode,
+            ErrorMessage = $"{channelLabel} manifest unavailable — {statusDetail}{reason}{urlSuffix}. Switch to Stable or another available Testing channel."
+        };
     }
 
-    public static bool IsValidManifestForChannel(LauncherManifest? manifest, UpdateChannel requestedChannel)
+    public static bool IsValidManifestForChannel(LauncherManifest? manifest, UpdateChannel requestedChannel) =>
+        ValidateManifestForChannel(manifest, requestedChannel, out _);
+
+    public static bool ValidateManifestForChannel(
+        LauncherManifest? manifest,
+        UpdateChannel requestedChannel,
+        out string error)
     {
+        error = string.Empty;
         if (manifest is null || manifest.Files.Count == 0)
         {
+            error = "Manifest is empty or contains no file entries.";
             return false;
         }
 
         var declared = (manifest.Channel ?? "stable").Trim();
-        if (requestedChannel == UpdateChannel.Stable &&
-            declared.Equals("testing", StringComparison.OrdinalIgnoreCase))
+        var candidateId = (manifest.CandidateId ?? string.Empty).Trim();
+
+        if (requestedChannel == UpdateChannel.Stable)
         {
-            // Never allow a Testing manifest to be applied to Stable players.
+            if (declared.Equals("testing", StringComparison.OrdinalIgnoreCase))
+            {
+                error = "Refusing Testing manifest on Stable channel.";
+                return false;
+            }
+        }
+        else if (requestedChannel == UpdateChannel.Testing)
+        {
+            if (!declared.Equals("testing", StringComparison.OrdinalIgnoreCase))
+            {
+                error = $"Expected channel 'testing' for Testing channel, but received '{declared}'.";
+                return false;
+            }
+
+            if (candidateId.Equals("registry-24hook", StringComparison.OrdinalIgnoreCase) ||
+                candidateId.Equals("search-legacy-text", StringComparison.OrdinalIgnoreCase) ||
+                candidateId.Equals("search-aligned-text", StringComparison.OrdinalIgnoreCase))
+            {
+                error = "Refusing isolated 24-hook candidate on 27-hook Testing channel.";
+                return false;
+            }
+        }
+        else if (requestedChannel is UpdateChannel.TestingRegistry24Hook
+                 or UpdateChannel.TestingSearchLegacyText
+                 or UpdateChannel.TestingSearchAlignedText)
+        {
+            var expectedCandidateId = requestedChannel switch
+            {
+                UpdateChannel.TestingRegistry24Hook => "registry-24hook",
+                UpdateChannel.TestingSearchLegacyText => "search-legacy-text",
+                UpdateChannel.TestingSearchAlignedText => "search-aligned-text",
+                _ => string.Empty
+            };
+
+            if (!declared.Equals("testing", StringComparison.OrdinalIgnoreCase))
+            {
+                error = $"Expected channel 'testing' for {requestedChannel} channel, but received '{declared}'.";
+                return false;
+            }
+
+            if (!candidateId.Equals(expectedCandidateId, StringComparison.OrdinalIgnoreCase))
+            {
+                error = $"Expected candidateId '{expectedCandidateId}' for {requestedChannel}, but received '{(string.IsNullOrWhiteSpace(candidateId) ? "none" : candidateId)}'.";
+                return false;
+            }
+        }
+
+        if (!ValidateRegistryBundle(manifest, requestedChannel, out var bundleError))
+        {
+            error = bundleError;
             return false;
         }
 
         return true;
+    }
+
+    public static bool ValidateRegistryBundle(
+        LauncherManifest manifest,
+        UpdateChannel requestedChannel,
+        out string error)
+    {
+        error = string.Empty;
+        var reg = manifest.Registry;
+        if (reg is null)
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(reg.Version) && string.IsNullOrWhiteSpace(reg.Hash))
+        {
+            error = "Manifest declares registry.version without a deterministic registry.hash.";
+            return false;
+        }
+
+        var dllEntry = manifest.Files.FirstOrDefault(f =>
+            f.Category.Equals("plugin", StringComparison.OrdinalIgnoreCase) &&
+            f.TargetPath.Replace('\\', '/').EndsWith("crystaljobs.dll", StringComparison.OrdinalIgnoreCase));
+
+        if (dllEntry is not null && !string.IsNullOrWhiteSpace(reg.NativeDllSha256) &&
+            !dllEntry.Sha256.Equals(reg.NativeDllSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            error = $"Manifest registry.nativeDllSha256 ({reg.NativeDllSha256}) does not match crystaljobs.dll entry ({dllEntry.Sha256}).";
+            return false;
+        }
+
+        // Stable channel must never distribute a newly built registry DLL that has not passed Windows client verification.
+        if (requestedChannel == UpdateChannel.Stable &&
+            !string.IsNullOrWhiteSpace(reg.NativeDllCompiledHash) &&
+            !reg.NativeDllCompiledHash.Equals("legacy-pre-registry", StringComparison.OrdinalIgnoreCase) &&
+            !reg.NativeDllClientVerified)
+        {
+            error = "Refusing Stable manifest: crystaljobs.dll is not marked client-verified (nativeDllClientVerified=false).";
+            return false;
+        }
+
+        return true;
+    }
+
+    public static void EnsureTargetFilesWritable(
+        IEnumerable<ManifestFileEntry> pending,
+        LauncherSettings settings)
+    {
+        foreach (var entry in pending)
+        {
+            var destPath = ResolveTargetFilePath(settings, entry);
+            if (!File.Exists(destPath))
+            {
+                continue;
+            }
+
+            try
+            {
+                using var stream = new FileStream(destPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException ex)
+            {
+                throw new IOException(
+                    $"Cannot update {entry.TargetPath} because it is locked by a running process. Close Ashita / FINAL FANTASY XI / PlayOnline and retry. ({ex.Message})",
+                    ex);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                throw new IOException(
+                    $"Cannot update {entry.TargetPath} due to file permissions or active lock. Close Ashita / FINAL FANTASY XI / PlayOnline and retry. ({ex.Message})",
+                    ex);
+            }
+        }
     }
 
     public static bool IsGitHubRawBaseUrl(string rawBaseUrl) =>
@@ -195,18 +457,48 @@ public sealed class ManifestUpdateService
         }
     }
 
-    private async Task<LauncherManifest?> TryFetchManifestFromUrlAsync(string url, CancellationToken cancellationToken)
+    private async Task<(LauncherManifest? Manifest, int? StatusCode, string? Error)> TryFetchManifestFromUrlDetailedAsync(
+        string url,
+        CancellationToken cancellationToken)
     {
         try
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(TimeSpan.FromSeconds(10));
-            var json = await _http.GetStringAsync(url, cts.Token).ConfigureAwait(false);
-            return JsonSerializer.Deserialize<LauncherManifest>(json, JsonOptions);
+            using var response = await _http.GetAsync(url, cts.Token).ConfigureAwait(false);
+            var statusCode = (int)response.StatusCode;
+            if (!response.IsSuccessStatusCode)
+            {
+                var reason = string.IsNullOrWhiteSpace(response.ReasonPhrase)
+                    ? response.StatusCode.ToString()
+                    : response.ReasonPhrase;
+                return (null, statusCode, reason);
+            }
+
+            var json = await response.Content.ReadAsStringAsync(cts.Token).ConfigureAwait(false);
+            var parsed = JsonSerializer.Deserialize<LauncherManifest>(json, JsonOptions);
+            if (parsed is null)
+            {
+                return (null, statusCode, "Remote manifest JSON deserialized to null.");
+            }
+
+            return (parsed, statusCode, null);
         }
-        catch
+        catch (JsonException ex)
         {
-            return null;
+            return (null, null, $"Invalid manifest JSON: {ex.Message}");
+        }
+        catch (TaskCanceledException)
+        {
+            return (null, null, "Request timed out while contacting GitHub.");
+        }
+        catch (HttpRequestException ex)
+        {
+            return (null, ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : null, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return (null, null, ex.Message);
         }
     }
 
@@ -469,6 +761,8 @@ public sealed class ManifestUpdateService
                 : manifest.Channel.Trim().ToLowerInvariant(),
             ManifestVersion = manifest.ManifestVersion ?? string.Empty,
             ServerVersion = manifest.ServerCompatibility?.Version ?? string.Empty,
+            RegistryVersion = manifest.Registry?.Version ?? string.Empty,
+            RegistryHash = manifest.Registry?.Hash ?? string.Empty,
             LastSyncedUtc = DateTimeOffset.UtcNow,
             ManagedFiles = EnumerateActiveFiles(manifest, settings)
                 .Select(e => new InstalledManagedFile
@@ -564,6 +858,14 @@ public sealed class ManifestUpdateService
             progress?.Report(new SyncProgress { Message = "All SoulspireXI client files are up to date.", Percent = 100 });
             return 0;
         }
+
+        if (!ValidateRegistryBundle(manifest, settings.UpdateChannel, out var bundleError))
+        {
+            throw new InvalidDataException(bundleError);
+        }
+
+        // Pre-flight lock check before downloading so locked DLLs/files fail fast with zero partial state.
+        EnsureTargetFilesWritable(pending, settings);
 
         var rawBase = (!string.IsNullOrWhiteSpace(manifest.ResolvedRawBaseUrl)
             ? manifest.ResolvedRawBaseUrl

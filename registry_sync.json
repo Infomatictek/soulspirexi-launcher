@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1.0.0",
+  "registryVersion": "2026.11.22-66-souls-approved",
+  "entitiesVersion": "2026.11.22-phase4-complete",
+  "idLockStatus": "locked",
+  "registryHash": "cf86aa59ff8d16c6",
+  "counts": {
+    "souls": 66,
+    "actions": 160,
+    "weaponSkills": 219,
+    "wsTalents": 1111,
+    "statusEffects": 71,
+    "items": 13
+  },
+  "compatibility": {
+    "presentationMismatchPolicy": "warn-only-backwards-compatible",
+    "gameplayBlockedOnMismatch": false
+  }
+}

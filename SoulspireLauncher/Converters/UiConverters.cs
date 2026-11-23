@@ -41,7 +41,11 @@ public sealed class ChannelToBrushConverter : IValueConverter
     private static readonly Brush TestingBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#8063BC"));
 
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
-        value is UpdateChannel.Testing ? TestingBrush : StableBrush;
+        value is UpdateChannel.Testing
+            or UpdateChannel.TestingRegistry24Hook
+            or UpdateChannel.TestingSearchLegacyText
+            or UpdateChannel.TestingSearchAlignedText
+            ? TestingBrush : StableBrush;
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();
@@ -53,7 +57,46 @@ public sealed class ChannelToBadgeBackgroundConverter : IValueConverter
     private static readonly Brush TestingBg = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#241B3B"));
 
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
-        value is UpdateChannel.Testing ? TestingBg : StableBg;
+        value is UpdateChannel.Testing
+            or UpdateChannel.TestingRegistry24Hook
+            or UpdateChannel.TestingSearchLegacyText
+            or UpdateChannel.TestingSearchAlignedText
+            ? TestingBg : StableBg;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+public sealed class ChannelToLabelConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value switch
+        {
+            UpdateChannel.Stable => "Stable",
+            UpdateChannel.Testing => "Testing (27-Hook Weapon Templates)",
+            UpdateChannel.TestingRegistry24Hook => "Testing B — Registry 24-Hook (Current menu2fon)",
+            UpdateChannel.TestingSearchLegacyText => "Testing A — Search Legacy native_text (4f0fdb3)",
+            UpdateChannel.TestingSearchAlignedText => "Testing C — Search Aligned native_text (Repair)",
+            _ => value?.ToString() ?? string.Empty
+        };
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+public sealed class DiagStatusToBrushConverter : IValueConverter
+{
+    private static readonly Brush PassBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#39CFE5"));
+    private static readonly Brush FailBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F87171"));
+    private static readonly Brush UnknownBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E8BD70"));
+
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        (value as string)?.Trim().ToUpperInvariant() switch
+        {
+            "PASS" => PassBrush,
+            "FAIL" => FailBrush,
+            _ => UnknownBrush
+        };
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();

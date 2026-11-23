@@ -217,11 +217,20 @@ def verify_manifest(repo_root: Path, manifest_path: Path | None = None) -> list[
     declared_channel = str(manifest.get("channel") or "stable").strip().lower()
     expected = expected_client_files(repo_root)
     if declared_channel == "testing":
+        candidate_id = str(manifest.get("candidateId") or "").strip()
+        candidate_prefixes = {
+            "registry-24hook": "channels/testing-registry-24hook/payload/",
+            "search-legacy-text": "channels/testing-search-legacy-text/payload/",
+            "search-aligned-text": "channels/testing-search-aligned-text/payload/",
+        }
+        allowed_testing_prefix = candidate_prefixes.get(candidate_id, "channels/testing/payload/")
         for src, (cat, tgt) in sorted(manifest_sources.items()):
             in_stable = src in expected
-            in_testing = src.startswith("channels/testing/payload/")
+            in_testing = src.startswith(allowed_testing_prefix)
             if not in_stable and not in_testing:
-                errors.append(f"Testing manifest entry points outside Stable or channels/testing/payload roots: {src}")
+                errors.append(
+                    f"Testing manifest entry points outside Stable or {allowed_testing_prefix} roots: {src}"
+                )
     else:
         for src, (cat, tgt) in sorted(expected.items()):
             if src not in manifest_sources:
@@ -374,6 +383,59 @@ def verify_manifest(repo_root: Path, manifest_path: Path | None = None) -> list[
             if ov_id not in seen_overlay_ids:
                 errors.append(f"Optional overlay directory missing from manifest.json optionalOverlays: {ov_id}")
 
+    # Validate coordinated registry metadata consistency when present.
+    reg_meta = manifest.get("registry")
+    reg_sync_path = repo_root / "registry_sync.json"
+    dll_state_path = repo_root / "native" / "crystaljobs" / "dll_sync_state.json"
+    if isinstance(reg_meta, dict):
+        if reg_sync_path.is_file():
+            reg_sync = json.loads(reg_sync_path.read_text(encoding="utf-8"))
+            if reg_meta.get("hash") != reg_sync.get("registryHash"):
+                errors.append(
+                    f"manifest.json registry.hash ({reg_meta.get('hash')!r}) != registry_sync.json ({reg_sync.get('registryHash')!r})"
+                )
+        dll_entry = next(
+            (e for e in manifest.get("files", []) if e.get("category") == "plugin" and str(e.get("targetPath", "")).lower().endswith("crystaljobs.dll")),
+            None,
+        )
+        if dll_entry and reg_meta.get("nativeDllSha256") and reg_meta.get("nativeDllSha256").lower() != str(dll_entry.get("sha256", "")).lower():
+            errors.append(
+                f"manifest.json registry.nativeDllSha256 ({reg_meta.get('nativeDllSha256')}) != crystaljobs.dll sha256 ({dll_entry.get('sha256')})"
+            )
+        if declared_channel == "testing" and str(manifest.get("candidateId") or "").strip() in ("registry-24hook", "search-legacy-text", "search-aligned-text"):
+            prov_path = (manifest_path or (repo_root / "manifest.json")).parent / "crystaljobs-provenance.json"
+            runtime_loader = False
+            if prov_path.is_file():
+                prov_data = json.loads(prov_path.read_text(encoding="utf-8-sig"))
+                runtime_loader = bool(prov_data.get("runtimeIdentityLoader")) and prov_data.get("identitySchemaVersion") == 1
+                if not runtime_loader and reg_meta.get("nativeDllCompiledHash") != prov_data.get("compiledRegistryHash"):
+                    errors.append(
+                        f"testing candidate registry.nativeDllCompiledHash ({reg_meta.get('nativeDllCompiledHash')!r}) != crystaljobs-provenance.json ({prov_data.get('compiledRegistryHash')!r})"
+                    )
+            if reg_sync_path.is_file():
+                reg_sync = json.loads(reg_sync_path.read_text(encoding="utf-8"))
+                if runtime_loader:
+                    ident_path = repo_root / "plugins" / "ashita4" / "data" / "soul-identities.json"
+                    if not ident_path.is_file():
+                        errors.append("runtimeIdentityLoader enabled but plugins/ashita4/data/soul-identities.json is missing")
+                    else:
+                        ident_doc = json.loads(ident_path.read_text(encoding="utf-8"))
+                        if ident_doc.get("schemaVersion") != 1 or ident_doc.get("registryHash") != reg_sync.get("registryHash"):
+                            errors.append(
+                                f"soul-identities.json ({ident_doc.get('registryHash')!r}) != registry_sync.json ({reg_sync.get('registryHash')!r})"
+                            )
+                elif reg_meta.get("nativeDllCompiledHash") != reg_sync.get("registryHash"):
+                    errors.append(
+                        f"testing candidate registry.nativeDllCompiledHash ({reg_meta.get('nativeDllCompiledHash')!r}) != registry_sync.json ({reg_sync.get('registryHash')!r})"
+                    )
+        elif dll_state_path.is_file():
+            dll_state = json.loads(dll_state_path.read_text(encoding="utf-8"))
+            runtime_loader = bool(dll_state.get("runtimeIdentityLoader")) and dll_state.get("identitySchemaVersion") == 1
+            if not runtime_loader and reg_meta.get("nativeDllCompiledHash") != dll_state.get("compiledRegistryHash"):
+                errors.append(
+                    f"manifest.json registry.nativeDllCompiledHash ({reg_meta.get('nativeDllCompiledHash')!r}) != dll_sync_state.json ({dll_state.get('compiledRegistryHash')!r})"
+                )
+
     return errors
 
 
@@ -391,17 +453,29 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Optional explicit path to manifest.json",
     )
+    parser.add_argument(
+        "--strict-stable-dll",
+        action="store_true",
+        help="Fail if Stable manifest's crystaljobs.dll is not compiled against current registryHash and clientVerified=true.",
+    )
     args = parser.parse_args(argv)
 
     repo_root = Path(args.repo).resolve()
     errors = verify_manifest(repo_root, manifest_path=args.manifest)
+    manifest_file = (args.manifest or (repo_root / "manifest.json")).resolve()
+    if args.strict_stable_dll and manifest_file.is_file():
+        m = json.loads(manifest_file.read_text(encoding="utf-8"))
+        reg = m.get("registry") or {}
+        if reg.get("nativeDllCompiledHash") != reg.get("hash") or not reg.get("nativeDllClientVerified"):
+            errors.append(
+                "Strict Stable DLL gate FAILED: crystaljobs.dll must match registry.hash and have nativeDllClientVerified=true before Stable release."
+            )
     if errors:
         print(f"Manifest verification FAILED with {len(errors)} error(s):", file=sys.stderr)
         for err in errors:
             print(f"  - {err}", file=sys.stderr)
         return 1
 
-    manifest_file = (args.manifest or (repo_root / "manifest.json")).resolve()
     manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
     print(f"Manifest verification PASSED ({len(manifest['files'])} files verified, read-only).")
     return 0
