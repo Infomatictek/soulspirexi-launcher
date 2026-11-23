@@ -360,7 +360,7 @@ jobs:
 
   publish-registry-24hook-candidate:
     needs: [verify-manifest, build-crystaljobs, build-and-test]
-    if: github.ref == 'refs/heads/fix/flintlock-search-label-and-dll-diagnostics' && !startsWith(github.event.head_commit.message, 'chore(testing-candidate):')
+    if: github.ref == 'refs/heads/feat/soul-identity-registry-integration' && !startsWith(github.event.head_commit.message, 'chore(testing-candidate):')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -368,7 +368,7 @@ jobs:
       - name: Checkout feature branch
         uses: actions/checkout@v7
         with:
-          ref: fix/flintlock-search-label-and-dll-diagnostics
+          ref: feat/soul-identity-registry-integration
           fetch-depth: 0
 
       - name: Setup Python
@@ -412,14 +412,14 @@ jobs:
             --crystaljobs-dll ci-crystaljobs/plugins/ashita4/crystaljobs.dll \
             --build-info ci-crystaljobs/crystaljobs-build-info.txt \
             --provenance-json ci-crystaljobs/crystaljobs-provenance.json \
-            --repo-branch fix/flintlock-search-label-and-dll-diagnostics \
-            --manifest-version "2.1.2-testing.registry24" \
-            --server-version "feat/centralized-game-registry-phase5c (57dbdbe)" \
-            --server-branch "feat/centralized-game-registry-phase5c" \
-            --server-commit "57dbdbe" \
+            --repo-branch feat/soul-identity-registry-integration \
+            --manifest-version "2.1.4-testing.registry24" \
+            --server-version "feat/soul-identity-registry-integration (6e4311c)" \
+            --server-branch "feat/soul-identity-registry-integration" \
+            --server-commit "6e4311c" \
             --server-image "soulspirexi/server:registry" \
             --crystaljobs-hooks 24 \
-            --notes "24-hook Centralized Registry + Flintlock/TLVERTEX Search glyph bank fix (pending Windows FFXI client verification)"
+            --notes "24-hook Approved 66-Soul Identity Registry (0e3278fac7296cb3) + Flintlock/TLVERTEX Search glyph bank fix + Native DLL Diagnostics (pending Windows FFXI client verification)"
 
           python scripts/verify-launcher-manifest.py --manifest channels/testing-registry-24hook/manifest.json
           git diff --exit-code manifest.json
@@ -435,8 +435,8 @@ jobs:
             echo "No changes to channels/testing-registry-24hook/."
             exit 0
           fi
-          git commit -m "chore(testing-candidate): publish verified registry-24hook crystaljobs.dll (2.1.2-testing.registry24)"
-          git push origin HEAD:fix/flintlock-search-label-and-dll-diagnostics
+          git commit -m "chore(testing-candidate): publish verified registry-24hook crystaljobs.dll (2.1.4-testing.registry24)"
+          git push origin HEAD:feat/soul-identity-registry-integration
 
   publish-release:
     needs: [build-and-test, build-crystaljobs]
