@@ -16,8 +16,10 @@ local MenuBridge = {}
 MenuBridge.__index = MenuBridge
 
 -- Recognized FFXI top-level Main Menu form names (Page 1 & Page 2).
+-- Verified live on retail Windows FFXI: "menu    menuwind" rect=(1792,48,1904,250).
 -- Strictly excludes Equipment (menu    equip), ItemInfo, Magic, Ability, etc.
 MenuBridge.MAIN_MENU_FORMS = {
+    ['menu    menuwind'] = true,
     ['menu    mnu1']     = true,
     ['menu    mnu2']     = true,
     ['menu    menu1']    = true,
@@ -229,12 +231,17 @@ function MenuBridge:main_menu_context()
     local dock_x = scaling.scale_w(left)
     local dock_y = scaling.scale_h(bottom + 4)
     local dock_w = scaling.scale_w(right - left)
-    -- Clamp dock cleanly inside screen if main menu sits near bottom edge
+    local dock_right = scaling.scale_w(right)
+    -- Clamp dock cleanly inside screen if main menu sits near bottom/right edge
     if scaling.scaled and scaling.scaled.h and (dock_y + 38) > scaling.scaled.h then
         dock_y = math.max(8, scaling.scale_h(top) - 40)
     end
-    if scaling.scaled and scaling.scaled.w then
-        dock_x = math.max(4, math.min(dock_x, scaling.scaled.w - math.max(156, dock_w) - 4))
+    local min_w = 156
+    if dock_w < min_w and scaling.scaled and scaling.scaled.w and (dock_x + min_w) > (scaling.scaled.w - 4) then
+        -- Flush right-align with the FFXI Main Menu's right edge (e.g. menuwind at right=1904)
+        dock_x = math.max(4, dock_right - min_w)
+    elseif scaling.scaled and scaling.scaled.w then
+        dock_x = math.max(4, math.min(dock_x, scaling.scaled.w - math.max(min_w, dock_w) - 4))
     end
 
     return {

@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.1.12-testing.core-ui",
+  "manifestVersion": "2.1.13-testing.core-ui",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
     "version": "main / staging (24-hook CrystalJobs)",
     "branch": "main",
-    "commit": "1b89252",
+    "commit": "cbf8abc",
     "dockerImage": "soulspirexi/server:v2026.11.21-weapon-config",
     "crystalJobsHooks": 24,
-    "notes": "Add menu1/menu2/com1/com2/main1/main2 Main Menu form aliases and /soulspire watch diagnostic (Lua-only update, no DLL/launcher rebuild)."
+    "notes": "Match verified retail FFXI Main Menu form menu    menuwind and right-align dock flush with menuwind right edge (Lua-only update)."
   },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
@@ -6010,8 +6010,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/menu_bridge.lua",
       "targetPath": "soulspire_core/core/menu_bridge.lua",
-      "sha256": "63bb0f06ed8d31d61a5846d34d6bd3bd4fa968c34c8758d068be07fc4816b935",
-      "size": 9646
+      "sha256": "4bc57cffe9f37777edb911d2ffb44d2cfa614d4a7aea6470027ad9a7d48bc352",
+      "size": 10102
     },
     {
       "category": "addon",
@@ -6080,8 +6080,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/tests/soulspire_core_test.lua",
       "targetPath": "soulspire_core/tests/soulspire_core_test.lua",
-      "sha256": "0cbcfad8d85bcd49f1c7d0a68b03aab4471dd64f27dddb9a0fe8c2c3f50515f2",
-      "size": 29799
+      "sha256": "0ec6c83ea3d16371f9c05308b582dfc300e0b9d1ff8be4c4f4cab244817b9011",
+      "size": 30613
     },
     {
       "category": "addon",

@@ -203,6 +203,15 @@ local bridge_throw = MenuBridge.new(mem1, scaling, op1, {
 })
 assert_eq(bridge_throw:get_mode(), 'native-styled-fallback', 'Throwing probe degrades gracefully')
 
+-- Verified retail FFXI Main Menu form ("menu    menuwind" at right edge 1792..1904)
+local mem_mw, op_mw = make_mock_memory('menu    menuwind', { left = 1792, top = 48, right = 1904, bottom = 250 }, 1)
+local scaling_1080 = { menu = { w = 1920, h = 1080 }, scaled = { w = 1920, h = 1080 }, scale_w = function(v) return v end, scale_h = function(v) return v end }
+local bridge_mw = MenuBridge.new(mem_mw, scaling_1080, op_mw, { native_probe = function() return false end })
+local ctx_mw = bridge_mw:main_menu_context()
+assert_true(ctx_mw ~= nil and ctx_mw.name == 'menu    menuwind', 'Retail FFXI menu    menuwind must be detected')
+assert_eq(ctx_mw.dock.x, 1748, 'Right-edge menuwind dock flush-aligned to right=1904 (1904-156=1748)')
+assert_eq(ctx_mw.dock.y, 254, 'Dock positioned 4px below menuwind bottom=250')
+
 -- Equipment menu strictly excluded (zero interference with crystalsocket & Hook #24)
 local mem_eq, op_eq = make_mock_memory('menu    equip   ', { left = 20, top = 40, right = 200, bottom = 260 }, 1)
 local bridge_eq = MenuBridge.new(mem_eq, scaling, op_eq, { native_probe = function() return false end })
