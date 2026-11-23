@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.1.4-testing.registry24",
+  "manifestVersion": "2.1.6-testing.registry24",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
     "version": "feat/soul-identity-registry-integration (6e4311c)",
@@ -9,7 +9,7 @@
     "commit": "6e4311c",
     "dockerImage": "soulspirexi/server:registry",
     "crystalJobsHooks": 24,
-    "notes": "24-hook Approved 66-Soul Identity Registry (0e3278fac7296cb3) + Flintlock/TLVERTEX Search glyph bank fix + Native DLL Diagnostics (pending Windows FFXI client verification)"
+    "notes": "Candidate B (Fixed native menu2fon): 24-hook Approved 66-Soul Registry (0e3278fac7296cb3) with SoA quad corners {x0,x1,x0,x1,-1,-1,9,9} at tile+0xC0 + immutable glyph banks"
   },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
@@ -95,7 +95,7 @@
       "category": "plugin",
       "sourcePath": "channels/testing-registry-24hook/payload/plugins/ashita4/crystaljobs.dll",
       "targetPath": "crystaljobs.dll",
-      "sha256": "24d409462d8b23d053968b89c702594fe236bd906f737668fc2c59433d248a9b",
+      "sha256": "7046daaf84c5242ca96b17ba5c846ba261466744bb51e78d0acabb111118f156",
       "size": 130560
     },
     {
@@ -9959,7 +9959,7 @@
     "hash": "0e3278fac7296cb3",
     "idLockStatus": "locked",
     "nativeDllCompiledHash": "0e3278fac7296cb3",
-    "nativeDllSha256": "24d409462d8b23d053968b89c702594fe236bd906f737668fc2c59433d248a9b",
+    "nativeDllSha256": "7046daaf84c5242ca96b17ba5c846ba261466744bb51e78d0acabb111118f156",
     "nativeDllClientVerified": false,
     "crystalJobsHooks": 24
   },
