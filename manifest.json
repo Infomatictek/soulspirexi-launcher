@@ -5981,43 +5981,43 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/assets.lua",
       "targetPath": "soulspire_core/core/assets.lua",
-      "sha256": "65700b2b3029199dbb8229a2af70525e903a90dbfa03fa903776df301b6f138c",
-      "size": 2533
+      "sha256": "62d67d39967f441f0cfc3a20437eddc802dceefbf2e6b9e7ac2402a23bcebc72",
+      "size": 3521
     },
     {
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/focus.lua",
       "targetPath": "soulspire_core/core/focus.lua",
-      "sha256": "311d40932c62841176d8207ec791d76e2188be7ef97506e096fc41e550800a79",
-      "size": 5583
+      "sha256": "e61e3ad830cee90b3cc1380443fc506ab5f140a0de5f7f3ebb47a2dfe3161b6d",
+      "size": 10419
     },
     {
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/foundations.lua",
       "targetPath": "soulspire_core/core/foundations.lua",
-      "sha256": "64d266a1d7106f30f857b242723b68490248eec91b1f386a1babbc2e73a875c2",
-      "size": 33834
+      "sha256": "37ec294d4a09b5e22b04718e54f8947f58c4fb729921a032c5d4317a3c7e0a50",
+      "size": 41985
     },
     {
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/input.lua",
       "targetPath": "soulspire_core/core/input.lua",
-      "sha256": "644d7dba485a115ff5b1354f2826d03e83784bc039b0cd50605a87d847c14e5a",
-      "size": 4437
+      "sha256": "033ea1207a78ff8495fd8a031c88b17be9c941b5f83433de36f25af7aa01ce4a",
+      "size": 17334
     },
     {
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/menu_bridge.lua",
       "targetPath": "soulspire_core/core/menu_bridge.lua",
-      "sha256": "5c7ad26423c8dda045b435b8fbf57a4e4f7ec74fb1b00866f0a8b39dd2d80884",
-      "size": 5943
+      "sha256": "412f692dc5e4d8351c6192452962b70d86fdcdcf7aa984469c0c2b1c00a4ba4d",
+      "size": 9430
     },
     {
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/registry.lua",
       "targetPath": "soulspire_core/core/registry.lua",
-      "sha256": "1826f51dd9d01708913597458cf99aca43d5d22886e93d0bc2fe6abeea3a728e",
-      "size": 5314
+      "sha256": "d2dd27662f6cd3c4881a9ac78f5e28fd29ea0ac2e7716f46ae62525c2410c6a3",
+      "size": 9895
     },
     {
       "category": "addon",
@@ -6037,15 +6037,36 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/ui.lua",
       "targetPath": "soulspire_core/core/ui.lua",
-      "sha256": "645890fcad623d6c342e216a0628cc97c30eebe4a44e3a5660db431c671e9d28",
-      "size": 14613
+      "sha256": "9af022b8a472e37a498a7f02e3f214c489d0ba8a8e38a39069b51d2c368959ee",
+      "size": 28886
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/ashita4/soulspire_core/modules/character.lua",
+      "targetPath": "soulspire_core/modules/character.lua",
+      "sha256": "9c55c3fd5a690e77bc8b8d3a86a555e6e338aac18933acd1780c71437f85440d",
+      "size": 27031
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/ashita4/soulspire_core/modules/soul_talents.lua",
+      "targetPath": "soulspire_core/modules/soul_talents.lua",
+      "sha256": "0ffdb68cbaea39e03438e4d058cd74698a2ca99a3e80377f74360177bc587e22",
+      "size": 21779
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/ashita4/soulspire_core/modules/weapon_mastery.lua",
+      "targetPath": "soulspire_core/modules/weapon_mastery.lua",
+      "sha256": "56209a1437344bc114a6522599d309c1b6e3840de2fdbe60c223e310367362e1",
+      "size": 15550
     },
     {
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/soulspire_core.lua",
       "targetPath": "soulspire_core/soulspire_core.lua",
-      "sha256": "084a6334290da07c5a93215c6829f1d90b1384e883d34fea8d3e6ac52c4100c2",
-      "size": 6725
+      "sha256": "974dd1e8a35e5889ad9b32093f8d93e746e71c6dda3c7854d2440db053db8fc0",
+      "size": 22300
     },
     {
       "category": "addon",
@@ -6058,8 +6079,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/tests/soulspire_core_test.lua",
       "targetPath": "soulspire_core/tests/soulspire_core_test.lua",
-      "sha256": "8ebf6e02a11dc97dc99658aa80f8996c2c11537741c86029a50c3ad62cedc322",
-      "size": 10246
+      "sha256": "0cbcfad8d85bcd49f1c7d0a68b03aab4471dd64f27dddb9a0fe8c2c3f50515f2",
+      "size": 29799
     },
     {
       "category": "addon",
@@ -7682,8 +7703,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_talents/art.lua",
       "targetPath": "soulspire_talents/art.lua",
-      "sha256": "d6beae36da59e5d0d593019f61da15fd77881b3eaef0ee805e90e18ab236121b",
-      "size": 2295
+      "sha256": "6cd23afada6acf9e1206ddedea0e46105b4d4226e5d64f00a7ec4d2fd933bb37",
+      "size": 2676
     },
     {
       "category": "addon",
@@ -7981,17 +8002,24 @@
     },
     {
       "category": "addon",
+      "sourcePath": "addons/ashita4/soulspire_talents/soulforge_state.lua",
+      "targetPath": "soulspire_talents/soulforge_state.lua",
+      "sha256": "a78fde59b1597c479c1f27f9e92d6a4aad98f36a8414f161f4c5392760c61c82",
+      "size": 20978
+    },
+    {
+      "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_talents/soulforge_ui.lua",
       "targetPath": "soulspire_talents/soulforge_ui.lua",
-      "sha256": "280aeed9d9c60cad01d15bb9f99860f152af5a6178b4ebd932a0935b53913071",
-      "size": 62165
+      "sha256": "5ee9ed35c6d627b74e5cb341ad2c7a6503d338b5e9c030c0e72136271fe87255",
+      "size": 80636
     },
     {
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_talents/soulspire_talents.lua",
       "targetPath": "soulspire_talents/soulspire_talents.lua",
-      "sha256": "ecf202c563534857929af5361a6ee867d93ecd5cd48825992761484e39c25d47",
-      "size": 25849
+      "sha256": "401898e83a85daaab1b949df7689cf9d3676954a1a7ddb855979961addcddcc0",
+      "size": 9118
     },
     {
       "category": "addon",
