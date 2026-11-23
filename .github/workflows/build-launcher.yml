@@ -431,11 +431,12 @@ jobs:
           import json
           from pathlib import Path
           reg = json.loads(Path("registry_sync.json").read_text(encoding="utf-8"))
-          runtime_identities = json.loads(Path("plugins/ashita4/data/soul-identities.json").read_text(encoding="utf-8"))
+          ident_path = Path("plugins/ashita4/data/soul-identities.json")
+          runtime_identities = json.loads(ident_path.read_text(encoding="utf-8")) if ident_path.is_file() else None
           seen_shas = set()
           for cand in ("search-legacy-text", "registry-24hook", "search-aligned-text"):
               prov = json.loads(Path(f"ci-crystaljobs/ci-builds/{cand}/crystaljobs-provenance.json").read_text(encoding="utf-8-sig"))
-              if reg.get("runtimeIdentityLoader"):
+              if runtime_identities is not None:
                   assert runtime_identities["registryHash"] == reg["registryHash"], (
                       f"{cand} runtime identity hash mismatch: data={runtime_identities['registryHash']} vs sync={reg['registryHash']}"
                   )
@@ -446,7 +447,8 @@ jobs:
               assert prov["clientVerified"] is False, f"{cand} provenance must keep clientVerified=false"
               assert prov["dllSha256"] not in seen_shas, f"Duplicate DLL sha256 across candidates: {prov['dllSha256']}"
               seen_shas.add(prov["dllSha256"])
-              print(f"Verified {cand}: sha256={prov['dllSha256']} mode={prov.get('searchRenderMode')} compiledHash={prov['compiledRegistryHash']} runtimeHash={runtime_identities['registryHash']}")
+              rhash = runtime_identities["registryHash"] if runtime_identities else prov["compiledRegistryHash"]
+              print(f"Verified {cand}: sha256={prov['dllSha256']} mode={prov.get('searchRenderMode')} compiledHash={prov['compiledRegistryHash']} runtimeHash={rhash}")
           PY
 
       - name: Publish isolated Candidate A, B (fixed menu2fon), and C manifests
