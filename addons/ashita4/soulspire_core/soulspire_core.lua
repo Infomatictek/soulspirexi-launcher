@@ -39,6 +39,8 @@ local sf_state, sf_actions, sf_ui, sf_art
 local weapon_mastery_mod, soul_talents_mod, character_mod, cs_soul_identity
 local ui_font = nil
 local last_session_active = false
+local watch_menus = false
+local last_watched_form = nil
 
 local function log(msg)
     print('[soulspire_core] ' .. tostring(msg))
@@ -448,8 +450,12 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
             log(('  [%d] form="%s" rect=(%d,%d,%d,%d) current=%s'):format(
                 i, win.name, win.left, win.top, win.right, win.bottom, tostring(win.is_current)))
         end
+    elseif sub == 'watch' then
+        watch_menus = not watch_menus
+        last_watched_form = nil
+        log('Menu form watch ' .. (watch_menus and 'ENABLED (open FFXI Main Menu to log its exact form name)' or 'DISABLED'))
     else
-        log('Commands: /soulspire [open [module] | close | scale <n> | bind | bindings | status | debug] (alias: /ss)')
+        log('Commands: /soulspire [open [module] | close | scale <n> | bind | bindings | status | debug | watch] (alias: /ss)')
     end
 end)
 
@@ -580,6 +586,23 @@ ashita.events.register('d3d_present', 'soulspire_core_present', function()
     input:tick(os.clock(), dispatch_action, focus:is_hub_open())
 
     local native = current_native_menu()
+    if watch_menus and menu and menu:is_available() then
+        local snap = menu:inspect_all()
+        local cur_name = snap and snap.current_name or 'none'
+        if cur_name ~= last_watched_form then
+            last_watched_form = cur_name
+            local cur_rect = ''
+            if snap and snap.windows then
+                for _, win in ipairs(snap.windows) do
+                    if win.is_current then
+                        cur_rect = (' rect=(%d,%d,%d,%d)'):format(win.left, win.top, win.right, win.bottom)
+                        break
+                    end
+                end
+            end
+            log(('watch: current="%s"%s matched_main=%s'):format(tostring(cur_name), cur_rect, tostring(native ~= nil)))
+        end
+    end
     local mode = menu and menu:get_mode() or 'standalone'
 
     local pushed = push_core_imgui_style()

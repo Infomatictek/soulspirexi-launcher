@@ -6009,8 +6009,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/menu_bridge.lua",
       "targetPath": "soulspire_core/core/menu_bridge.lua",
-      "sha256": "412f692dc5e4d8351c6192452962b70d86fdcdcf7aa984469c0c2b1c00a4ba4d",
-      "size": 9430
+      "sha256": "63bb0f06ed8d31d61a5846d34d6bd3bd4fa968c34c8758d068be07fc4816b935",
+      "size": 9646
     },
     {
       "category": "addon",
@@ -6065,8 +6065,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/soulspire_core.lua",
       "targetPath": "soulspire_core/soulspire_core.lua",
-      "sha256": "ace380be29d17624b836108e0d2deec85e0a3408c0943395a4577b19d10bdade",
-      "size": 23304
+      "sha256": "9a457e49577faef7f8de38c7f293a4b90304773a66e804685a7edcc3b381c9a8",
+      "size": 24351
     },
     {
       "category": "addon",

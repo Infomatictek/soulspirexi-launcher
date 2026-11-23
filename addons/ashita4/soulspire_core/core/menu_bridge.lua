@@ -15,11 +15,17 @@
 local MenuBridge = {}
 MenuBridge.__index = MenuBridge
 
--- Recognized FFXI top-level Main Menu form names.
+-- Recognized FFXI top-level Main Menu form names (Page 1 & Page 2).
 -- Strictly excludes Equipment (menu    equip), ItemInfo, Magic, Ability, etc.
 MenuBridge.MAIN_MENU_FORMS = {
     ['menu    mnu1']     = true,
     ['menu    mnu2']     = true,
+    ['menu    menu1']    = true,
+    ['menu    menu2']    = true,
+    ['menu    com1']     = true,
+    ['menu    com2']     = true,
+    ['menu    main1']    = true,
+    ['menu    main2']    = true,
     ['menu    mainmenu'] = true,
     ['menu    submain']  = true,
 }
