@@ -46,7 +46,7 @@ class SearchPresentationSpacingTests(unittest.TestCase):
         self.assertEqual(badge["offsetXPx"], 1)
         self.assertFalse(badge["useGlyphWidths"])
 
-        for abbr in ("HEL", "GMB", "BKW", "GOE", "THV", "FLT", "KEN", "IRN", "SEI"):
+        for abbr in ("HEL", "GMB", "BKW", "GOE", "TVL", "FLT", "KEN", "IRN", "SEI", "BSP", "CNL", "PTM", "SNI", "CRY", "CRG", "CFL"):
             xs, right_edge = compute_layout(abbr, badge["trackingPx"], badge["offsetXPx"], badge["useGlyphWidths"])
             self.assertEqual(xs, [1, 8, 15], f"{abbr} must preserve uniform 7px pitch at [1, 8, 15]")
             self.assertEqual(xs[1] - xs[0], 7)

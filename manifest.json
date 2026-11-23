@@ -108,7 +108,7 @@
       "category": "plugin",
       "sourcePath": "plugins/ashita4/data/soul-identities.json",
       "targetPath": "data/soul-identities.json",
-      "sha256": "def9274a2e4f15d164a716c7b58d2ed5234508e73b51e2eafb4db3380820e4bb",
+      "sha256": "f9cf9895360c269624ca5116dc8700e35089406406b348740eb6f919cee75628",
       "size": 6600
     },
     {
@@ -430,7 +430,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/crystalsocket/soul_registry_generated.lua",
       "targetPath": "crystalsocket/soul_registry_generated.lua",
-      "sha256": "e62113f876e6c7ad406ad746481f3e8d03bc3d0f4b23934b99dcd9e0467e1080",
+      "sha256": "8c896d36fe04c18ab12e1683e1be5720c1c39aa25ad906bbf5a1a0686e5978ac",
       "size": 18834
     },
     {
@@ -6016,7 +6016,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/soul_registry_generated.lua",
       "targetPath": "soulspire_core/core/soul_registry_generated.lua",
-      "sha256": "e62113f876e6c7ad406ad746481f3e8d03bc3d0f4b23934b99dcd9e0467e1080",
+      "sha256": "8c896d36fe04c18ab12e1683e1be5720c1c39aa25ad906bbf5a1a0686e5978ac",
       "size": 18834
     },
     {
@@ -6310,7 +6310,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_soul_actions/soul_registry_generated.lua",
       "targetPath": "soulspire_soul_actions/soul_registry_generated.lua",
-      "sha256": "e62113f876e6c7ad406ad746481f3e8d03bc3d0f4b23934b99dcd9e0467e1080",
+      "sha256": "8c896d36fe04c18ab12e1683e1be5720c1c39aa25ad906bbf5a1a0686e5978ac",
       "size": 18834
     },
     {
@@ -7591,7 +7591,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_soulhud/soulhud_roster_generated.lua",
       "targetPath": "soulspire_soulhud/soulhud_roster_generated.lua",
-      "sha256": "dd87fdc1eb661b66badafd8197d7ad2e86559b6bb62a27c7a4cfcf3b38fa738f",
+      "sha256": "ac7497f479592e34f24ee07531041b00bfe222274ffaf4924cb2391e83e45f78",
       "size": 15491
     },
     {
@@ -7955,7 +7955,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_talents/soul_registry_generated.lua",
       "targetPath": "soulspire_talents/soul_registry_generated.lua",
-      "sha256": "e62113f876e6c7ad406ad746481f3e8d03bc3d0f4b23934b99dcd9e0467e1080",
+      "sha256": "8c896d36fe04c18ab12e1683e1be5720c1c39aa25ad906bbf5a1a0686e5978ac",
       "size": 18834
     },
     {
@@ -9969,7 +9969,7 @@
   ],
   "registry": {
     "version": "2026.11.22-66-souls-approved",
-    "hash": "f8abc95e3c88cce7",
+    "hash": "cf86aa59ff8d16c6",
     "idLockStatus": "locked",
     "nativeDllCompiledHash": "legacy-pre-registry",
     "nativeDllSha256": "8e10ac388d13531c1d8e3572af1cab196a96d9d61a43f4ce0194960cfc3133e3",
