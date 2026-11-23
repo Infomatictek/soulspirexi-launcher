@@ -92,6 +92,13 @@
     },
     {
       "category": "plugin",
+      "sourcePath": "plugins/ashita4/data/dat-text-overrides.json",
+      "targetPath": "data/dat-text-overrides.json",
+      "sha256": "b40c50f9c6e89362d90677edeebdb02f34fa71d1ce3fdfd24bbfbd38ba2051ed",
+      "size": 43853
+    },
+    {
+      "category": "plugin",
       "sourcePath": "plugins/ashita4/data/soul-identities.json",
       "targetPath": "data/soul-identities.json",
       "sha256": "f9cf9895360c269624ca5116dc8700e35089406406b348740eb6f919cee75628",

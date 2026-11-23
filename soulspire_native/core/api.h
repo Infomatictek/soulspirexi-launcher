@@ -250,6 +250,23 @@ typedef struct SoulspireNativeInterfaceInfo {
 
 uint32_t SOULSPIRE_NATIVE_CALL SoulspireNativeGetInterfaceInfo(SoulspireNativeInterfaceInfo* info, uint32_t size);
 
+/* Registry-driven DAT Virtualization diagnostics (Phase E/F). */
+typedef struct SoulspireNativeDatVirtStatus {
+    uint32_t size;
+    uint32_t schema_version;
+    uint32_t enabled;
+    uint32_t loaded_from_file;
+    uint32_t override_count;
+    uint32_t generation;
+    uint32_t hits;
+    uint32_t misses;
+    char     registry_hash[24];
+    char     integrity_fnv1a64[20];
+    char     warning[96];
+} SoulspireNativeDatVirtStatus;
+
+uint32_t SOULSPIRE_NATIVE_CALL SoulspireNativeGetDatVirtualizationStatus(SoulspireNativeDatVirtStatus* status, uint32_t size);
+
 #ifdef __cplusplus
 }
 #endif

@@ -1061,6 +1061,91 @@ static void runtime_identity_and_config_checks() {
     publish_search_presentation(cfg);
 }
 
+static void dat_virtualization_poc_checks() {
+    // End-to-end Phase F POC: registry-compiled dat-text-overrides.json drives native FFXI
+    // menu text overrides directly without editing any DAT file or pushing a Lua catalog.
+    action_catalog.clear();
+    dat_virt_mgr.reset();
+    dat_virt_mgr.configure(true);
+
+    // 1. Load the actual registry-compiled plugins/ashita4/data/dat-text-overrides.json
+    std::unique_ptr<char[]> file_buf(new char[kMaxDatTextFileBytes + 1]);
+    size_t file_len = 0;
+    const bool read_ok = read_bounded_file_w(L"..\\plugins\\ashita4\\data\\dat-text-overrides.json",
+        file_buf.get(), kMaxDatTextFileBytes, file_len);
+    assert(read_ok && file_len > 1000);
+    file_buf[file_len] = '\0';
+    assert(dat_virt_mgr.load_from_json(file_buf.get(), file_len, true));
+    assert(dat_virt_mgr.override_count() >= 160u);
+    const uint32_t gen1 = dat_virt_mgr.generation();
+    assert(gen1 >= 1u);
+
+    // 2. Verify Soul-scoped isolation on shared spell ID 28 (WHM Zealot vs WHM Valkyrie vs unsocketed)
+    assert(SoulspireNativeSetActiveSoul(3, 2, 1) == 0); // WHM Zealot
+    const char* zealot_name = resolve_magic_row_name(28);
+    assert(zealot_name != nullptr && std::strcmp(zealot_name, "Dawnfire") == 0);
+    const char* zealot_desc = resolve_magic_desc(28);
+    assert(zealot_desc != nullptr && std::strstr(zealot_desc, "light") != nullptr);
+
+    // Switch Soul -> stale Zealot identity MUST immediately invalidate!
+    assert(SoulspireNativeSetActiveSoul(3, 3, 1) == 0); // WHM Valkyrie
+    const char* valk_name = resolve_magic_row_name(28);
+    assert(valk_name != nullptr && std::strcmp(valk_name, "Vigil Lance") == 0);
+
+    // Unsocket -> MUST fall back cleanly to pristine vanilla DAT (nullptr)
+    assert(SoulspireNativeClearActiveSoul() == 0);
+    assert(resolve_magic_row_name(28) == nullptr);
+
+    // 3. Simulate authoritative registry edit ("Dawnfire" -> "Solaris Flare") and reload WITHOUT touching DATs
+    DatTextOverrideRecord rec{};
+    rec.job = 3; rec.branch = 2; rec.kind = 1; rec.action_id = 28;
+    std::snprintf(rec.name, sizeof(rec.name), "Solaris Flare");
+    std::snprintf(rec.description, sizeof(rec.description), "Unleash a focused solar flare. 6s recast.");
+    std::vector<DatTextOverrideRecord> one{rec};
+    char fnv_hex[20]{};
+    detail_dat_virt::format_hex64(detail_dat_virt::compute_fnv1a64(one), fnv_hex, sizeof(fnv_hex));
+    char updated_json[1024]{};
+    const int n = std::snprintf(
+        updated_json, sizeof(updated_json),
+        "{\"schemaVersion\":1,\"registryHash\":\"deadbeef12345678\",\"integrityFnv1a64\":\"%s\","
+        "\"overrideCount\":1,\"overrides\":[{\"jobId\":3,\"branch\":2,\"kind\":1,\"actionId\":28,"
+        "\"name\":\"Solaris Flare\",\"description\":\"Unleash a focused solar flare. 6s recast.\","
+        "\"iconId\":0,\"iconIdV2\":0}]}",
+        fnv_hex);
+    assert(n > 0);
+    assert(dat_virt_mgr.load_from_json(updated_json, static_cast<size_t>(n), false));
+    assert(dat_virt_mgr.generation() == gen1 + 1u);
+
+    assert(SoulspireNativeSetActiveSoul(3, 2, 1) == 0);
+    const char* updated_name = resolve_magic_row_name(28);
+    assert(updated_name != nullptr && std::strcmp(updated_name, "Solaris Flare") == 0);
+
+    // 4. Tampered JSON (corrupted integrityFnv1a64) MUST fail closed and keep valid snapshot
+    const char* tampered =
+        "{\"schemaVersion\":1,\"registryHash\":\"bad\",\"integrityFnv1a64\":\"0000000000000000\","
+        "\"overrideCount\":1,\"overrides\":[{\"jobId\":3,\"branch\":2,\"kind\":1,\"actionId\":28,"
+        "\"name\":\"Tampered\",\"description\":\"Bad\",\"iconId\":0,\"iconIdV2\":0}]}";
+    assert(!dat_virt_mgr.load_from_json(tampered, std::strlen(tampered), false));
+    const char* still_valid = resolve_magic_row_name(28);
+    assert(still_valid != nullptr && std::strcmp(still_valid, "Solaris Flare") == 0);
+
+    // 5. Disabling DatVirtualization module falls back cleanly to vanilla DAT
+    dat_virt_mgr.configure(false);
+    assert(resolve_magic_row_name(28) == nullptr);
+    dat_virt_mgr.configure(true);
+    assert(std::strcmp(resolve_magic_row_name(28), "Solaris Flare") == 0);
+
+    // 6. Diagnostics export reflects live counts, generation, hits, and hash
+    SoulspireNativeDatVirtStatus dv{};
+    assert(SoulspireNativeGetDatVirtualizationStatus(&dv, sizeof(dv)) == 0);
+    assert(dv.size == sizeof(dv) && dv.schema_version == 1 && dv.enabled == 1);
+    assert(dv.override_count == 1 && dv.generation == gen1 + 1u && dv.hits >= 3u);
+    assert(std::strcmp(dv.registry_hash, "deadbeef12345678") == 0);
+
+    assert(SoulspireNativeClearActiveSoul() == 0);
+    dat_virt_mgr.reset();
+}
+
 int main() {
     runtime_identity_and_config_checks();
 
@@ -1120,6 +1205,7 @@ int main() {
     action_catalog_checks();
     visibility_checks();
     weapon_rule_checks();
+    dat_virtualization_poc_checks();
 
     // Load compiled soulspire_native.dll and verify ALL canonical + compatibility + Ashita v4 exports!
     const HMODULE dll = LoadLibraryA("soulspire_native.dll");
@@ -1132,7 +1218,7 @@ int main() {
         "SoulspireNativeSetActionRowLimit", "SoulspireNativeReplaceVisibility", "SoulspireNativeClearVisibility",
         "SoulspireNativeGetVisibilityStatus", "SoulspireNativeReplaceWeaponRules", "SoulspireNativeClearWeaponRules",
         "SoulspireNativeGetWeaponStatus", "SoulspireNativeGetHookDiagnostics", "SoulspireNativeGetIdentityDiagnostics",
-        "SoulspireNativeGetInterfaceInfo",
+        "SoulspireNativeGetInterfaceInfo", "SoulspireNativeGetDatVirtualizationStatus",
         "CrystalJobsInitialize", "CrystalJobsShutdown", "CrystalJobsGetStatus", "CrystalJobsSetState",
         "CrystalJobsReplaceCatalog", "CrystalJobsUpsertAction", "CrystalJobsClearCatalog",
         "CrystalJobsSetActiveSoul", "CrystalJobsClearActiveSoul", "CrystalJobsGetActionStatus",

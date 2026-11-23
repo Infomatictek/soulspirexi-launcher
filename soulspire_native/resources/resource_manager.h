@@ -1,8 +1,10 @@
 #pragma once
 #include "../core/config.h"
+#include "../dat_virtualization/dat_virtualization.h"
 #include "../diagnostics/diagnostics.h"
 #include "../job_identity/job_identity.h"
 #include <cwchar>
+#include <memory>
 
 namespace soulspire::native {
 
@@ -54,7 +56,8 @@ inline bool build_trusted_data_path(HMODULE mod, const wchar_t* filename, wchar_
     return true;
 }
 
-inline void load_runtime_resources(HMODULE mod, std::atomic<uint32_t>& action_row_limit) noexcept {
+inline void load_runtime_resources(HMODULE mod, std::atomic<uint32_t>& action_row_limit,
+                                   DatVirtualizationManager* dat_virt = nullptr) noexcept {
     static char file_buf[kMaxIdentityFileBytes + 1]{};
 
     // 1. Load soulspire_native.json (preferred) with backwards-compatible fallback to crystaljobs-presentation.json.
@@ -107,6 +110,31 @@ inline void load_runtime_resources(HMODULE mod, std::atomic<uint32_t>& action_ro
             "soul-identities.json missing or unreadable; using compiled fallback");
         log_message(LOG_LEVEL_WARN, "data\\soul-identities.json not found; using compiled fallback (%s)",
             kRegistryHash);
+    }
+
+    // 3. Load registry-compiled DAT text overrides (plugins/data/dat-text-overrides.json).
+    if (dat_virt != nullptr) {
+        dat_virt->configure(module_enabled(SOULSPIRE_NATIVE_MOD_DAT_VIRTUALIZATION));
+        wchar_t dat_path[MAX_PATH]{};
+        size_t dat_len = 0;
+        std::unique_ptr<char[]> dat_buf(new (std::nothrow) char[kMaxDatTextFileBytes + 1]);
+        if (dat_buf && build_trusted_data_path(mod, L"dat-text-overrides.json", dat_path, MAX_PATH) &&
+            read_bounded_file_w(dat_path, dat_buf.get(), kMaxDatTextFileBytes, dat_len)) {
+            dat_buf[dat_len] = '\0';
+            if (dat_virt->load_from_json(dat_buf.get(), dat_len, true)) {
+                log_message(LOG_LEVEL_INFO,
+                    "Loaded runtime dat-text-overrides.json (%u overrides, gen=%u)",
+                    dat_virt->override_count(), dat_virt->generation());
+            } else {
+                SoulspireNativeDatVirtStatus st{};
+                dat_virt->fill_status(st);
+                log_message(LOG_LEVEL_WARN,
+                    "Invalid dat-text-overrides.json (%s); preserving vanilla DAT fallback",
+                    st.warning);
+            }
+        } else {
+            dat_virt->record_missing("data\\dat-text-overrides.json not found; vanilla DAT fallback active");
+        }
     }
 }
 #endif

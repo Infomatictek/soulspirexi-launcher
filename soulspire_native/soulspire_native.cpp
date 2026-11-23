@@ -507,6 +507,13 @@ static const char* resolve_action_string(uint32_t kind, int32_t raw_id, bool wan
         }
     }
     ReleaseSRWLockShared(&action_lock);
+    if (!found && module_enabled(SOULSPIRE_NATIVE_MOD_DAT_VIRTUALIZATION)) {
+        char* dest = want_desc ? tls_action_desc : tls_action_name;
+        const size_t cap = want_desc ? sizeof(tls_action_desc) : sizeof(tls_action_name);
+        if (dat_virt_mgr.lookup_text(job, branch, kind, static_cast<uint16_t>(action_id), want_desc, dest, cap)) {
+            found = true;
+        }
+    }
     if (!found) return nullptr;
     return want_desc ? tls_action_desc : tls_action_name;
 }
@@ -522,6 +529,9 @@ static bool resolve_action_icon(uint32_t kind, uint16_t action_id, uint32_t& ico
         if (rec->icon_id_v2 != 0xFFFFu) { icon_v2 = rec->icon_id_v2; overridden = true; }
     }
     ReleaseSRWLockShared(&action_lock);
+    if (!overridden && module_enabled(SOULSPIRE_NATIVE_MOD_DAT_VIRTUALIZATION)) {
+        overridden = dat_virt_mgr.lookup_icon(job, branch, kind, action_id, icon_v1, icon_v2);
+    }
     return overridden;
 }
 
@@ -1492,7 +1502,7 @@ extern "C" uint32_t __stdcall SoulspireNativeReloadConfig() {
         ReleaseSRWLockExclusive(&lifecycle_lock);
         return 1;
     }
-    load_runtime_resources(mod, action_row_max_chars);
+    load_runtime_resources(mod, action_row_max_chars, &dat_virt_mgr);
     dat_virt_mgr.configure(module_enabled(SOULSPIRE_NATIVE_MOD_DAT_VIRTUALIZATION));
     ReleaseSRWLockExclusive(&lifecycle_lock);
     return 0;
@@ -1577,7 +1587,7 @@ extern "C" uint32_t __stdcall SoulspireNativeInitialize() {
     soul_sub_2h_main_deny_resume = reinterpret_cast<uintptr_t>(base + 0x133DD8);
     soul_sub_2h_main_allow_resume = reinterpret_cast<uintptr_t>(base + 0x133DEB);
 
-    load_runtime_resources(pinned, action_row_max_chars);
+    load_runtime_resources(pinned, action_row_max_chars, &dat_virt_mgr);
     dat_virt_mgr.configure(module_enabled(SOULSPIRE_NATIVE_MOD_DAT_VIRTUALIZATION));
 
     for (uint32_t i = 0; i < kPatchCount; ++i) {
@@ -1967,6 +1977,14 @@ extern "C" uint32_t __stdcall SoulspireNativeGetInterfaceInfo(SoulspireNativeInt
     return 0;
 }
 
+extern "C" uint32_t __stdcall SoulspireNativeGetDatVirtualizationStatus(SoulspireNativeDatVirtStatus* output, uint32_t size) {
+    if (output == nullptr || size < sizeof(*output)) return 1;
+    SoulspireNativeDatVirtStatus st{};
+    dat_virt_mgr.fill_status(st);
+    *output = st;
+    return 0;
+}
+
 static_assert(sizeof(SoulspireNativeStatus) == 68);
 static_assert(sizeof(SoulspireNativeActionEntry) == 288);
 static_assert(sizeof(SoulspireNativeActionStatus) == 64);
@@ -1976,6 +1994,7 @@ static_assert(sizeof(SoulspireNativeWeaponRule) == 24);
 static_assert(sizeof(SoulspireNativeWeaponStatus) == 36);
 static_assert(sizeof(SoulspireNativeHookDiagnostics) == 60);
 static_assert(sizeof(SoulspireNativeInterfaceInfo) == 104);
+static_assert(sizeof(SoulspireNativeDatVirtStatus) == 172);
 
 // ============================================================================
 // Temporary Backwards-Compatible CrystalJobs* Forwarding Exports

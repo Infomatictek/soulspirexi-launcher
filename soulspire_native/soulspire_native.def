@@ -21,6 +21,7 @@ EXPORTS
     SoulspireNativeGetHookDiagnostics=_SoulspireNativeGetHookDiagnostics@8
     SoulspireNativeGetIdentityDiagnostics=_SoulspireNativeGetIdentityDiagnostics@8
     SoulspireNativeGetInterfaceInfo=_SoulspireNativeGetInterfaceInfo@8
+    SoulspireNativeGetDatVirtualizationStatus=_SoulspireNativeGetDatVirtualizationStatus@8
     CrystalJobsInitialize=_CrystalJobsInitialize@0
     CrystalJobsShutdown=_CrystalJobsShutdown@0
     CrystalJobsGetStatus=_CrystalJobsGetStatus@8

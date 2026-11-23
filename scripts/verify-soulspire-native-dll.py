@@ -33,6 +33,7 @@ REQUIRED_CANONICAL_EXPORTS = (
     "SoulspireNativeGetHookDiagnostics",
     "SoulspireNativeGetIdentityDiagnostics",
     "SoulspireNativeGetInterfaceInfo",
+    "SoulspireNativeGetDatVirtualizationStatus",
 )
 
 REQUIRED_COMPAT_EXPORTS = (
