@@ -43,7 +43,7 @@ public sealed class ManifestUpdateService
         {
             Timeout = TimeSpan.FromSeconds(60)
         };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd("SoulspireLauncher/2.1 (+https://github.com/Infomatictek/soulspirexi-launcher)");
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("SoulspireLauncher/2.2 (+https://soulspirexi.com)");
         client.DefaultRequestHeaders.CacheControl = new CacheControlHeaderValue
         {
             NoCache = true,

@@ -366,11 +366,112 @@ jobs:
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Publish GitHub Release on tag
+      - name: Generate SHA256SUMS.txt for release binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd release-assets/publish/SoulspireLauncher && sha256sum SoulspireLauncher.exe) > release-assets/SHA256SUMS.txt
+          (cd release-assets && sha256sum SoulspireLauncher-win-x64.zip) >> release-assets/SHA256SUMS.txt
+          cat release-assets/SHA256SUMS.txt
+
+      - name: Publish GitHub Release on tag (curated player notes, no internal commit dump)
         uses: softprops/action-gh-release@v2
         with:
           prerelease: ${{ steps.channel.outputs.prerelease == 'true' }}
-          generate_release_notes: true
+          generate_release_notes: false
+          body: |
+            ## SoulspireXI Launcher ${{ github.ref_name }}
+
+            Official SoulspireXI Windows client launcher and auto-updater.
+
+            - Download `SoulspireLauncher-win-x64.zip` (recommended) or `SoulspireLauncher.exe`.
+            - Verify integrity against `SHA256SUMS.txt`.
+            - Website: https://soulspirexi.com | Wiki: https://wiki.soulspirexi.com
           files: |
             release-assets/publish/SoulspireLauncher/SoulspireLauncher.exe
             release-assets/SoulspireLauncher-win-x64.zip
+            release-assets/SHA256SUMS.txt
+
+  publish-public-releases:
+    needs: [verify-manifest, build-and-test, build-crystaljobs]
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-testing') && !contains(github.ref_name, '-rc') && !contains(github.ref_name, '-beta')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout private launcher source
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Stage and strictly validate allowlist-only public artifact tree
+        run: |
+          python scripts/stage-public-release.py \
+            --repo-root . \
+            --output-dir dist/public-release-tree \
+            --owner Infomatictek \
+            --release-repo-name soulspirexi-releases \
+            --branch main
+
+      - name: Download launcher build artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: SoulspireLauncher-win-x64
+          path: release-assets
+
+      - name: Generate SHA256SUMS.txt
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd release-assets/publish/SoulspireLauncher && sha256sum SoulspireLauncher.exe) > release-assets/SHA256SUMS.txt
+          (cd release-assets && sha256sum SoulspireLauncher-win-x64.zip) >> release-assets/SHA256SUMS.txt
+
+      - name: Sync allowlisted public artifacts to Infomatictek/soulspirexi-releases
+        id: sync_public
+        env:
+          RELEASES_PUBLISH_TOKEN: ${{ secrets.RELEASES_PUBLISH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${RELEASES_PUBLISH_TOKEN:-}" ]; then
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::RELEASES_PUBLISH_TOKEN not configured; skipping push to Infomatictek/soulspirexi-releases."
+            exit 0
+          fi
+          echo "has_token=true" >> "$GITHUB_OUTPUT"
+          git clone --depth 1 "https://x-access-token:${RELEASES_PUBLISH_TOKEN}@github.com/Infomatictek/soulspirexi-releases.git" /tmp/public-releases
+          find /tmp/public-releases -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf -- {} +
+          cp -a dist/public-release-tree/. /tmp/public-releases/
+          cd /tmp/public-releases
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(release): publish sanitized client assets for ${{ github.ref_name }}"
+            git push origin main
+          fi
+
+      - name: Publish curated GitHub Release to Infomatictek/soulspirexi-releases
+        if: steps.sync_public.outputs.has_token == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: Infomatictek/soulspirexi-releases
+          token: ${{ secrets.RELEASES_PUBLISH_TOKEN }}
+          tag_name: ${{ github.ref_name }}
+          prerelease: false
+          generate_release_notes: false
+          body: |
+            ## SoulspireXI Launcher ${{ github.ref_name }}
+
+            Official SoulspireXI Windows client launcher and auto-updater.
+
+            - Download `SoulspireLauncher-win-x64.zip` (recommended) or `SoulspireLauncher.exe`.
+            - Verify integrity against `SHA256SUMS.txt`.
+            - Website: https://soulspirexi.com | Wiki: https://wiki.soulspirexi.com
+          files: |
+            release-assets/publish/SoulspireLauncher/SoulspireLauncher.exe
+            release-assets/SoulspireLauncher-win-x64.zip
+            release-assets/SHA256SUMS.txt

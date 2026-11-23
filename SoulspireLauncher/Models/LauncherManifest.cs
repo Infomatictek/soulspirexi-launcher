@@ -11,7 +11,7 @@ public sealed class LauncherManifest
     public string Channel { get; set; } = "stable";
 
     [JsonPropertyName("manifestVersion")]
-    public string ManifestVersion { get; set; } = "2.1.0";
+    public string ManifestVersion { get; set; } = "2.2.0";
 
     [JsonPropertyName("minLauncherVersion")]
     public string? MinLauncherVersion { get; set; }
@@ -71,13 +71,13 @@ public sealed class ManifestRepo
     public string Owner { get; set; } = "Infomatictek";
 
     [JsonPropertyName("name")]
-    public string Name { get; set; } = "soulspirexi-launcher";
+    public string Name { get; set; } = "soulspirexi-releases";
 
     [JsonPropertyName("branch")]
     public string Branch { get; set; } = "main";
 
     [JsonPropertyName("rawBaseUrl")]
-    public string RawBaseUrl { get; set; } = "https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/main";
+    public string RawBaseUrl { get; set; } = "https://raw.githubusercontent.com/Infomatictek/soulspirexi-releases/main";
 }
 
 public sealed class ManifestBootstrap

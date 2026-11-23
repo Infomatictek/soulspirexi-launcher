@@ -285,7 +285,7 @@ public sealed class LauncherSelfUpdateService
         var currentVersion = GetCurrentVersion();
         var currentInfoVersion = GetCurrentInformationalVersion();
         var owner = string.IsNullOrWhiteSpace(manifest.Repo.Owner) ? "Infomatictek" : manifest.Repo.Owner.Trim();
-        var repo = string.IsNullOrWhiteSpace(manifest.Repo.Name) ? "soulspirexi-launcher" : manifest.Repo.Name.Trim();
+        var repo = string.IsNullOrWhiteSpace(manifest.Repo.Name) ? "soulspirexi-releases" : manifest.Repo.Name.Trim();
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(TimeSpan.FromSeconds(10));

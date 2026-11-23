@@ -56,8 +56,18 @@ def _validate_rel_posix_path(value: object, field_name: str, entry_idx: int, err
     return value
 
 
+EXCLUDED_ADDON_SUFFIXES = {".md", ".py", ".cs", ".cpp", ".h", ".pdb", ".cmd", ".ps1"}
+
+
+def is_excluded_addon_file(rel_target: str) -> bool:
+    parts = Path(rel_target).parts
+    if any(part.lower() == "tests" for part in parts):
+        return True
+    return Path(rel_target).suffix.lower() in EXCLUDED_ADDON_SUFFIXES
+
+
 def expected_client_files(repo_root: Path) -> dict[str, tuple[str, str]]:
-    """Return mapping of repo-relative sourcePath -> (category, targetPath) for all client payload files."""
+    """Return mapping of repo-relative sourcePath -> (category, targetPath) for all public client payload files."""
     expected: dict[str, tuple[str, str]] = {}
     roots = [
         ("dat", repo_root / "dat-overlay" / "ROM", repo_root / "dat-overlay"),
@@ -73,6 +83,8 @@ def expected_client_files(repo_root: Path) -> dict[str, tuple[str, str]]:
         ):
             rel_source = file_path.relative_to(repo_root).as_posix()
             rel_target = file_path.relative_to(target_base).as_posix()
+            if category == "addon" and is_excluded_addon_file(rel_target):
+                continue
             expected[rel_source] = (category, rel_target)
     return expected
 

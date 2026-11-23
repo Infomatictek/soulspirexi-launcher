@@ -118,11 +118,18 @@ def main(argv: list[str] | None = None) -> int:
             )
 
     addons_root = repo_root / "addons" / "ashita4"
+    excluded_addon_suffixes = {".md", ".py", ".cs", ".cpp", ".h", ".pdb", ".cmd", ".ps1"}
     if addons_root.exists():
         for file_path in sorted(
             (p for p in addons_root.rglob("*") if p.is_file()),
             key=lambda p: p.relative_to(repo_root).as_posix().lower(),
         ):
+            rel_addon_parts = file_path.relative_to(addons_root).parts
+            # Never distribute internal unit tests or developer documentation to player machines
+            if any(part.lower() == "tests" for part in rel_addon_parts):
+                continue
+            if file_path.suffix.lower() in excluded_addon_suffixes:
+                continue
             rel_repo = file_path.relative_to(repo_root).as_posix()
             rel_addon = file_path.relative_to(addons_root).as_posix()
             digest, size = sha256_file(file_path)

@@ -41,12 +41,15 @@ class TestingChannelPublishTests(unittest.TestCase):
             for p in sorted((tmp_repo / "addons" / "ashita4" / "crystalsocket").rglob("*")):
                 if not p.is_file():
                     continue
+                rel_target = p.relative_to(tmp_repo / "addons" / "ashita4").as_posix()
+                if verify_manifest.is_excluded_addon_file(rel_target):
+                    continue
                 digest, size = publish_testing.sha256_file(p)
                 stable_files.append(
                     {
                         "category": "addon",
                         "sourcePath": p.relative_to(tmp_repo).as_posix(),
-                        "targetPath": p.relative_to(tmp_repo / "addons" / "ashita4").as_posix(),
+                        "targetPath": rel_target,
                         "sha256": digest,
                         "size": size,
                     }
