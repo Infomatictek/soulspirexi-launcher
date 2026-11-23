@@ -50,17 +50,32 @@ def build_testing_manifest(
     crystaljobs_hooks: int,
     testing_notes: str,
     repo_branch: str | None = None,
+    candidate: str = "default-27hook",
+    provenance_json: Path | None = None,
 ) -> Path:
     repo_root = repo_root.resolve()
     stable_manifest_path = repo_root / "manifest.json"
     if not stable_manifest_path.is_file():
         raise FileNotFoundError(f"Stable manifest not found: {stable_manifest_path}")
 
-    testing_dir = repo_root / "channels" / "testing"
+    if candidate not in ("default-27hook", "registry-24hook"):
+        raise ValueError(f"Unknown Testing candidate {candidate!r}; expected 'default-27hook' or 'registry-24hook'")
+    if candidate == "default-27hook" and crystaljobs_hooks < 26:
+        raise ValueError(
+            "Refusing to replace the 27-hook Testing channel with a 24-hook DLL. "
+            "Use --candidate registry-24hook to publish an isolated 24-hook registry candidate."
+        )
+
+    testing_dir = (
+        repo_root / "channels" / "testing-registry-24hook"
+        if candidate == "registry-24hook"
+        else repo_root / "channels" / "testing"
+    )
     payload_root = testing_dir / "payload"
     payload_root.mkdir(parents=True, exist_ok=True)
 
-    # Verify and stage the 27-hook crystaljobs.dll when provided
+    # Verify and stage the candidate crystaljobs.dll when provided
+    staged_dll_sha: str | None = None
     if crystaljobs_dll is not None:
         dll_verifier = load_module(repo_root / "scripts" / "verify-crystaljobs-dll.py", "verify_crystaljobs_dll")
         dll_verifier.verify_dll(
@@ -73,11 +88,16 @@ def build_testing_manifest(
         dest_dll.parent.mkdir(parents=True, exist_ok=True)
         if crystaljobs_dll.resolve() != dest_dll.resolve():
             shutil.copy2(crystaljobs_dll, dest_dll)
+        staged_dll_sha, _ = sha256_file(dest_dll)
+
+    if provenance_json is not None and provenance_json.is_file():
+        shutil.copy2(provenance_json, testing_dir / "crystaljobs-provenance.json")
 
     stable_manifest = json.loads(stable_manifest_path.read_text(encoding="utf-8"))
     testing_manifest = copy.deepcopy(stable_manifest)
 
     testing_manifest["channel"] = "testing"
+    testing_manifest["candidateId"] = candidate
     testing_manifest["manifestVersion"] = manifest_version
     testing_manifest["minLauncherVersion"] = "2.1.0"
     testing_manifest["serverCompatibility"] = {
@@ -88,6 +108,20 @@ def build_testing_manifest(
         "crystalJobsHooks": crystaljobs_hooks,
         "notes": testing_notes,
     }
+
+    if candidate == "registry-24hook":
+        reg_sync_path = repo_root / "registry_sync.json"
+        reg_sync = json.loads(reg_sync_path.read_text(encoding="utf-8")) if reg_sync_path.is_file() else {}
+        prov = json.loads(provenance_json.read_text(encoding="utf-8")) if (provenance_json and provenance_json.is_file()) else {}
+        testing_manifest["registry"] = {
+            "version": str(reg_sync.get("registryVersion") or ""),
+            "hash": str(reg_sync.get("registryHash") or ""),
+            "idLockStatus": str(reg_sync.get("idLockStatus") or ""),
+            "nativeDllCompiledHash": str(prov.get("compiledRegistryHash") or reg_sync.get("registryHash") or ""),
+            "nativeDllSha256": staged_dll_sha or str(prov.get("dllSha256") or ""),
+            "nativeDllClientVerified": False,  # Never mark client-verified from CI alone
+            "crystalJobsHooks": 24,
+        }
 
     if repo_branch:
         repo_cfg = testing_manifest.setdefault("repo", {})
@@ -159,6 +193,13 @@ def main(argv: list[str] | None = None) -> int:
         default="Testing channel build pairing verified 27-hook CrystalJobs (DUAL_2H + CanEquipItemInSlot Hook #27) with feat/soul-weapon-templates server.",
     )
     parser.add_argument("--repo-branch", default=None, help="Optional branch override for testing manifest rawBaseUrl")
+    parser.add_argument(
+        "--candidate",
+        choices=("default-27hook", "registry-24hook"),
+        default="default-27hook",
+        help="Explicit Testing candidate track (default-27hook preserves 27-hook channel; registry-24hook isolates 24-hook registry candidate).",
+    )
+    parser.add_argument("--provenance-json", type=Path, default=None, help="Optional crystaljobs-provenance.json to bundle with candidate.")
     args = parser.parse_args(argv)
 
     out_path = build_testing_manifest(
@@ -173,6 +214,8 @@ def main(argv: list[str] | None = None) -> int:
         crystaljobs_hooks=args.crystaljobs_hooks,
         testing_notes=args.notes,
         repo_branch=args.repo_branch,
+        candidate=args.candidate,
+        provenance_json=args.provenance_json,
     )
     print(f"Wrote verified Testing channel manifest: {out_path}")
     return 0

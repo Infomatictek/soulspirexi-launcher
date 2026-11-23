@@ -217,11 +217,19 @@ def verify_manifest(repo_root: Path, manifest_path: Path | None = None) -> list[
     declared_channel = str(manifest.get("channel") or "stable").strip().lower()
     expected = expected_client_files(repo_root)
     if declared_channel == "testing":
+        candidate_id = str(manifest.get("candidateId") or "").strip()
+        allowed_testing_prefix = (
+            "channels/testing-registry-24hook/payload/"
+            if candidate_id == "registry-24hook"
+            else "channels/testing/payload/"
+        )
         for src, (cat, tgt) in sorted(manifest_sources.items()):
             in_stable = src in expected
-            in_testing = src.startswith("channels/testing/payload/")
+            in_testing = src.startswith(allowed_testing_prefix)
             if not in_stable and not in_testing:
-                errors.append(f"Testing manifest entry points outside Stable or channels/testing/payload roots: {src}")
+                errors.append(
+                    f"Testing manifest entry points outside Stable or {allowed_testing_prefix} roots: {src}"
+                )
     else:
         for src, (cat, tgt) in sorted(expected.items()):
             if src not in manifest_sources:

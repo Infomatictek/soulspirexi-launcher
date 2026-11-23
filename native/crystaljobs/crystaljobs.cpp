@@ -179,29 +179,46 @@ static constexpr MenuGlyph menu_glyphs[26] = {
     {13, 173, 8},  // Z
 };
 
+struct GlyphSlot {
+    uint8_t sprite[0x30];
+    uint8_t node[0x20];
+    uint8_t tile[0xE0];
+};
+static constexpr size_t kSearchGlyphPoolSize = 192; // 64 Search rows x 3 glyphs/frame without reuse
+static GlyphSlot g_search_glyph_pool[kSearchGlyphPoolSize]{};
+static size_t g_search_glyph_next = 0;
+
 static bool draw_menu2fon_label(const char* custom, const SpriteArgs* args) noexcept {
     if (pname_sheet_slot == nullptr || original_sprite == 0) return false;
     auto* sheet = static_cast<uint8_t***>(*pname_sheet_slot);
     if (sheet == nullptr || *sheet == nullptr) return false;
-    uint8_t* sprite = (*sheet)[1]; // WAR sprite (1 tile on 'menu    menu2fon')
-    if (sprite == nullptr || *reinterpret_cast<const uint32_t*>(sprite + 0x14) != 1) return false;
-    uint8_t* node = *reinterpret_cast<uint8_t**>(sprite + 0x04);
-    if (node == nullptr) return false;
-    uint8_t* tile = *reinterpret_cast<uint8_t**>(node + 0x10);
-    if (tile == nullptr) return false;
+    const uint8_t* src_sprite = (*sheet)[1]; // WAR sprite (1 tile on 'menu    menu2fon') — read-only template!
+    if (src_sprite == nullptr || *reinterpret_cast<const uint32_t*>(src_sprite + 0x14) != 1) return false;
+    const uint8_t* src_node = *reinterpret_cast<uint8_t* const*>(src_sprite + 0x04);
+    if (src_node == nullptr) return false;
+    const uint8_t* src_tile = *reinterpret_cast<uint8_t* const*>(src_node + 0x10);
+    if (src_tile == nullptr) return false;
     for (int i = 0; i < 3; ++i) {
         if (custom[i] < 'A' || custom[i] > 'Z') return false;
     }
 
-    uint8_t saved_corners[16], saved_uv0[8], saved_uv1[8], saved_uv2[8], saved_uv3[8];
-    std::memcpy(saved_corners, tile + 0xC0, sizeof(saved_corners));
-    std::memcpy(saved_uv0, tile + 0x64, sizeof(saved_uv0));
-    std::memcpy(saved_uv1, tile + 0x80, sizeof(saved_uv1));
-    std::memcpy(saved_uv2, tile + 0x9C, sizeof(saved_uv2));
-    std::memcpy(saved_uv3, tile + 0xB8, sizeof(saved_uv3));
-
+    // Clone into private ring-buffered GlyphSlot structs so FFXI's shared (*sheet)[1]
+    // WAR sprite is NEVER mutated in-place and deferred D3D8 sprite queues retain
+    // independent geometry and UVs for every glyph across every Search row.
     const auto draw_sprite = reinterpret_cast<DrawSprite>(original_sprite);
     for (int i = 0; i < 3; ++i) {
+        GlyphSlot& slot = g_search_glyph_pool[g_search_glyph_next % kSearchGlyphPoolSize];
+        ++g_search_glyph_next;
+
+        std::memcpy(slot.sprite, src_sprite, sizeof(slot.sprite));
+        std::memcpy(slot.node, src_node, sizeof(slot.node));
+        std::memcpy(slot.tile, src_tile, sizeof(slot.tile));
+
+        uint8_t* node_ptr = slot.node;
+        uint8_t* tile_ptr = slot.tile;
+        std::memcpy(slot.sprite + 0x04, &node_ptr, sizeof(node_ptr));
+        std::memcpy(slot.node + 0x10, &tile_ptr, sizeof(tile_ptr));
+
         const MenuGlyph g = menu_glyphs[custom[i] - 'A'];
         const int16_t x0 = static_cast<int16_t>(i * 8);
         const int16_t x1 = static_cast<int16_t>(x0 + g.w);
@@ -211,19 +228,15 @@ static bool draw_menu2fon_label(const char* custom, const SpriteArgs* args) noex
         const float v0 = static_cast<float>(g.v) * (1.0f / 256.0f);
         const float v1 = static_cast<float>(g.v + 10) * (1.0f / 256.0f);
         const float uv0[2] = {u0, v0}, uv1[2] = {u1, v0}, uv2[2] = {u0, v1}, uv3[2] = {u1, v1};
-        std::memcpy(tile + 0xC0, corners, sizeof(corners));
-        std::memcpy(tile + 0x64, uv0, sizeof(uv0));
-        std::memcpy(tile + 0x80, uv1, sizeof(uv1));
-        std::memcpy(tile + 0x9C, uv2, sizeof(uv2));
-        std::memcpy(tile + 0xB8, uv3, sizeof(uv3));
-        draw_sprite(sprite, nullptr, args->x, args->y, args->scale_x, args->scale_y, args->color, args->center, args->first, args->count);
-    }
 
-    std::memcpy(tile + 0xC0, saved_corners, sizeof(saved_corners));
-    std::memcpy(tile + 0x64, saved_uv0, sizeof(saved_uv0));
-    std::memcpy(tile + 0x80, saved_uv1, sizeof(saved_uv1));
-    std::memcpy(tile + 0x9C, saved_uv2, sizeof(saved_uv2));
-    std::memcpy(tile + 0xB8, saved_uv3, sizeof(saved_uv3));
+        std::memcpy(slot.tile + 0xC0, corners, sizeof(corners));
+        std::memcpy(slot.tile + 0x64, uv0, sizeof(uv0));
+        std::memcpy(slot.tile + 0x80, uv1, sizeof(uv1));
+        std::memcpy(slot.tile + 0x9C, uv2, sizeof(uv2));
+        std::memcpy(slot.tile + 0xB8, uv3, sizeof(uv3));
+
+        draw_sprite(slot.sprite, nullptr, args->x, args->y, args->scale_x, args->scale_y, args->color, args->center, args->first, args->count);
+    }
     return true;
 }
 

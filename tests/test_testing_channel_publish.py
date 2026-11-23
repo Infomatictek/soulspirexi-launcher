@@ -105,6 +105,102 @@ class TestingChannelPublishTests(unittest.TestCase):
             self.assertEqual([], verify_manifest.verify_manifest(tmp_repo, manifest_path=stable_path))
             self.assertEqual([], verify_manifest.verify_manifest(tmp_repo, manifest_path=out_path))
 
+    def test_registry_24hook_candidate_is_isolated_and_cannot_overwrite_27hook_testing(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="soulspire_reg24_cand_") as tmp:
+            tmp_repo = Path(tmp)
+            shutil.copytree(REPO_ROOT / "scripts", tmp_repo / "scripts")
+            shutil.copy2(REPO_ROOT / "registry_sync.json", tmp_repo / "registry_sync.json")
+            (tmp_repo / "plugins" / "ashita4").mkdir(parents=True, exist_ok=True)
+            dummy_old_dll = tmp_repo / "plugins" / "ashita4" / "crystaljobs.dll"
+            dummy_old_dll.write_bytes(b"OLD-STABLE-DLL")
+            import hashlib
+            old_sha = hashlib.sha256(b"OLD-STABLE-DLL").hexdigest()
+            stable_manifest = {
+                "schemaVersion": 1,
+                "channel": "stable",
+                "manifestVersion": "2.1.0",
+                "serverName": "SoulspireXI",
+                "defaultHost": "play.soulspirexi.com",
+                "ports": {"lobby": 54231, "auth": 54001, "search": 54002},
+                "useHairpin": True,
+                "repo": {"owner": "Infomatictek", "name": "soulspirexi-launcher", "branch": "main", "rawBaseUrl": "https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/main"},
+                "bootstrap": {},
+                "files": [
+                    {
+                        "sourcePath": "plugins/ashita4/crystaljobs.dll",
+                        "targetPath": "crystaljobs.dll",
+                        "sha256": old_sha,
+                        "size": len(b"OLD-STABLE-DLL"),
+                        "category": "plugin",
+                        "required": True,
+                    }
+                ],
+            }
+            (tmp_repo / "manifest.json").write_text(json.dumps(stable_manifest, indent=2) + "\n", encoding="utf-8")
+
+            # Attempting to publish 24-hook DLL into default-27hook channel MUST fail
+            with self.assertRaises(ValueError):
+                publish_testing.build_testing_manifest(
+                    tmp_repo,
+                    crystaljobs_dll=None,
+                    build_info=None,
+                    manifest_version="2.1.0-testing.24",
+                    server_version="feat/centralized-game-registry-phase5c",
+                    server_branch="feat/centralized-game-registry-phase5c",
+                    server_commit="57dbdbe",
+                    server_image="soulspirexi/server:registry",
+                    crystaljobs_hooks=24,
+                    testing_notes="Should be rejected",
+                    candidate="default-27hook",
+                )
+
+            # Publishing via explicit --candidate registry-24hook succeeds in its own isolated path
+            real_dll = REPO_ROOT / "plugins" / "ashita4" / "crystaljobs.dll"
+            new_dll = tmp_repo / "ci_crystaljobs.dll"
+            shutil.copy2(real_dll, new_dll)
+            real_sha = hashlib.sha256(new_dll.read_bytes()).hexdigest()
+            prov = tmp_repo / "crystaljobs-provenance.json"
+            prov.write_text(
+                json.dumps(
+                    {
+                        "dllSha256": real_sha,
+                        "compiledRegistryHash": "de6314e97385e328",
+                        "clientVerified": False,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            out = publish_testing.build_testing_manifest(
+                tmp_repo,
+                crystaljobs_dll=new_dll,
+                build_info=None,
+                manifest_version="2.1.0-testing.registry24",
+                server_version="feat/centralized-game-registry-phase5c",
+                server_branch="feat/centralized-game-registry-phase5c",
+                server_commit="57dbdbe",
+                server_image="soulspirexi/server:registry",
+                crystaljobs_hooks=24,
+                testing_notes="24-hook registry candidate for Windows client Search label verification",
+                candidate="registry-24hook",
+                provenance_json=prov,
+            )
+            self.assertEqual(out, tmp_repo / "channels" / "testing-registry-24hook" / "manifest.json")
+            cand = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(cand["channel"], "testing")
+            self.assertEqual(cand["candidateId"], "registry-24hook")
+            self.assertEqual(cand["registry"]["crystalJobsHooks"], 24)
+            self.assertFalse(cand["registry"]["nativeDllClientVerified"])
+            self.assertEqual(cand["registry"]["nativeDllCompiledHash"], "de6314e97385e328")
+            self.assertEqual(cand["registry"]["nativeDllSha256"], real_sha)
+            self.assertTrue((tmp_repo / "channels" / "testing-registry-24hook" / "crystaljobs-provenance.json").is_file())
+            self.assertEqual(
+                cand["files"][0]["sourcePath"],
+                "channels/testing-registry-24hook/payload/plugins/ashita4/crystaljobs.dll",
+            )
+            self.assertEqual(cand["files"][0]["sha256"], real_sha)
+            self.assertFalse((tmp_repo / "channels" / "testing" / "manifest.json").exists())
+            self.assertEqual([], verify_manifest.verify_manifest(tmp_repo, manifest_path=out))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -449,11 +449,51 @@ static void multi_job_checks() {
     pname_sheet_slot = &sheet_obj;
 
     sprite_calls = 0; text_calls = 0;
+    g_search_glyph_next = 0;
     make_row(row_a, 320, marker | 2, 1); state.decoded(row_a); // WAR branch 2 = BRZ
     assert(sprite_abi(reinterpret_cast<void*>(&normal_sprite_hook), row_a));
     assert(sprite_calls == 3 && text_calls == 0);
+    // Shared WAR template tile must NEVER be mutated in-place.
     assert(std::memcmp(mock_tile + 0xC0, war_corners, sizeof(war_corners)) == 0);
     assert(std::memcmp(mock_tile + 0x64, war_uv, sizeof(war_uv)) == 0);
+
+    // Deferred multi-row Search regression: verify all 66 Souls render via private GlyphSlot
+    // entries with intact independent UVs & corners and zero mutation of (*sheet)[1].
+    uint8_t orig_sprite_copy[0x30], orig_node_copy[0x20], orig_tile_copy[0xE0];
+    std::memcpy(orig_sprite_copy, mock_sprite, sizeof(orig_sprite_copy));
+    std::memcpy(orig_node_copy, mock_node, sizeof(orig_node_copy));
+    std::memcpy(orig_tile_copy, mock_tile, sizeof(orig_tile_copy));
+
+    g_search_glyph_next = 0;
+    for (uint8_t j = 1; j <= 22; ++j) {
+        for (uint8_t b = 1; b <= 3; ++b) {
+            sprite_calls = 0; text_calls = 0;
+            const size_t start_slot = g_search_glyph_next;
+            make_row(row_a, 400 + j * 4 + b, marker | b, j);
+            state.decoded(row_a);
+            assert(sprite_abi(reinterpret_cast<void*>(&normal_sprite_hook), row_a));
+            assert(sprite_calls == 3 && text_calls == 0);
+
+            const char* abr = label_for(j, b, false);
+            assert(abr != nullptr && std::strlen(abr) == 3);
+            for (int gi = 0; gi < 3; ++gi) {
+                const GlyphSlot& slot = g_search_glyph_pool[(start_slot + gi) % kSearchGlyphPoolSize];
+                const MenuGlyph g = menu_glyphs[abr[gi] - 'A'];
+                const int16_t expected_x0 = static_cast<int16_t>(gi * 8);
+                int16_t obs_corners[8]{};
+                std::memcpy(obs_corners, slot.tile + 0xC0, sizeof(obs_corners));
+                assert(obs_corners[0] == expected_x0 && obs_corners[2] == static_cast<int16_t>(expected_x0 + g.w));
+                float obs_uv0[2]{};
+                std::memcpy(obs_uv0, slot.tile + 0x64, sizeof(obs_uv0));
+                assert(obs_uv0[0] == static_cast<float>(g.u) * (1.0f / 256.0f));
+                assert(obs_uv0[1] == static_cast<float>(g.v) * (1.0f / 256.0f));
+            }
+        }
+    }
+    // Verify shared template (*sheet)[1] remained 100% untouched across all 66 x 3 = 198 draws.
+    assert(std::memcmp(mock_sprite, orig_sprite_copy, sizeof(orig_sprite_copy)) == 0);
+    assert(std::memcmp(mock_node, orig_node_copy, sizeof(orig_node_copy)) == 0);
+    assert(std::memcmp(mock_tile, orig_tile_copy, sizeof(orig_tile_copy)) == 0);
     pname_sheet_slot = nullptr;
 
     selftest_alive = false;
