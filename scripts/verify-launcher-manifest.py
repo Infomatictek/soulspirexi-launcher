@@ -374,6 +374,32 @@ def verify_manifest(repo_root: Path, manifest_path: Path | None = None) -> list[
             if ov_id not in seen_overlay_ids:
                 errors.append(f"Optional overlay directory missing from manifest.json optionalOverlays: {ov_id}")
 
+    # Validate coordinated registry metadata consistency when present.
+    reg_meta = manifest.get("registry")
+    reg_sync_path = repo_root / "registry_sync.json"
+    dll_state_path = repo_root / "native" / "crystaljobs" / "dll_sync_state.json"
+    if isinstance(reg_meta, dict):
+        if reg_sync_path.is_file():
+            reg_sync = json.loads(reg_sync_path.read_text(encoding="utf-8"))
+            if reg_meta.get("hash") != reg_sync.get("registryHash"):
+                errors.append(
+                    f"manifest.json registry.hash ({reg_meta.get('hash')!r}) != registry_sync.json ({reg_sync.get('registryHash')!r})"
+                )
+        dll_entry = next(
+            (e for e in manifest.get("files", []) if e.get("category") == "plugin" and str(e.get("targetPath", "")).lower().endswith("crystaljobs.dll")),
+            None,
+        )
+        if dll_entry and reg_meta.get("nativeDllSha256") and reg_meta.get("nativeDllSha256").lower() != str(dll_entry.get("sha256", "")).lower():
+            errors.append(
+                f"manifest.json registry.nativeDllSha256 ({reg_meta.get('nativeDllSha256')}) != crystaljobs.dll sha256 ({dll_entry.get('sha256')})"
+            )
+        if dll_state_path.is_file():
+            dll_state = json.loads(dll_state_path.read_text(encoding="utf-8"))
+            if reg_meta.get("nativeDllCompiledHash") != dll_state.get("compiledRegistryHash"):
+                errors.append(
+                    f"manifest.json registry.nativeDllCompiledHash ({reg_meta.get('nativeDllCompiledHash')!r}) != dll_sync_state.json ({dll_state.get('compiledRegistryHash')!r})"
+                )
+
     return errors
 
 
@@ -391,17 +417,29 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Optional explicit path to manifest.json",
     )
+    parser.add_argument(
+        "--strict-stable-dll",
+        action="store_true",
+        help="Fail if Stable manifest's crystaljobs.dll is not compiled against current registryHash and clientVerified=true.",
+    )
     args = parser.parse_args(argv)
 
     repo_root = Path(args.repo).resolve()
     errors = verify_manifest(repo_root, manifest_path=args.manifest)
+    manifest_file = (args.manifest or (repo_root / "manifest.json")).resolve()
+    if args.strict_stable_dll and manifest_file.is_file():
+        m = json.loads(manifest_file.read_text(encoding="utf-8"))
+        reg = m.get("registry") or {}
+        if reg.get("nativeDllCompiledHash") != reg.get("hash") or not reg.get("nativeDllClientVerified"):
+            errors.append(
+                "Strict Stable DLL gate FAILED: crystaljobs.dll must match registry.hash and have nativeDllClientVerified=true before Stable release."
+            )
     if errors:
         print(f"Manifest verification FAILED with {len(errors)} error(s):", file=sys.stderr)
         for err in errors:
             print(f"  - {err}", file=sys.stderr)
         return 1
 
-    manifest_file = (args.manifest or (repo_root / "manifest.json")).resolve()
     manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
     print(f"Manifest verification PASSED ({len(manifest['files'])} files verified, read-only).")
     return 0

@@ -300,4 +300,66 @@ public sealed class ManagedUpdateAndChannelTests
         Assert.False(ManifestUpdateService.IsProtectedPlayerConfigPath("plugin", "crystaljobs.dll"));
         Assert.False(ManifestUpdateService.IsProtectedPlayerConfigPath("addon", "crystalsocket/weapon_config.lua"));
     }
+
+    [Fact]
+    public void RegistryBundleValidation_BlocksUnverifiedStableDllAndMismatchedDllSha()
+    {
+        var dllSha = new string('a', 64);
+        var unverifiedStable = new LauncherManifest
+        {
+            Channel = "stable",
+            Registry = new ManifestRegistryMetadata
+            {
+                Version = "2026.11.22-phase2-locked",
+                Hash = "de6314e97385e328",
+                NativeDllCompiledHash = "de6314e97385e328",
+                NativeDllSha256 = dllSha,
+                NativeDllClientVerified = false,
+                CrystalJobsHooks = 24
+            },
+            Files = [new ManifestFileEntry { Category = "plugin", SourcePath = "plugins/ashita4/crystaljobs.dll", TargetPath = "crystaljobs.dll", Sha256 = dllSha }]
+        };
+
+        // Stable must reject unverified new registry DLL; Testing may install it for validation.
+        Assert.False(ManifestUpdateService.IsValidManifestForChannel(unverifiedStable, UpdateChannel.Stable));
+        Assert.True(ManifestUpdateService.ValidateRegistryBundle(unverifiedStable, UpdateChannel.Testing, out _));
+
+        // Once client-verified, Stable accepts it.
+        unverifiedStable.Registry.NativeDllClientVerified = true;
+        Assert.True(ManifestUpdateService.IsValidManifestForChannel(unverifiedStable, UpdateChannel.Stable));
+
+        // Mismatched DLL SHA-256 must always be rejected on both channels.
+        unverifiedStable.Registry.NativeDllSha256 = new string('b', 64);
+        Assert.False(ManifestUpdateService.ValidateRegistryBundle(unverifiedStable, UpdateChannel.Stable, out _));
+        Assert.False(ManifestUpdateService.ValidateRegistryBundle(unverifiedStable, UpdateChannel.Testing, out _));
+    }
+
+    [Fact]
+    public void PreFlightLockCheck_RejectsLockedDllWithoutModifyingExistingFiles()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"soulspire_locktest_{Guid.NewGuid():N}");
+        try
+        {
+            var ashitaDir = Path.Combine(tempRoot, "Ashita");
+            var pluginDir = Path.Combine(ashitaDir, "plugins");
+            Directory.CreateDirectory(pluginDir);
+            var dllPath = Path.Combine(pluginDir, "crystaljobs.dll");
+            File.WriteAllText(dllPath, "OLD_DLL_CONTENT");
+
+            var settings = new LauncherSettings { AshitaPath = ashitaDir };
+            var pending = new[]
+            {
+                new ManifestFileEntry { Category = "plugin", TargetPath = "crystaljobs.dll", Sha256 = new string('c', 64) }
+            };
+
+            using var lockStream = new FileStream(dllPath, FileMode.Open, FileAccess.Read, FileShare.None);
+            var ex = Assert.Throws<IOException>(() => ManifestUpdateService.EnsureTargetFilesWritable(pending, settings));
+            Assert.Contains("locked", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("OLD_DLL_CONTENT", File.ReadAllText(dllPath));
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, recursive: true);
+        }
+    }
 }

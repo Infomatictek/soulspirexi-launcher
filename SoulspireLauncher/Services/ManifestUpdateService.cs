@@ -158,7 +158,85 @@ public sealed class ManifestUpdateService
             return false;
         }
 
+        if (!ValidateRegistryBundle(manifest, requestedChannel, out _))
+        {
+            return false;
+        }
+
         return true;
+    }
+
+    public static bool ValidateRegistryBundle(
+        LauncherManifest manifest,
+        UpdateChannel requestedChannel,
+        out string error)
+    {
+        error = string.Empty;
+        var reg = manifest.Registry;
+        if (reg is null)
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(reg.Version) && string.IsNullOrWhiteSpace(reg.Hash))
+        {
+            error = "Manifest declares registry.version without a deterministic registry.hash.";
+            return false;
+        }
+
+        var dllEntry = manifest.Files.FirstOrDefault(f =>
+            f.Category.Equals("plugin", StringComparison.OrdinalIgnoreCase) &&
+            f.TargetPath.Replace('\\', '/').EndsWith("crystaljobs.dll", StringComparison.OrdinalIgnoreCase));
+
+        if (dllEntry is not null && !string.IsNullOrWhiteSpace(reg.NativeDllSha256) &&
+            !dllEntry.Sha256.Equals(reg.NativeDllSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            error = $"Manifest registry.nativeDllSha256 ({reg.NativeDllSha256}) does not match crystaljobs.dll entry ({dllEntry.Sha256}).";
+            return false;
+        }
+
+        // Stable channel must never distribute a newly built registry DLL that has not passed Windows client verification.
+        if (requestedChannel == UpdateChannel.Stable &&
+            !string.IsNullOrWhiteSpace(reg.NativeDllCompiledHash) &&
+            !reg.NativeDllCompiledHash.Equals("legacy-pre-registry", StringComparison.OrdinalIgnoreCase) &&
+            !reg.NativeDllClientVerified)
+        {
+            error = "Refusing Stable manifest: crystaljobs.dll is not marked client-verified (nativeDllClientVerified=false).";
+            return false;
+        }
+
+        return true;
+    }
+
+    public static void EnsureTargetFilesWritable(
+        IEnumerable<ManifestFileEntry> pending,
+        LauncherSettings settings)
+    {
+        foreach (var entry in pending)
+        {
+            var destPath = ResolveTargetFilePath(settings, entry);
+            if (!File.Exists(destPath))
+            {
+                continue;
+            }
+
+            try
+            {
+                using var stream = new FileStream(destPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+            }
+            catch (IOException ex)
+            {
+                throw new IOException(
+                    $"Cannot update {entry.TargetPath} because it is locked by a running process. Close Ashita / FINAL FANTASY XI / PlayOnline and retry. ({ex.Message})",
+                    ex);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                throw new IOException(
+                    $"Cannot update {entry.TargetPath} due to file permissions or active lock. Close Ashita / FINAL FANTASY XI / PlayOnline and retry. ({ex.Message})",
+                    ex);
+            }
+        }
     }
 
     public static bool IsGitHubRawBaseUrl(string rawBaseUrl) =>
@@ -469,6 +547,8 @@ public sealed class ManifestUpdateService
                 : manifest.Channel.Trim().ToLowerInvariant(),
             ManifestVersion = manifest.ManifestVersion ?? string.Empty,
             ServerVersion = manifest.ServerCompatibility?.Version ?? string.Empty,
+            RegistryVersion = manifest.Registry?.Version ?? string.Empty,
+            RegistryHash = manifest.Registry?.Hash ?? string.Empty,
             LastSyncedUtc = DateTimeOffset.UtcNow,
             ManagedFiles = EnumerateActiveFiles(manifest, settings)
                 .Select(e => new InstalledManagedFile
@@ -564,6 +644,14 @@ public sealed class ManifestUpdateService
             progress?.Report(new SyncProgress { Message = "All SoulspireXI client files are up to date.", Percent = 100 });
             return 0;
         }
+
+        if (!ValidateRegistryBundle(manifest, settings.UpdateChannel, out var bundleError))
+        {
+            throw new InvalidDataException(bundleError);
+        }
+
+        // Pre-flight lock check before downloading so locked DLLs/files fail fast with zero partial state.
+        EnsureTargetFilesWritable(pending, settings);
 
         var rawBase = (!string.IsNullOrWhiteSpace(manifest.ResolvedRawBaseUrl)
             ? manifest.ResolvedRawBaseUrl

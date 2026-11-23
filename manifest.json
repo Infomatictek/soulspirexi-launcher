@@ -9952,5 +9952,14 @@
         }
       ]
     }
-  ]
+  ],
+  "registry": {
+    "version": "2026.11.22-phase2-locked",
+    "hash": "de6314e97385e328",
+    "idLockStatus": "locked",
+    "nativeDllCompiledHash": "legacy-pre-registry",
+    "nativeDllSha256": "8e10ac388d13531c1d8e3572af1cab196a96d9d61a43f4ce0194960cfc3133e3",
+    "nativeDllClientVerified": false,
+    "crystalJobsHooks": 24
+  }
 }
