@@ -184,9 +184,90 @@ struct GlyphSlot {
     uint8_t node[0x20];
     uint8_t tile[0xE0];
 };
-static constexpr size_t kSearchGlyphPoolSize = 192; // 64 Search rows x 3 glyphs/frame without reuse
-static GlyphSlot g_search_glyph_pool[kSearchGlyphPoolSize]{};
-static size_t g_search_glyph_next = 0;
+
+struct Menu2fonTemplateKey {
+    const uint8_t* src_sprite;
+    const uint8_t* src_node;
+    const uint8_t* src_tile;
+    uint8_t sprite_bytes[0x30];
+    uint8_t node_bytes[0x20];
+    uint8_t tile_bytes[0xE0];
+};
+
+struct Menu2fonBank {
+    bool active;
+    Menu2fonTemplateKey key;
+    bool initialized[3][26];
+    GlyphSlot slots[3][26];
+};
+
+// Because FFXI's sprite renderer (0x121110) may queue raw sprite/node/tile pointers for
+// deferred submission and we cannot assume when a queued pointer is retired, a GlyphSlot
+// must NEVER be mutated once handed to draw_sprite. Every GlyphSlot depends solely on the
+// loaded (*sheet)[1] template, character position (0..2), and letter ('A'..'Z') — at most
+// 3 x 26 = 78 immutable slots per sheet generation, regardless of Search row count or frame
+// count. Multiple immutable banks handle menu2fon reloads without overwriting live slots;
+// if all banks are exhausted, draw_menu2fon_label returns false so draw_branch safely falls
+// back to native_text.
+static constexpr size_t kMaxMenu2fonBanks = 8;
+static SRWLOCK menu2fon_lock = SRWLOCK_INIT;
+static Menu2fonBank g_menu2fon_banks[kMaxMenu2fonBanks]{};
+static size_t g_last_menu2fon_bank = 0;
+
+static bool menu2fon_key_matches(
+    const Menu2fonTemplateKey& key,
+    const uint8_t* src_sprite,
+    const uint8_t* src_node,
+    const uint8_t* src_tile) noexcept {
+    return key.src_sprite == src_sprite &&
+           key.src_node == src_node &&
+           key.src_tile == src_tile &&
+           std::memcmp(key.sprite_bytes, src_sprite, sizeof(key.sprite_bytes)) == 0 &&
+           std::memcmp(key.node_bytes, src_node, sizeof(key.node_bytes)) == 0 &&
+           std::memcmp(key.tile_bytes, src_tile, sizeof(key.tile_bytes)) == 0;
+}
+
+static void init_glyph_slot(
+    GlyphSlot& slot,
+    const uint8_t* src_sprite,
+    const uint8_t* src_node,
+    const uint8_t* src_tile,
+    int pos,
+    size_t letter) noexcept {
+    std::memcpy(slot.sprite, src_sprite, sizeof(slot.sprite));
+    std::memcpy(slot.node, src_node, sizeof(slot.node));
+    std::memcpy(slot.tile, src_tile, sizeof(slot.tile));
+
+    uint8_t* node_ptr = slot.node;
+    uint8_t* tile_ptr = slot.tile;
+    std::memcpy(slot.sprite + 0x04, &node_ptr, sizeof(node_ptr));
+    std::memcpy(slot.node + 0x10, &tile_ptr, sizeof(tile_ptr));
+
+    const MenuGlyph g = menu_glyphs[letter];
+    const int16_t x0 = static_cast<int16_t>(pos * 8);
+    const int16_t x1 = static_cast<int16_t>(x0 + g.w);
+    const int16_t corners[8] = {x0, -1, x1, -1, x0, 9, x1, 9};
+    const float u0 = static_cast<float>(g.u) * (1.0f / 256.0f);
+    const float u1 = static_cast<float>(g.u + g.w) * (1.0f / 256.0f);
+    const float v0 = static_cast<float>(g.v) * (1.0f / 256.0f);
+    const float v1 = static_cast<float>(g.v + 10) * (1.0f / 256.0f);
+    const float uv0[2] = {u0, v0}, uv1[2] = {u1, v0}, uv2[2] = {u0, v1}, uv3[2] = {u1, v1};
+
+    std::memcpy(slot.tile + 0xC0, corners, sizeof(corners));
+    std::memcpy(slot.tile + 0x64, uv0, sizeof(uv0));
+    std::memcpy(slot.tile + 0x80, uv1, sizeof(uv1));
+    std::memcpy(slot.tile + 0x9C, uv2, sizeof(uv2));
+    std::memcpy(slot.tile + 0xB8, uv3, sizeof(uv3));
+}
+
+#ifdef CRYSTALJOBS_SELFTEST
+static void reset_menu2fon_banks_for_test() noexcept {
+    AcquireSRWLockExclusive(&menu2fon_lock);
+    std::memset(g_menu2fon_banks, 0, sizeof(g_menu2fon_banks));
+    g_last_menu2fon_bank = 0;
+    ReleaseSRWLockExclusive(&menu2fon_lock);
+}
+#endif
 
 static bool draw_menu2fon_label(const char* custom, const SpriteArgs* args) noexcept {
     if (pname_sheet_slot == nullptr || original_sprite == 0) return false;
@@ -202,40 +283,57 @@ static bool draw_menu2fon_label(const char* custom, const SpriteArgs* args) noex
         if (custom[i] < 'A' || custom[i] > 'Z') return false;
     }
 
-    // Clone into private ring-buffered GlyphSlot structs so FFXI's shared (*sheet)[1]
-    // WAR sprite is NEVER mutated in-place and deferred D3D8 sprite queues retain
-    // independent geometry and UVs for every glyph across every Search row.
+    GlyphSlot* slots[3]{};
+    AcquireSRWLockExclusive(&menu2fon_lock);
+    Menu2fonBank* bank = nullptr;
+    if (g_last_menu2fon_bank < kMaxMenu2fonBanks &&
+        g_menu2fon_banks[g_last_menu2fon_bank].active &&
+        menu2fon_key_matches(g_menu2fon_banks[g_last_menu2fon_bank].key, src_sprite, src_node, src_tile)) {
+        bank = &g_menu2fon_banks[g_last_menu2fon_bank];
+    } else {
+        for (size_t bi = 0; bi < kMaxMenu2fonBanks; ++bi) {
+            if (g_menu2fon_banks[bi].active &&
+                menu2fon_key_matches(g_menu2fon_banks[bi].key, src_sprite, src_node, src_tile)) {
+                bank = &g_menu2fon_banks[bi];
+                g_last_menu2fon_bank = bi;
+                break;
+            }
+        }
+        if (bank == nullptr) {
+            for (size_t bi = 0; bi < kMaxMenu2fonBanks; ++bi) {
+                if (!g_menu2fon_banks[bi].active) {
+                    bank = &g_menu2fon_banks[bi];
+                    bank->active = true;
+                    bank->key.src_sprite = src_sprite;
+                    bank->key.src_node = src_node;
+                    bank->key.src_tile = src_tile;
+                    std::memcpy(bank->key.sprite_bytes, src_sprite, sizeof(bank->key.sprite_bytes));
+                    std::memcpy(bank->key.node_bytes, src_node, sizeof(bank->key.node_bytes));
+                    std::memcpy(bank->key.tile_bytes, src_tile, sizeof(bank->key.tile_bytes));
+                    std::memset(bank->initialized, 0, sizeof(bank->initialized));
+                    g_last_menu2fon_bank = bi;
+                    break;
+                }
+            }
+        }
+    }
+    if (bank == nullptr) {
+        ReleaseSRWLockExclusive(&menu2fon_lock);
+        return false; // Safe capacity exhausted: never recycle live slots; caller falls back to native_text.
+    }
+    for (int i = 0; i < 3; ++i) {
+        const size_t letter = static_cast<size_t>(custom[i] - 'A');
+        if (!bank->initialized[i][letter]) {
+            init_glyph_slot(bank->slots[i][letter], src_sprite, src_node, src_tile, i, letter);
+            bank->initialized[i][letter] = true;
+        }
+        slots[i] = &bank->slots[i][letter];
+    }
+    ReleaseSRWLockExclusive(&menu2fon_lock);
+
     const auto draw_sprite = reinterpret_cast<DrawSprite>(original_sprite);
     for (int i = 0; i < 3; ++i) {
-        GlyphSlot& slot = g_search_glyph_pool[g_search_glyph_next % kSearchGlyphPoolSize];
-        ++g_search_glyph_next;
-
-        std::memcpy(slot.sprite, src_sprite, sizeof(slot.sprite));
-        std::memcpy(slot.node, src_node, sizeof(slot.node));
-        std::memcpy(slot.tile, src_tile, sizeof(slot.tile));
-
-        uint8_t* node_ptr = slot.node;
-        uint8_t* tile_ptr = slot.tile;
-        std::memcpy(slot.sprite + 0x04, &node_ptr, sizeof(node_ptr));
-        std::memcpy(slot.node + 0x10, &tile_ptr, sizeof(tile_ptr));
-
-        const MenuGlyph g = menu_glyphs[custom[i] - 'A'];
-        const int16_t x0 = static_cast<int16_t>(i * 8);
-        const int16_t x1 = static_cast<int16_t>(x0 + g.w);
-        const int16_t corners[8] = {x0, -1, x1, -1, x0, 9, x1, 9};
-        const float u0 = static_cast<float>(g.u) * (1.0f / 256.0f);
-        const float u1 = static_cast<float>(g.u + g.w) * (1.0f / 256.0f);
-        const float v0 = static_cast<float>(g.v) * (1.0f / 256.0f);
-        const float v1 = static_cast<float>(g.v + 10) * (1.0f / 256.0f);
-        const float uv0[2] = {u0, v0}, uv1[2] = {u1, v0}, uv2[2] = {u0, v1}, uv3[2] = {u1, v1};
-
-        std::memcpy(slot.tile + 0xC0, corners, sizeof(corners));
-        std::memcpy(slot.tile + 0x64, uv0, sizeof(uv0));
-        std::memcpy(slot.tile + 0x80, uv1, sizeof(uv1));
-        std::memcpy(slot.tile + 0x9C, uv2, sizeof(uv2));
-        std::memcpy(slot.tile + 0xB8, uv3, sizeof(uv3));
-
-        draw_sprite(slot.sprite, nullptr, args->x, args->y, args->scale_x, args->scale_y, args->color, args->center, args->first, args->count);
+        draw_sprite(slots[i]->sprite, nullptr, args->x, args->y, args->scale_x, args->scale_y, args->color, args->center, args->first, args->count);
     }
     return true;
 }

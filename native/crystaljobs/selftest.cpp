@@ -14,8 +14,13 @@ static int __cdecl fake_persona_text(int x, int y, const char* text, uint32_t co
     assert(x == 142 && y == 69 && sx == 1.0f && sy == 1.0f && center == 0);
     ++persona_text_calls; last_persona_text = text; last_persona_color = color; return x;
 }
-static int __fastcall fake_sprite(void*, void*, int x, int y, float sx, float sy, uint32_t color, int center, int first, int count) {
+static const uint8_t* recorded_sprites[1024]{};
+static size_t recorded_sprite_count = 0;
+static int __fastcall fake_sprite(void* self, void*, int x, int y, float sx, float sy, uint32_t color, int center, int first, int count) {
     assert(x == 100 && y == 50 && sx == 1.0f && sy == 1.0f && color == 0x80808080 && center == 0 && first == 0 && count == 0);
+    if (recorded_sprite_count < 1024) {
+        recorded_sprites[recorded_sprite_count++] = static_cast<const uint8_t*>(self);
+    }
     ++sprite_calls; return 1;
 }
 static void __fastcall fake_sprite_simple(void* self, void*, int x, int y, uint32_t color, int center, int first) {
@@ -448,52 +453,127 @@ static void multi_job_checks() {
     void* sheet_obj = &sprite_table;
     pname_sheet_slot = &sheet_obj;
 
-    sprite_calls = 0; text_calls = 0;
-    g_search_glyph_next = 0;
+    sprite_calls = 0; text_calls = 0; recorded_sprite_count = 0;
+    reset_menu2fon_banks_for_test();
     make_row(row_a, 320, marker | 2, 1); state.decoded(row_a); // WAR branch 2 = BRZ
     assert(sprite_abi(reinterpret_cast<void*>(&normal_sprite_hook), row_a));
-    assert(sprite_calls == 3 && text_calls == 0);
+    assert(sprite_calls == 3 && text_calls == 0 && recorded_sprite_count == 3);
     // Shared WAR template tile must NEVER be mutated in-place.
     assert(std::memcmp(mock_tile + 0xC0, war_corners, sizeof(war_corners)) == 0);
     assert(std::memcmp(mock_tile + 0x64, war_uv, sizeof(war_uv)) == 0);
 
-    // Deferred multi-row Search regression: verify all 66 Souls render via private GlyphSlot
-    // entries with intact independent UVs & corners and zero mutation of (*sheet)[1].
+    // Deferred multi-frame, multi-row Search regression exceeding old 192-slot capacity:
+    // Queue 3 consecutive frames x 66 Souls x 3 glyphs = 594 deferred draws, then verify
+    // EVERY queued sprite* pointer from Frame 1..3 remains intact, immutable, and non-aliasing.
     uint8_t orig_sprite_copy[0x30], orig_node_copy[0x20], orig_tile_copy[0xE0];
     std::memcpy(orig_sprite_copy, mock_sprite, sizeof(orig_sprite_copy));
     std::memcpy(orig_node_copy, mock_node, sizeof(orig_node_copy));
     std::memcpy(orig_tile_copy, mock_tile, sizeof(orig_tile_copy));
 
-    g_search_glyph_next = 0;
-    for (uint8_t j = 1; j <= 22; ++j) {
-        for (uint8_t b = 1; b <= 3; ++b) {
-            sprite_calls = 0; text_calls = 0;
-            const size_t start_slot = g_search_glyph_next;
-            make_row(row_a, 400 + j * 4 + b, marker | b, j);
-            state.decoded(row_a);
-            assert(sprite_abi(reinterpret_cast<void*>(&normal_sprite_hook), row_a));
-            assert(sprite_calls == 3 && text_calls == 0);
+    struct DeferredExpectation {
+        const uint8_t* sprite;
+        char letter;
+        int pos;
+    };
+    static DeferredExpectation deferred_queue[3 * 66 * 3]{};
+    size_t deferred_count = 0;
+    recorded_sprite_count = 0;
+    reset_menu2fon_banks_for_test();
 
-            const char* abr = label_for(j, b, false);
-            assert(abr != nullptr && std::strlen(abr) == 3);
-            for (int gi = 0; gi < 3; ++gi) {
-                const GlyphSlot& slot = g_search_glyph_pool[(start_slot + gi) % kSearchGlyphPoolSize];
-                const MenuGlyph g = menu_glyphs[abr[gi] - 'A'];
-                const int16_t expected_x0 = static_cast<int16_t>(gi * 8);
-                int16_t obs_corners[8]{};
-                std::memcpy(obs_corners, slot.tile + 0xC0, sizeof(obs_corners));
-                assert(obs_corners[0] == expected_x0 && obs_corners[2] == static_cast<int16_t>(expected_x0 + g.w));
-                float obs_uv0[2]{};
-                std::memcpy(obs_uv0, slot.tile + 0x64, sizeof(obs_uv0));
-                assert(obs_uv0[0] == static_cast<float>(g.u) * (1.0f / 256.0f));
-                assert(obs_uv0[1] == static_cast<float>(g.v) * (1.0f / 256.0f));
+    for (int frame = 0; frame < 3; ++frame) {
+        for (uint8_t j = 1; j <= 22; ++j) {
+            for (uint8_t b = 1; b <= 3; ++b) {
+                sprite_calls = 0; text_calls = 0;
+                const size_t rec_start = recorded_sprite_count;
+                make_row(row_a, 400 + j * 4 + b, marker | b, j);
+                state.decoded(row_a);
+                assert(sprite_abi(reinterpret_cast<void*>(&normal_sprite_hook), row_a));
+                assert(sprite_calls == 3 && text_calls == 0);
+                assert(recorded_sprite_count == rec_start + 3);
+
+                const char* abr = label_for(j, b, false);
+                assert(abr != nullptr && std::strlen(abr) == 3);
+                for (int gi = 0; gi < 3; ++gi) {
+                    deferred_queue[deferred_count++] = {recorded_sprites[rec_start + gi], abr[gi], gi};
+                }
             }
         }
     }
-    // Verify shared template (*sheet)[1] remained 100% untouched across all 66 x 3 = 198 draws.
+    assert(deferred_count == 3 * 66 * 3); // 594 > 192
+
+    // Simulate deferred D3D8 consumption AFTER all 3 consecutive frames have been queued.
+    for (size_t idx = 0; idx < deferred_count; ++idx) {
+        const uint8_t* spr = deferred_queue[idx].sprite;
+        assert(spr != nullptr && spr != mock_sprite);
+        const uint8_t* node = *reinterpret_cast<uint8_t* const*>(spr + 0x04);
+        assert(node != nullptr && node != mock_node);
+        const uint8_t* tile = *reinterpret_cast<uint8_t* const*>(node + 0x10);
+        assert(tile != nullptr && tile != mock_tile);
+
+        const MenuGlyph g = menu_glyphs[deferred_queue[idx].letter - 'A'];
+        const int16_t expected_x0 = static_cast<int16_t>(deferred_queue[idx].pos * 8);
+        int16_t obs_corners[8]{};
+        std::memcpy(obs_corners, tile + 0xC0, sizeof(obs_corners));
+        assert(obs_corners[0] == expected_x0 && obs_corners[2] == static_cast<int16_t>(expected_x0 + g.w));
+        float obs_uv0[2]{};
+        std::memcpy(obs_uv0, tile + 0x64, sizeof(obs_uv0));
+        assert(obs_uv0[0] == static_cast<float>(g.u) * (1.0f / 256.0f));
+        assert(obs_uv0[1] == static_cast<float>(g.v) * (1.0f / 256.0f));
+    }
+    // Consecutive frames must reuse the exact same immutable slot pointers (zero churn/overwrite).
+    for (size_t i = 0; i < 66 * 3; ++i) {
+        assert(deferred_queue[i].sprite == deferred_queue[i + 66 * 3].sprite);
+        assert(deferred_queue[i].sprite == deferred_queue[i + 2 * 66 * 3].sprite);
+    }
+    // Verify shared template (*sheet)[1] remained 100% untouched across all 594 draws.
     assert(std::memcmp(mock_sprite, orig_sprite_copy, sizeof(orig_sprite_copy)) == 0);
     assert(std::memcmp(mock_node, orig_node_copy, sizeof(orig_node_copy)) == 0);
     assert(std::memcmp(mock_tile, orig_tile_copy, sizeof(orig_tile_copy)) == 0);
+
+    // Safe capacity exhaustion test: exhaust all kMaxMenu2fonBanks distinct sheet reloads,
+    // verify the (kMaxMenu2fonBanks + 1)-th reload falls back cleanly to native_text WITHOUT
+    // mutating any previously queued GlyphSlot from generations 0..kMaxMenu2fonBanks-1.
+    reset_menu2fon_banks_for_test();
+    recorded_sprite_count = 0;
+    const uint8_t* bank_sprites[kMaxMenu2fonBanks][3]{};
+    make_row(row_a, 700, marker | 2, 1); state.decoded(row_a); // WAR branch 2 = BRZ
+    const char* war_b2 = label_for(1, 2, false);
+    assert(war_b2 != nullptr);
+    for (size_t gen = 0; gen < kMaxMenu2fonBanks; ++gen) {
+        mock_tile[0x08] = static_cast<uint8_t>(0x10u + gen);
+        sprite_calls = 0; text_calls = 0;
+        const size_t rec_start = recorded_sprite_count;
+        assert(sprite_abi(reinterpret_cast<void*>(&normal_sprite_hook), row_a));
+        assert(sprite_calls == 3 && text_calls == 0);
+        for (int gi = 0; gi < 3; ++gi) {
+            bank_sprites[gen][gi] = recorded_sprites[rec_start + gi];
+        }
+    }
+    // Reload #9 exceeds safe bank capacity: must fall back to native_text, never recycle slots.
+    mock_tile[0x08] = static_cast<uint8_t>(0x10u + kMaxMenu2fonBanks);
+    sprite_calls = 0; text_calls = 0; last_text = nullptr;
+    assert(sprite_abi(reinterpret_cast<void*>(&normal_sprite_hook), row_a));
+    assert(sprite_calls == 0 && text_calls == 1 && last_text != nullptr && std::strcmp(last_text, war_b2) == 0);
+    // Verify all previously queued sprites from generations 0..7 are still 100% intact.
+    for (size_t gen = 0; gen < kMaxMenu2fonBanks; ++gen) {
+        for (int gi = 0; gi < 3; ++gi) {
+            const uint8_t* spr = bank_sprites[gen][gi];
+            const uint8_t* node = *reinterpret_cast<uint8_t* const*>(spr + 0x04);
+            const uint8_t* tile = *reinterpret_cast<uint8_t* const*>(node + 0x10);
+            assert(tile[0x08] == static_cast<uint8_t>(0x10u + gen));
+            const MenuGlyph g = menu_glyphs[war_b2[gi] - 'A'];
+            float obs_uv0[2]{};
+            std::memcpy(obs_uv0, tile + 0x64, sizeof(obs_uv0));
+            assert(obs_uv0[0] == static_cast<float>(g.u) * (1.0f / 256.0f));
+            assert(obs_uv0[1] == static_cast<float>(g.v) * (1.0f / 256.0f));
+        }
+    }
+    // Returning to an already-cached generation (gen 0) still hits its immutable bank.
+    mock_tile[0x08] = 0x10u;
+    sprite_calls = 0; text_calls = 0;
+    assert(sprite_abi(reinterpret_cast<void*>(&normal_sprite_hook), row_a));
+    assert(sprite_calls == 3 && text_calls == 0);
+    std::memcpy(mock_tile, orig_tile_copy, sizeof(orig_tile_copy));
     pname_sheet_slot = nullptr;
 
     selftest_alive = false;
