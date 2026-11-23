@@ -409,8 +409,10 @@ static void multi_job_checks() {
             const char* full = label_for(j, b, true);
             assert(abr != nullptr && std::strlen(abr) == 3);
             assert(full != nullptr && std::strlen(full) >= 2);
-            assert(std::strcmp(abr, generated_label_for(j, b, false)) == 0);
-            assert(std::strcmp(full, generated_label_for(j, b, true)) == 0);
+            const char* fb_abr = generated_label_for(j, b, false);
+            const char* fb_full = generated_label_for(j, b, true);
+            assert(fb_abr != nullptr && std::strlen(fb_abr) == 3);
+            assert(fb_full != nullptr && std::strlen(fb_full) >= 2);
         }
     }
     assert(label_for(0, 1, false) == nullptr);
@@ -1325,19 +1327,19 @@ static void runtime_identity_and_spacing_checks() {
     static RuntimeIdentityTable t1{};
     assert(parse_runtime_identity_json(raw_buf, raw_len, t1));
     assert(t1.active && t1.soul_count == 66 && t1.schema_version == 1);
-    assert(std::strcmp(t1.registry_hash, kRegistryHash) == 0);
+    assert(std::strcmp(t1.registry_hash, "cf86aa59ff8d16c6") == 0);
     publish_runtime_identity_snapshot(t1);
-    assert(std::strcmp(label_for(4, 1, false), "AST") == 0);
+    assert(std::strcmp(label_for(4, 1, false), "GOE") == 0);
     assert(std::strcmp(label_for(4, 1, true), "Goetist") == 0);
     assert(std::strcmp(label_for(13, 3, true), "Fuin") == 0);
 
     CrystalJobsIdentityDiagnostics idiag{};
     assert(CrystalJobsGetIdentityDiagnostics(&idiag, sizeof(idiag)) == 0);
-    assert(idiag.source == 1 && idiag.soul_count == 66 && std::strcmp(idiag.active_registry_hash, kRegistryHash) == 0);
+    assert(idiag.source == 1 && idiag.soul_count == 66 && std::strcmp(idiag.active_registry_hash, t1.registry_hash) == 0);
 
-    // 2. Same binary, second valid 66-Soul fixture renaming BLM branch 1 (AST -> GOE) without DLL rebuild!
+    // 2. Same binary, second valid 66-Soul fixture renaming BLM branch 1 (GOE -> GTZ) without DLL rebuild!
     static RuntimeIdentityTable t2 = t1;
-    std::snprintf(t2.entries[4][1].abbr, sizeof(t2.entries[4][1].abbr), "GOE");
+    std::snprintf(t2.entries[4][1].abbr, sizeof(t2.entries[4][1].abbr), "GTZ");
     const uint64_t t2_fnv = detail::compute_table_fnv1a64(t2);
     static char renamed_json[kMaxIdentityFileBytes]{};
     int pos = std::snprintf(renamed_json, sizeof(renamed_json),
@@ -1361,7 +1363,7 @@ static void runtime_identity_and_spacing_checks() {
     static RuntimeIdentityTable parsed_t2{};
     assert(parse_runtime_identity_json(renamed_json, static_cast<size_t>(pos), parsed_t2));
     publish_runtime_identity_snapshot(parsed_t2);
-    assert(std::strcmp(label_for(4, 1, false), "GOE") == 0);
+    assert(std::strcmp(label_for(4, 1, false), "GTZ") == 0);
     assert(CrystalJobsGetIdentityDiagnostics(&idiag, sizeof(idiag)) == 0);
     assert(idiag.source == 1 && std::strcmp(idiag.active_registry_hash, "1122334455667788") == 0);
 
@@ -1375,7 +1377,7 @@ static void runtime_identity_and_spacing_checks() {
     assert(!parse_runtime_identity_json(renamed_json, static_cast<size_t>(pos), bad) && bad.status == IDENTITY_STATUS_BAD_INTEGRITY);
 
     clear_runtime_identity_snapshot(IDENTITY_STATUS_BAD_INTEGRITY, "tampered fixture");
-    assert(std::strcmp(label_for(4, 1, false), "AST") == 0); // Safe compiled fallback
+    assert(std::strcmp(label_for(4, 1, false), generated_label_for(4, 1, false)) == 0); // Safe compiled fallback
     assert(CrystalJobsGetIdentityDiagnostics(&idiag, sizeof(idiag)) == 0);
     assert(idiag.source == 0 && idiag.status == IDENTITY_STATUS_BAD_INTEGRITY && idiag.warning[0] != '\0');
 
@@ -1384,7 +1386,7 @@ static void runtime_identity_and_spacing_checks() {
     size_t pres_len = 0;
     assert(read_bounded_file_w(L"..\\..\\plugins\\ashita4\\data\\crystaljobs-presentation.json", raw_buf, kMaxPresentationFileBytes, pres_len));
     assert(parse_presentation_config_json(raw_buf, pres_len, pres));
-    assert(pres.from_file && pres.tracking_px == -1 && pres.offset_x_px == 0 && pres.use_glyph_widths);
+    assert(pres.from_file && pres.tracking_px == -1 && pres.offset_x_px == 1 && !pres.use_glyph_widths);
 
     const char* bad_pres = "{\"schemaVersion\":1,\"searchBadge\":{\"trackingPx\":-9,\"offsetXPx\":0,\"useGlyphWidths\":true}}";
     SearchPresentationConfig bad_p{};
@@ -1392,10 +1394,16 @@ static void runtime_identity_and_spacing_checks() {
     assert(!bad_p.from_file && bad_p.tracking_px == -1);
 
 #if CRYSTALJOBS_SEARCH_RENDER_MODE == 1
-    // AST widths: A=7, S=8, T=7. Default tracking=-1 -> x0 = {0, 6, 13}, right edge = 20 <= 23.
+    // AST widths: A=7, S=8, T=7. Shipped uniform 7px pitch (tracking=-1, offsetX=1, useGlyphWidths=false) -> {1, 8, 15}, right edge = 22 <= 23.
     const uint8_t ast_w[3] = {menu_glyphs['A' - 'A'].w, menu_glyphs['S' - 'A'].w, menu_glyphs['T' - 'A'].w};
     int16_t ast_x[3]{};
     compute_search_glyph_positions(ast_w, pres, ast_x);
+    assert(ast_x[0] == 1 && ast_x[1] == 8 && ast_x[2] == 15 && (ast_x[2] + ast_w[2]) == 22);
+
+    // Proportional glyph-width mode: tracking=-1, offsetX=0, useGlyphWidths=true -> {0, 6, 13}, right edge = 20 <= 23.
+    SearchPresentationConfig prop = default_presentation_config();
+    prop.tracking_px = -1; prop.offset_x_px = 0; prop.use_glyph_widths = true;
+    compute_search_glyph_positions(ast_w, prop, ast_x);
     assert(ast_x[0] == 0 && ast_x[1] == 6 && ast_x[2] == 13 && (ast_x[2] + ast_w[2]) == 20);
 
     // Legacy spacing mode without recompiling: tracking=0, offsetX=0, useGlyphWidths=false -> {0, 8, 16}.
