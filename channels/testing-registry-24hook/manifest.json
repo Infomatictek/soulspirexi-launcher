@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.1.1-testing.registry24",
+  "manifestVersion": "2.1.2-testing.registry24",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
     "version": "feat/centralized-game-registry-phase5c (57dbdbe)",
@@ -9,7 +9,7 @@
     "commit": "57dbdbe",
     "dockerImage": "soulspirexi/server:registry",
     "crystalJobsHooks": 24,
-    "notes": "24-hook Centralized Registry + immutable Search glyph bank candidate (pending Windows FFXI client verification)"
+    "notes": "24-hook Centralized Registry + Flintlock/TLVERTEX Search glyph bank fix (pending Windows FFXI client verification)"
   },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
@@ -23,8 +23,8 @@
   "repo": {
     "owner": "Infomatictek",
     "name": "soulspirexi-launcher",
-    "branch": "fix/native-search-label-and-testing-candidate",
-    "rawBaseUrl": "https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/fix/native-search-label-and-testing-candidate"
+    "branch": "fix/flintlock-search-label-and-dll-diagnostics",
+    "rawBaseUrl": "https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/fix/flintlock-search-label-and-dll-diagnostics"
   },
   "bootstrap": {
     "ashitaZipUrl": "https://github.com/AshitaXI/Ashita-v4beta/archive/refs/heads/main.zip",
@@ -95,7 +95,7 @@
       "category": "plugin",
       "sourcePath": "channels/testing-registry-24hook/payload/plugins/ashita4/crystaljobs.dll",
       "targetPath": "crystaljobs.dll",
-      "sha256": "8467d286ea52b14913dcbe2f5dd2dc4c6de3ba73abdd504aff6b0e1e5b1b9cbd",
+      "sha256": "37eaac60e8a3569eafc77bd7afbd5e7ecf00249bd6fd857389525a58495ff61f",
       "size": 130560
     },
     {
@@ -9959,7 +9959,7 @@
     "hash": "de6314e97385e328",
     "idLockStatus": "locked",
     "nativeDllCompiledHash": "de6314e97385e328",
-    "nativeDllSha256": "8467d286ea52b14913dcbe2f5dd2dc4c6de3ba73abdd504aff6b0e1e5b1b9cbd",
+    "nativeDllSha256": "37eaac60e8a3569eafc77bd7afbd5e7ecf00249bd6fd857389525a58495ff61f",
     "nativeDllClientVerified": false,
     "crystalJobsHooks": 24
   },
