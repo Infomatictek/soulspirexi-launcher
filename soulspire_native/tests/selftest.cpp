@@ -314,10 +314,6 @@ static void make_reply(uint8_t* bytes, uint16_t request, uint8_t branch = 2, uin
 }
 
 static int fake_decode_result;
-static void* __cdecl fake_search_decode(const uint8_t* input, uint8_t* output, int flags) {
-    assert(input == nullptr && flags == 1);
-    return output + 72;
-}
 static int __cdecl fake_map_decode(uint8_t*, uint32_t capacity, uintptr_t context, uintptr_t tree, const uint8_t* wire, uint32_t length) {
     assert(capacity == 512 && context == 11 && tree == 12 && wire == nullptr && length == 13);
     return fake_decode_result;
