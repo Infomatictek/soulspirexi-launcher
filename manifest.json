@@ -101,8 +101,8 @@
       "category": "plugin",
       "sourcePath": "plugins/ashita4/data/crystaljobs-presentation.json",
       "targetPath": "data/crystaljobs-presentation.json",
-      "sha256": "f41f03a5a48da595f0c3534cff67ffa5e49390175178e6d3ccff8e045ec18e7f",
-      "size": 118
+      "sha256": "506e9f08f1e1b26484dd6117eceb617db46ba23d2316d72c42afed571b1a618e",
+      "size": 119
     },
     {
       "category": "plugin",

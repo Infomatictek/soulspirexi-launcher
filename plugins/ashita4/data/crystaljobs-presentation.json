@@ -3,6 +3,6 @@
   "searchBadge": {
     "trackingPx": -1,
     "offsetXPx": 0,
-    "useGlyphWidths": true
+    "useGlyphWidths": false
   }
 }
