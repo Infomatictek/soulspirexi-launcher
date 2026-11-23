@@ -135,6 +135,10 @@ def build_testing_manifest(
             "nativeDllClientVerified": False,  # Never mark client-verified from CI alone
             "crystalJobsHooks": 24,
         }
+    elif staged_dll_sha and isinstance(testing_manifest.get("registry"), dict):
+        testing_manifest["registry"]["nativeDllSha256"] = staged_dll_sha
+        testing_manifest["registry"]["nativeHooks"] = crystaljobs_hooks
+        testing_manifest["registry"]["crystalJobsHooks"] = crystaljobs_hooks
 
     if repo_branch:
         repo_cfg = testing_manifest.setdefault("repo", {})

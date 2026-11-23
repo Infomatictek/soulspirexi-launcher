@@ -152,8 +152,7 @@ class NativeEquipmentHookTests(unittest.TestCase):
         self.assertIn("function W.native_rules()", wc_lua)
 
     def test_shipped_soulspire_native_dll_is_x86_pe32_with_all_43_exports(self):
-        if not SHIPPED_DLL.is_file():
-            self.skipTest("Pending initial Windows CI build of plugins/ashita4/soulspire_native.dll")
+        self.assertTrue(SHIPPED_DLL.is_file(), "Missing plugins/ashita4/soulspire_native.dll")
         machine, magic, chars, exports = parse_pe32_exports(SHIPPED_DLL)
         self.assertEqual(machine, 0x014C, "soulspire_native.dll must be Win32 x86 (IMAGE_FILE_MACHINE_I386)")
         self.assertEqual(magic, 0x010B, "soulspire_native.dll must be PE32")
