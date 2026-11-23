@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.1.7-testing.search-legacy-text",
+  "manifestVersion": "2.1.12-testing.search-legacy-text",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
-    "version": "feat/runtime-soul-identity-and-spacing (1938472)",
+    "version": "feat/runtime-soul-identity-and-spacing (b28a7a3)",
     "branch": "feat/runtime-soul-identity-and-spacing",
-    "commit": "1938472",
+    "commit": "b28a7a3",
     "dockerImage": "soulspirexi/server:registry",
     "crystalJobsHooks": 24,
     "notes": "Candidate A (Historical 4f0fdb3): 24-hook runtime identity loader + legacy 0.75x native_text fallback"
@@ -95,21 +95,21 @@
       "category": "plugin",
       "sourcePath": "channels/testing-search-legacy-text/payload/plugins/ashita4/crystaljobs.dll",
       "targetPath": "crystaljobs.dll",
-      "sha256": "b22b4cfa9ce52371a0df136c116f7f6f3325184bbc78fb9d2df4c704f248c393",
+      "sha256": "8b81621c63dcc2c8fa6bb7486b77230345781e5c9f173d872c57198b2eeef9f9",
       "size": 165888
     },
     {
       "category": "plugin",
       "sourcePath": "plugins/ashita4/data/crystaljobs-presentation.json",
       "targetPath": "data/crystaljobs-presentation.json",
-      "sha256": "f41f03a5a48da595f0c3534cff67ffa5e49390175178e6d3ccff8e045ec18e7f",
-      "size": 118
+      "sha256": "f1a43b2f9fa4a831dd465b5e431ebc71db34ad6eb66b12cef644cd77e737b09e",
+      "size": 119
     },
     {
       "category": "plugin",
       "sourcePath": "plugins/ashita4/data/soul-identities.json",
       "targetPath": "data/soul-identities.json",
-      "sha256": "a49c665c0c35e0b0208c4ecb6c7527f4ed1979191cefa22f309ca566105933ca",
+      "sha256": "f9cf9895360c269624ca5116dc8700e35089406406b348740eb6f919cee75628",
       "size": 6600
     },
     {
@@ -431,7 +431,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/crystalsocket/soul_registry_generated.lua",
       "targetPath": "crystalsocket/soul_registry_generated.lua",
-      "sha256": "3f9534c12a9be7a16381a082bb2a4beddb69475938b58f434c766ef4c72350be",
+      "sha256": "8c896d36fe04c18ab12e1683e1be5720c1c39aa25ad906bbf5a1a0686e5978ac",
       "size": 18834
     },
     {
@@ -6017,7 +6017,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/soul_registry_generated.lua",
       "targetPath": "soulspire_core/core/soul_registry_generated.lua",
-      "sha256": "3f9534c12a9be7a16381a082bb2a4beddb69475938b58f434c766ef4c72350be",
+      "sha256": "8c896d36fe04c18ab12e1683e1be5720c1c39aa25ad906bbf5a1a0686e5978ac",
       "size": 18834
     },
     {
@@ -6311,7 +6311,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_soul_actions/soul_registry_generated.lua",
       "targetPath": "soulspire_soul_actions/soul_registry_generated.lua",
-      "sha256": "3f9534c12a9be7a16381a082bb2a4beddb69475938b58f434c766ef4c72350be",
+      "sha256": "8c896d36fe04c18ab12e1683e1be5720c1c39aa25ad906bbf5a1a0686e5978ac",
       "size": 18834
     },
     {
@@ -7592,7 +7592,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_soulhud/soulhud_roster_generated.lua",
       "targetPath": "soulspire_soulhud/soulhud_roster_generated.lua",
-      "sha256": "11995e2b0f7345ff60ada6936cdc70c77b1b9123fd246890b26641d963e14f10",
+      "sha256": "ac7497f479592e34f24ee07531041b00bfe222274ffaf4924cb2391e83e45f78",
       "size": 15491
     },
     {
@@ -7956,7 +7956,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_talents/soul_registry_generated.lua",
       "targetPath": "soulspire_talents/soul_registry_generated.lua",
-      "sha256": "3f9534c12a9be7a16381a082bb2a4beddb69475938b58f434c766ef4c72350be",
+      "sha256": "8c896d36fe04c18ab12e1683e1be5720c1c39aa25ad906bbf5a1a0686e5978ac",
       "size": 18834
     },
     {
@@ -9970,10 +9970,10 @@
   ],
   "registry": {
     "version": "2026.11.22-66-souls-approved",
-    "hash": "0e3278fac7296cb3",
+    "hash": "cf86aa59ff8d16c6",
     "idLockStatus": "locked",
     "nativeDllCompiledHash": "0e3278fac7296cb3",
-    "nativeDllSha256": "b22b4cfa9ce52371a0df136c116f7f6f3325184bbc78fb9d2df4c704f248c393",
+    "nativeDllSha256": "8b81621c63dcc2c8fa6bb7486b77230345781e5c9f173d872c57198b2eeef9f9",
     "nativeDllClientVerified": false,
     "crystalJobsHooks": 24
   },
