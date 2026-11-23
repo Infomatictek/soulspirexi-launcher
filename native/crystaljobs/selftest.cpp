@@ -455,7 +455,7 @@ static void multi_job_checks() {
 
     // Test menu2fon 3-glyph sprite rendering (24px wide: x0 = 0, 8, 16) and tile restoration.
     uint8_t mock_tile[0xE0]{}, mock_node[0x20]{}, mock_sprite[0x30]{};
-    const int16_t war_corners[8] = {0, -1, 24, -1, 0, 9, 24, 9};
+    const int16_t war_corners[8] = {0, 24, 0, 24, -1, -1, 9, 9};
     const float war_uv[2] = {0.0f, 184.0f / 256.0f};
     std::memcpy(mock_tile + 0xC0, war_corners, sizeof(war_corners));
     std::memcpy(mock_tile + 0x64, war_uv, sizeof(war_uv));
@@ -557,9 +557,13 @@ static void multi_job_checks() {
 
         const MenuGlyph g = menu_glyphs[deferred_queue[idx].letter - 'A'];
         const int16_t expected_x0 = static_cast<int16_t>(deferred_queue[idx].pos * 8);
+        const int16_t expected_x1 = static_cast<int16_t>(expected_x0 + g.w);
         int16_t obs_corners[8]{};
         std::memcpy(obs_corners, tile + 0xC0, sizeof(obs_corners));
-        assert(obs_corners[0] == expected_x0 && obs_corners[2] == static_cast<int16_t>(expected_x0 + g.w));
+        assert(obs_corners[0] == expected_x0 && obs_corners[1] == expected_x1 &&
+               obs_corners[2] == expected_x0 && obs_corners[3] == expected_x1 &&
+               obs_corners[4] == -1 && obs_corners[5] == -1 &&
+               obs_corners[6] == 9 && obs_corners[7] == 9);
         float obs_uv0[2]{};
         std::memcpy(obs_uv0, tile + 0x64, sizeof(obs_uv0));
         assert(obs_uv0[0] == static_cast<float>(g.u) * (1.0f / 256.0f));
@@ -603,8 +607,11 @@ static void multi_job_checks() {
             int16_t obs_corners[8]{};
             std::memcpy(obs_corners, tile + 0xC0, sizeof(obs_corners));
             assert(obs_corners[0] == static_cast<int16_t>(gi * 8));
-            assert(obs_corners[2] == static_cast<int16_t>(gi * 8 + g.w));
-            assert(obs_corners[2] <= 23); // Fits flush before level digits at +23
+            assert(obs_corners[1] == static_cast<int16_t>(gi * 8 + g.w));
+            assert(obs_corners[2] == static_cast<int16_t>(gi * 8));
+            assert(obs_corners[3] == static_cast<int16_t>(gi * 8 + g.w));
+            assert(obs_corners[4] == -1 && obs_corners[5] == -1 && obs_corners[6] == 9 && obs_corners[7] == 9);
+            assert(obs_corners[1] <= 23); // Fits flush before level digits at +23
         }
     }
     // Confirm only 1 bank was claimed across all 25 TLVERTEX mutations!

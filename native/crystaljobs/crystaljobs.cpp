@@ -268,7 +268,11 @@ static void init_glyph_slot(
     const MenuGlyph g = menu_glyphs[letter];
     const int16_t x0 = static_cast<int16_t>(pos * 8);
     const int16_t x1 = static_cast<int16_t>(x0 + g.w);
-    const int16_t corners[8] = {x0, -1, x1, -1, x0, 9, x1, 9};
+    // FFXI CXiSpriteTile stores quad corners at +0xC0 as Structure-of-Arrays:
+    //   +0xC0: int16_t x[4] = { x0, x1, x0, x1 } (TL, TR, BL, BR)
+    //   +0xC8: int16_t y[4] = { -1, -1,  9,  9 } (TL, TR, BL, BR)
+    // Previously interleaved {x0, -1, x1, -1, x0, 9, x1, 9} collapsed every glyph into a 45-degree wedge.
+    const int16_t corners[8] = {x0, x1, x0, x1, -1, -1, 9, 9};
     const float u0 = static_cast<float>(g.u) * (1.0f / 256.0f);
     const float u1 = static_cast<float>(g.u + g.w) * (1.0f / 256.0f);
     const float v0 = static_cast<float>(g.v) * (1.0f / 256.0f);

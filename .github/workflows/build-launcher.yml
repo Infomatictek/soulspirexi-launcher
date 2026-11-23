@@ -219,7 +219,9 @@ jobs:
 
           # Candidate A: Historical working implementation (4f0fdb3 single-call native_text)
           Invoke-CrystalJobsBuild "/DCRYSTALJOBS_SEARCH_RENDER_MODE=0" "ci-builds/search-legacy-text" "crystaljobs-legacy-build.log"
-          # Candidate C: Safe default repair (fixed-column aligned native_text)
+          # Candidate B: Fixed native menu2fon sprite renderer (SoA x[4]/y[4] quad corners at tile+0xC0)
+          Invoke-CrystalJobsBuild "/DCRYSTALJOBS_SEARCH_RENDER_MODE=1" "ci-builds/registry-24hook" "crystaljobs-menu2fon-build.log"
+          # Candidate C: Safe fallback (fixed-column aligned native_text)
           Invoke-CrystalJobsBuild "/DCRYSTALJOBS_SEARCH_RENDER_MODE=2" "ci-builds/search-aligned-text" "crystaljobs-build.log"
 
       - name: Verify built 32-bit binaries and write build metadata
@@ -282,13 +284,14 @@ jobs:
             return $dllInfo
           }
 
-          $alignedInfo = Write-CandidateMetadata "ci-builds/search-aligned-text/crystaljobs.dll" "ci-builds/search-aligned-text/selftest.exe" "aligned-native-text (mode 2)" "ci-builds/search-aligned-text/crystaljobs-provenance.json" "ci-builds/search-aligned-text/crystaljobs-build-info.txt"
-          $legacyInfo  = Write-CandidateMetadata "ci-builds/search-legacy-text/crystaljobs.dll" "ci-builds/search-legacy-text/selftest.exe" "legacy-native-text-4f0fdb3 (mode 0)" "ci-builds/search-legacy-text/crystaljobs-provenance.json" "ci-builds/search-legacy-text/crystaljobs-build-info.txt"
-          if ($alignedInfo.Sha256 -eq $legacyInfo.Sha256) {
-            throw "Candidate A (legacy) and Candidate C (aligned) produced identical DLL SHA-256 hashes!"
+          $alignedInfo  = Write-CandidateMetadata "ci-builds/search-aligned-text/crystaljobs.dll" "ci-builds/search-aligned-text/selftest.exe" "aligned-native-text (mode 2)" "ci-builds/search-aligned-text/crystaljobs-provenance.json" "ci-builds/search-aligned-text/crystaljobs-build-info.txt"
+          $legacyInfo   = Write-CandidateMetadata "ci-builds/search-legacy-text/crystaljobs.dll" "ci-builds/search-legacy-text/selftest.exe" "legacy-native-text-4f0fdb3 (mode 0)" "ci-builds/search-legacy-text/crystaljobs-provenance.json" "ci-builds/search-legacy-text/crystaljobs-build-info.txt"
+          $menu2fonInfo = Write-CandidateMetadata "ci-builds/registry-24hook/crystaljobs.dll" "ci-builds/registry-24hook/selftest.exe" "menu2fon-soa-corners (mode 1)" "ci-builds/registry-24hook/crystaljobs-provenance.json" "ci-builds/registry-24hook/crystaljobs-build-info.txt"
+          if ($alignedInfo.Sha256 -eq $legacyInfo.Sha256 -or $alignedInfo.Sha256 -eq $menu2fonInfo.Sha256 -or $legacyInfo.Sha256 -eq $menu2fonInfo.Sha256) {
+            throw "Candidates A, B, and C must produce distinct DLL SHA-256 hashes!"
           }
-          Copy-Item -Force "ci-builds/search-aligned-text/crystaljobs-provenance.json" "crystaljobs-provenance.json"
-          Copy-Item -Force "ci-builds/search-aligned-text/crystaljobs-build-info.txt" "crystaljobs-build-info.txt"
+          Copy-Item -Force "ci-builds/registry-24hook/crystaljobs-provenance.json" "crystaljobs-provenance.json"
+          Copy-Item -Force "ci-builds/registry-24hook/crystaljobs-build-info.txt" "crystaljobs-build-info.txt"
           Get-Content "crystaljobs-build-info.txt"
 
       - name: Upload crystaljobs.dll and selftest.exe build artifacts
@@ -303,7 +306,9 @@ jobs:
             crystaljobs-provenance.json
             crystaljobs-build.log
             crystaljobs-legacy-build.log
+            crystaljobs-menu2fon-build.log
             ci-builds/search-legacy-text/
+            ci-builds/registry-24hook/
             ci-builds/search-aligned-text/
 
   build-testing-channel:
@@ -409,11 +414,11 @@ jobs:
           name: crystaljobs-win-x86
           path: ci-crystaljobs
 
-      - name: Verify DLL provenance, registry hash, architecture, and exports for Candidates A and C
+      - name: Verify DLL provenance, registry hash, architecture, and exports for Candidates A, B, and C
         shell: bash
         run: |
           set -euo pipefail
-          for cand in search-legacy-text search-aligned-text; do
+          for cand in search-legacy-text registry-24hook search-aligned-text; do
             python scripts/verify-crystaljobs-dll.py \
               "ci-crystaljobs/ci-builds/${cand}/crystaljobs.dll" \
               --allow-24-hook \
@@ -425,7 +430,7 @@ jobs:
           from pathlib import Path
           reg = json.loads(Path("registry_sync.json").read_text(encoding="utf-8"))
           seen_shas = set()
-          for cand in ("search-legacy-text", "search-aligned-text"):
+          for cand in ("search-legacy-text", "registry-24hook", "search-aligned-text"):
               prov = json.loads(Path(f"ci-crystaljobs/ci-builds/{cand}/crystaljobs-provenance.json").read_text(encoding="utf-8-sig"))
               assert prov["compiledRegistryHash"] == reg["registryHash"], (
                   f"{cand} registry hash mismatch: dll={prov['compiledRegistryHash']} vs sync={reg['registryHash']}"
@@ -436,7 +441,7 @@ jobs:
               print(f"Verified {cand}: sha256={prov['dllSha256']} mode={prov.get('searchRenderMode')} registryHash={prov['compiledRegistryHash']}")
           PY
 
-      - name: Publish isolated Candidate A (search-legacy-text) and Candidate C (search-aligned-text) manifests
+      - name: Publish isolated Candidate A, B (fixed menu2fon), and C manifests
         shell: bash
         run: |
           set -euo pipefail
@@ -455,6 +460,20 @@ jobs:
             --notes "Candidate A (Historical 4f0fdb3): 24-hook Approved 66-Soul Registry (0e3278fac7296cb3) with legacy single-call 0.75x native_text Search labels (zero menu2fon sprite mutation)"
 
           python scripts/publish-testing-channel.py \
+            --candidate registry-24hook \
+            --crystaljobs-dll ci-crystaljobs/ci-builds/registry-24hook/crystaljobs.dll \
+            --build-info ci-crystaljobs/ci-builds/registry-24hook/crystaljobs-build-info.txt \
+            --provenance-json ci-crystaljobs/ci-builds/registry-24hook/crystaljobs-provenance.json \
+            --repo-branch feat/soul-identity-registry-integration \
+            --manifest-version "2.1.6-testing.registry24" \
+            --server-version "feat/soul-identity-registry-integration (6e4311c)" \
+            --server-branch "feat/soul-identity-registry-integration" \
+            --server-commit "6e4311c" \
+            --server-image "soulspirexi/server:registry" \
+            --crystaljobs-hooks 24 \
+            --notes "Candidate B (Fixed native menu2fon): 24-hook Approved 66-Soul Registry (0e3278fac7296cb3) with SoA quad corners {x0,x1,x0,x1,-1,-1,9,9} at tile+0xC0 + immutable glyph banks"
+
+          python scripts/publish-testing-channel.py \
             --candidate search-aligned-text \
             --crystaljobs-dll ci-crystaljobs/ci-builds/search-aligned-text/crystaljobs.dll \
             --build-info ci-crystaljobs/ci-builds/search-aligned-text/crystaljobs-build-info.txt \
@@ -466,7 +485,7 @@ jobs:
             --server-commit "6e4311c" \
             --server-image "soulspirexi/server:registry" \
             --crystaljobs-hooks 24 \
-            --notes "Candidate C (Repair): 24-hook Approved 66-Soul Registry (0e3278fac7296cb3) with fixed-column aligned native_text Search labels (readable first, zero menu2fon sprite mutation)"
+            --notes "Candidate C (Fallback): 24-hook Approved 66-Soul Registry (0e3278fac7296cb3) with fixed-column aligned native_text Search labels (readable first, zero menu2fon sprite mutation)"
 
           python scripts/verify-launcher-manifest.py --manifest channels/testing-search-legacy-text/manifest.json
           python scripts/verify-launcher-manifest.py --manifest channels/testing-search-aligned-text/manifest.json
@@ -479,12 +498,12 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add channels/testing-search-legacy-text/ channels/testing-search-aligned-text/
+          git add channels/testing-search-legacy-text/ channels/testing-registry-24hook/ channels/testing-search-aligned-text/
           if git diff --cached --quiet; then
             echo "No changes to Search testing candidates."
             exit 0
           fi
-          git commit -m "chore(testing-candidate): publish isolated Search A (legacy) and C (aligned) crystaljobs.dll (2.1.5)"
+          git commit -m "chore(testing-candidate): publish fixed menu2fon Testing B (2.1.6-testing.registry24) and A/C crystaljobs.dll"
           git push origin HEAD:feat/soul-identity-registry-integration
 
   publish-release:
