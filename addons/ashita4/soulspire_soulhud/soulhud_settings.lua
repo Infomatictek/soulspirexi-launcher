@@ -4,9 +4,9 @@ local defaults = {
     x              = 320,
     y              = 180,
     scale          = 1.0,
-    opacity        = 0.92,
-    layout         = 'compact', -- 'compact' | 'expanded'
-    mode           = 'auto',    -- 'auto' | 'show' | 'hide'
+    opacity        = 0.94,
+    layout         = 'standard', -- 'minimal' | 'standard' | 'expanded' ('compact' aliases to 'standard')
+    mode           = 'auto',     -- 'auto' | 'show' | 'hide'
     locked         = false,
     hiddenElements = {},        -- [soulKey] = { [resId] = true }
     showShared     = true,      -- show shared party buffs in the status sub-strip
@@ -94,7 +94,10 @@ function M.clampSettings(cfg)
     cfg.y = math.floor((tonumber(cfg.y) or defaults.y) + 0.5)
     cfg.scale = clamp(tonumber(cfg.scale) or defaults.scale, 0.75, 2.0)
     cfg.opacity = clamp(tonumber(cfg.opacity) or defaults.opacity, 0.25, 1.0)
-    if cfg.layout ~= 'compact' and cfg.layout ~= 'expanded' then
+    if cfg.layout == 'compact' then
+        cfg.layout = 'standard'
+    end
+    if cfg.layout ~= 'minimal' and cfg.layout ~= 'standard' and cfg.layout ~= 'expanded' then
         cfg.layout = defaults.layout
     end
     if cfg.mode ~= 'auto' and cfg.mode ~= 'show' and cfg.mode ~= 'hide' then
