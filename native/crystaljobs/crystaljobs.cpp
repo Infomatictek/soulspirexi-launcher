@@ -1561,14 +1561,18 @@ static bool build_trusted_data_path(HMODULE mod, const wchar_t* filename, wchar_
     wchar_t mod_path[MAX_PATH]{};
     const DWORD n = GetModuleFileNameW(mod, mod_path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return false;
-    wchar_t* slash = nullptr;
-    for (wchar_t* p = mod_path; *p != L'\0'; ++p) {
-        if (*p == L'\\' || *p == L'/') slash = p;
+    size_t slash_end = 0;
+    for (size_t i = 0; mod_path[i] != L'\0'; ++i) {
+        if (mod_path[i] == L'\\' || mod_path[i] == L'/') slash_end = i + 1;
     }
-    if (slash == nullptr) return false;
-    *(slash + 1) = L'\0';
-    const int written = std::swprintf(out, out_cap, L"%lsdata\\%ls", mod_path, filename);
-    if (written <= 0 || static_cast<size_t>(written) >= out_cap) return false;
+    if (slash_end == 0) return false;
+    const wchar_t* sub = L"data\\";
+    const size_t sub_len = 5;
+    const size_t fn_len = std::wcslen(filename);
+    if (slash_end + sub_len + fn_len + 1 > out_cap) return false;
+    std::memcpy(out, mod_path, slash_end * sizeof(wchar_t));
+    std::memcpy(out + slash_end, sub, sub_len * sizeof(wchar_t));
+    std::memcpy(out + slash_end + sub_len, filename, (fn_len + 1) * sizeof(wchar_t));
     // Reject any relative traversal sequences.
     if (std::wcsstr(out, L"..") != nullptr) return false;
     return true;
