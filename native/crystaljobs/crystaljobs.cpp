@@ -242,10 +242,10 @@ static void compute_search_glyph_positions(
         if (step < 4) step = 4; // Prevent glyph collapse/overlap
         x[i + 1] = x[i] + step;
     }
-    // Keep right edge strictly within the 23px Search job column (clear of level digits at +23).
+    // Keep right edge strictly within the 24px Search job column (0..24; legacy 8+8+8 fits exact).
     const int32_t right_edge = x[2] + static_cast<int32_t>(widths[2]);
-    if (right_edge > 23) {
-        int32_t shift = right_edge - 23;
+    if (right_edge > 24) {
+        int32_t shift = right_edge - 24;
         if (x[0] - shift < kMinGlyphX0) {
             shift = x[0] - kMinGlyphX0;
         }
@@ -254,7 +254,7 @@ static void compute_search_glyph_positions(
             x[1] -= shift;
             x[2] -= shift;
         }
-        const int32_t max_x2 = 23 - static_cast<int32_t>(widths[2]);
+        const int32_t max_x2 = 24 - static_cast<int32_t>(widths[2]);
         if (x[2] > max_x2) {
             x[2] = max_x2;
             const int32_t mid = x[0] + (x[2] - x[0]) / 2;

@@ -1404,13 +1404,13 @@ static void runtime_identity_and_spacing_checks() {
     compute_search_glyph_positions(ast_w, leg, ast_x);
     assert(ast_x[0] == 0 && ast_x[1] == 8 && ast_x[2] == 16);
 
-    // Max-width WWW (8,8,8) with max tracking=+2 and max offsetX=+3 still stays <= 23px (clear of level digits).
+    // Max-width WWW (8,8,8) with max tracking=+2 and max offsetX=+3 still stays <= 24px (badge column).
     const uint8_t www_w[3] = {8, 8, 8};
     SearchPresentationConfig wide = default_presentation_config();
     wide.tracking_px = 2; wide.offset_x_px = 3; wide.use_glyph_widths = true;
     int16_t www_x[3]{};
     compute_search_glyph_positions(www_w, wide, www_x);
-    assert(www_x[0] >= kMinGlyphX0 && (www_x[2] + www_w[2]) <= 23);
+    assert(www_x[0] >= kMinGlyphX0 && (www_x[2] + www_w[2]) <= 24);
 #endif
     publish_runtime_identity_snapshot(t1);
     publish_search_presentation(pres);
