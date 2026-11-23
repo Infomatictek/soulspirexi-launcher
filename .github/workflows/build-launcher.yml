@@ -91,7 +91,7 @@ jobs:
             echo "should_build=false" >> "$GITHUB_OUTPUT"
           fi
 
-          if echo "$changed" | grep -Eq '^(native/crystaljobs/.*\.(c|cc|cpp|cxx|h|hh|hpp|hxx|def|cmd|bat|ps1)|\.github/workflows/build-launcher\.yml)$'; then
+          if echo "$changed" | grep -Eq '^(native/crystaljobs/.*\.(c|cc|cpp|cxx|h|hh|hpp|hxx|def|cmd|bat|ps1)|\.github/workflows/build-launcher\.yml|scripts/publish-testing-channel\.py|scripts/verify-launcher-manifest\.py)$'; then
             echo "should_build_crystaljobs=true" >> "$GITHUB_OUTPUT"
           else
             echo "No native/crystaljobs C++ source files changed; skipping crystaljobs.dll build."

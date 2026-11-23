@@ -401,7 +401,21 @@ def verify_manifest(repo_root: Path, manifest_path: Path | None = None) -> list[
             errors.append(
                 f"manifest.json registry.nativeDllSha256 ({reg_meta.get('nativeDllSha256')}) != crystaljobs.dll sha256 ({dll_entry.get('sha256')})"
             )
-        if dll_state_path.is_file():
+        if declared_channel == "testing" and str(manifest.get("candidateId") or "").strip() == "registry-24hook":
+            prov_path = (manifest_path or (repo_root / "manifest.json")).parent / "crystaljobs-provenance.json"
+            if prov_path.is_file():
+                prov_data = json.loads(prov_path.read_text(encoding="utf-8-sig"))
+                if reg_meta.get("nativeDllCompiledHash") != prov_data.get("compiledRegistryHash"):
+                    errors.append(
+                        f"testing candidate registry.nativeDllCompiledHash ({reg_meta.get('nativeDllCompiledHash')!r}) != crystaljobs-provenance.json ({prov_data.get('compiledRegistryHash')!r})"
+                    )
+            if reg_sync_path.is_file():
+                reg_sync = json.loads(reg_sync_path.read_text(encoding="utf-8"))
+                if reg_meta.get("nativeDllCompiledHash") != reg_sync.get("registryHash"):
+                    errors.append(
+                        f"testing candidate registry.nativeDllCompiledHash ({reg_meta.get('nativeDllCompiledHash')!r}) != registry_sync.json ({reg_sync.get('registryHash')!r})"
+                    )
+        elif dll_state_path.is_file():
             dll_state = json.loads(dll_state_path.read_text(encoding="utf-8"))
             if reg_meta.get("nativeDllCompiledHash") != dll_state.get("compiledRegistryHash"):
                 errors.append(
