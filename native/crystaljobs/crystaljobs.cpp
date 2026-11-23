@@ -254,6 +254,12 @@ static void compute_search_glyph_positions(
             x[1] -= shift;
             x[2] -= shift;
         }
+        const int32_t max_x2 = 23 - static_cast<int32_t>(widths[2]);
+        if (x[2] > max_x2) {
+            x[2] = max_x2;
+            const int32_t mid = x[0] + (x[2] - x[0]) / 2;
+            if (x[1] > mid) x[1] = mid;
+        }
     }
     for (int i = 0; i < 3; ++i) {
         if (x[i] < kMinGlyphX0) x[i] = kMinGlyphX0;
