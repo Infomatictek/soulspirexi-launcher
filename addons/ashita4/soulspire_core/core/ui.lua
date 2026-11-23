@@ -1,4 +1,8 @@
--- SoulspireXI Core: Unified Dark-Fantasy Shell & Native-Styled Main Menu Dock.
+-- SoulspireXI Core: Unified Dark-Fantasy Shell (opened from native FFXI Commands Menu).
+--
+-- No floating ImGui Main Menu dock or overlay is rendered; "Soulspire" is
+-- injected directly into FFXI's native Commands menu ("menu    menuwind") by
+-- soulspire_native.dll between Status and Equipment.
 --
 -- Aligned to the approved SoulspireXI Core visual direction:
 --   - Left: Sundered Crag crest + "SOULSPIREXI / — CORE —" brand lockup
@@ -133,72 +137,11 @@ function UI:compute_layout(viewW, viewH)
     })
 end
 
--- 1. Native-styled docked "Soulspire" entry anchored to FFXI's top-level Main Menu.
-function UI:draw_main_menu_dock(native)
+-- Main Menu integration is handled natively inside FFXI's Commands menu by
+-- soulspire_native.dll; no floating ImGui Main Menu button is rendered.
+function UI:draw_main_menu_dock(_native)
     self.last_dock.visible = false
     self.last_dock.hovered = false
-    if not native or not native.dock or self.focus.hub_open then return end
-
-    local imgui = self.imgui
-    local L = Theme.layout
-    local w = math.max(L.dock_min_width, math.floor(native.dock.w or L.dock_min_width))
-    local h = L.dock_height
-    local x = math.floor(native.dock.x or 0)
-    local y = math.floor(native.dock.y or 0)
-
-    local win_flags = flag_or(
-        ImGuiWindowFlags_NoTitleBar,
-        ImGuiWindowFlags_NoResize,
-        ImGuiWindowFlags_NoMove,
-        ImGuiWindowFlags_NoScrollbar,
-        ImGuiWindowFlags_NoScrollWithMouse,
-        ImGuiWindowFlags_NoSavedSettings,
-        ImGuiWindowFlags_NoNav,
-        ImGuiWindowFlags_NoBackground
-    )
-
-    if imgui.SetNextWindowPos then imgui.SetNextWindowPos({ x, y }, ImGuiCond_Always or 1) end
-    if imgui.SetNextWindowSize then imgui.SetNextWindowSize({ w, h }, ImGuiCond_Always or 1) end
-    if imgui.PushStyleVar then imgui.PushStyleVar(ImGuiStyleVar_WindowPadding or 2, { 0, 0 }) end
-
-    local opened = imgui.Begin('##soulspire_main_menu_dock', true, win_flags)
-    if opened then
-        self.last_dock.visible = true
-        local dl = imgui.GetWindowDrawList and imgui.GetWindowDrawList() or nil
-
-        imgui.SetCursorScreenPos({ x, y })
-        if imgui.InvisibleButton('##soulspire_dock_btn', { w, h }) then
-            self.last_dock.clicks = self.last_dock.clicks + 1
-            self.focus:open_hub(self.focus.active_index, true)
-        end
-        local hovered = imgui.IsItemHovered and imgui.IsItemHovered() or false
-        self.last_dock.hovered = hovered
-        local focused = self.focus.dock_focused
-
-        if dl then
-            local bg = (focused or hovered) and Theme.u32.ffxi_selection or Theme.u32.ffxi_navy
-            local border = focused and Theme.u32.gold or (hovered and Theme.u32.gold_hover or Theme.u32.ffxi_silver)
-            dl:AddRectFilled({ x + 2, y + 2 }, { x + w + 2, y + h + 2 }, Theme.u32.shadow, 4)
-            dl:AddRectFilled({ x, y }, { x + w, y + h }, bg, 4)
-            dl:AddRect({ x, y }, { x + w, y + h }, border, 4, 0, focused and 2.0 or 1.2)
-            if focused then
-                dl:AddRectFilled({ x + 2, y + 4 }, { x + 5, y + h - 4 }, Theme.u32.gold, 1)
-            end
-            draw_crest(dl, x + 8, y + 5, 22, self:ensure_assets())
-        end
-
-        F.drawShadowText(imgui, dl, x + 36, y + 9,
-            focused and '> Soulspire' or 'Soulspire',
-            (focused or hovered) and F.u32.soul_gold_bright or F.u32.text_primary, 0.92, 'l')
-
-        local hint = focused and '[A/Enter]' or '[LB/Tab]'
-        if w >= 152 then
-            F.drawShadowText(imgui, dl, x + w - 8, y + 10, hint,
-                focused and F.u32.aether_cyan or F.u32.text_secondary, 0.74, 'r')
-        end
-    end
-    imgui.End()
-    if imgui.PopStyleVar then imgui.PopStyleVar() end
 end
 
 -- Render an honest unavailable module panel (zero fake interactive controls).
@@ -555,8 +498,8 @@ function UI:draw_hub(native, bridge_mode)
 
         -- B. Central Module Viewport
         local active = self.focus:active_module()
-        local mode_str = (bridge_mode == 'native-hook' and 'Native Main Menu Hook')
-            or (bridge_mode == 'native-styled-fallback' and 'Native-Styled Main Menu Fallback')
+        local mode_str = (bridge_mode == 'native-commands-menu' and 'Native Commands Menu')
+            or (bridge_mode == 'native-hook' and 'Native Commands Menu')
             or 'Standalone (/soulspire)'
 
         local ident = nil
@@ -629,9 +572,10 @@ end
 function UI:draw(native, bridge_mode)
     local mode = bridge_mode
     if type(mode) == 'boolean' then
-        mode = mode and 'native-styled-fallback' or 'standalone'
+        mode = mode and 'native-commands-menu' or 'standalone'
     end
-    self:draw_main_menu_dock(native)
+    self.last_dock.visible = false
+    self.last_dock.hovered = false
     self:draw_hub(native, mode or 'standalone')
 end
 

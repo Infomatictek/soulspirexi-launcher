@@ -1,11 +1,12 @@
 -- SoulspireXI Core: deterministic menu focus, module switching & modal state machine.
 -- Manages clean focus ownership between:
---   1. Native FFXI Main Menu (unowned -> all native inputs pass through)
---   2. Docked "Soulspire" Main Menu entry (owned -> inputs consumed cleanly)
---   3. Unified SoulspireXI Core Hub (owned -> ALL controller/menu inputs captured):
+--   1. Native FFXI Menus (unowned -> 100% of native inputs pass untouched to FFXI)
+--   2. Unified SoulspireXI Core Hub (owned -> ALL controller/menu inputs captured):
+--        - Opened natively from FFXI's Commands menu "Soulspire" entry or /soulspire
 --        - Help / Details overlay modal (Y toggle, B dismiss)
 --        - Dynamic module switching (LB/RB -> module_prev / module_next)
 --        - Delegation into the active module's directional focus controller
+--        - Cancel (B / Esc) closes Core and restores normal FFXI operation immediately
 
 local Focus = {}
 Focus.__index = Focus
@@ -65,7 +66,7 @@ function Focus:clamp_selection()
 end
 
 function Focus:owns_input()
-    return self.hub_open or self.dock_focused
+    return self.hub_open == true
 end
 
 function Focus:is_hub_open()
@@ -79,11 +80,12 @@ local function notify_module(mod, method, ...)
     return nil
 end
 
-function Focus:open_hub(index, from_dock)
+function Focus:open_hub(index, from_native_menu)
     local prev_open = self.hub_open
     self.hub_open = true
     self.help_open = false
-    self.opened_from_dock = (from_dock == true)
+    self.dock_focused = false
+    self.opened_from_dock = false
     if type(index) == 'number' then
         local mod = self.registry:get(index)
         if mod then
@@ -93,7 +95,7 @@ function Focus:open_hub(index, from_dock)
         end
     end
     self:clamp_selection()
-    self.last_action = from_dock and 'open_from_dock' or 'open_direct'
+    self.last_action = from_native_menu and 'open_from_native_menu' or 'open_direct'
     local active = self:active_module()
     if not prev_open then
         notify_module(active, 'on_open', self)
@@ -101,25 +103,21 @@ function Focus:open_hub(index, from_dock)
     notify_module(active, 'on_activate', self)
 end
 
-function Focus:close_hub(native)
+function Focus:open_from_native_menu(index)
+    self:open_hub(index or self.active_index, true)
+end
+
+function Focus:close_hub(_native)
     local active = self:active_module()
     notify_module(active, 'on_close', self)
 
-    local return_to_dock = self.opened_from_dock and native ~= nil
     self.hub_open = false
     self.help_open = false
     self.opened_from_dock = false
-    if return_to_dock then
-        self.dock_focused = true
-        self.focus_window = native.window
-        self.focus_cursor = native.cursor
-        self.last_action = 'close_to_dock'
-    else
-        self.dock_focused = false
-        self.focus_window = nil
-        self.focus_cursor = nil
-        self.last_action = 'close'
-    end
+    self.dock_focused = false
+    self.focus_window = nil
+    self.focus_cursor = nil
+    self.last_action = 'close'
 end
 
 function Focus:toggle_hub(index)
@@ -265,35 +263,7 @@ function Focus:handle_action(action, native)
         return true
     end
 
-    -- Docked "Soulspire" entry on FFXI Main Menu is focused
-    if self.dock_focused then
-        if action == 'confirm' then
-            self:open_hub(self.active_index, true)
-            return true
-        elseif action == 'cancel' or action == 'up' or action == 'focus_dock'
-            or action == 'module_prev' or action == 'module_next' then
-            self.dock_focused = false
-            self.focus_window = nil
-            self.focus_cursor = nil
-            self.last_action = 'return_to_native'
-            return true
-        elseif action == 'down' or action == 'left' or action == 'right'
-            or action == 'context' or action == 'details' then
-            return true
-        end
-        return false
-    end
-
-    -- Neither Hub nor Dock is focused: claim dock focus when FFXI Main Menu is open
-    -- and player triggers Tab or LB/RB handoff.
-    if native ~= nil and (action == 'focus_dock' or action == 'module_prev' or action == 'module_next') then
-        self.dock_focused = true
-        self.focus_window = native.window
-        self.focus_cursor = native.cursor
-        self.last_action = 'focus_dock'
-        return true
-    end
-
+    -- When Core Hub is closed, NEVER intercept any native FFXI Commands menu or gameplay inputs.
     return false
 end
 

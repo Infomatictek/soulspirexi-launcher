@@ -41,6 +41,7 @@ local ui_font = nil
 local last_session_active = false
 local watch_menus = false
 local last_watched_form = nil
+local last_native_probe_at = 0
 
 local function log(msg)
     print('[soulspire_core] ' .. tostring(msg))
@@ -70,7 +71,7 @@ local function load_sibling_lua(sibling_addon, filename)
     return mod, nil
 end
 
--- Read-only crystaljobs.dll status helper (zero memory writes, never interferes with hooks)
+-- Read-only soulspire_native.dll (with legacy crystaljobs.dll fallback) status helper
 local crystal_status_t = nil
 pcall(ffi.cdef, 'void* __stdcall GetModuleHandleA(const char* name);')
 pcall(ffi.cdef, 'void* __stdcall GetProcAddress(void* module, const char* name);')
@@ -90,9 +91,12 @@ end)
 local function read_crystaljobs_status()
     if not crystal_status_t or not get_status_sig then return nil end
     local ok, info = pcall(function()
-        local mod = ffi.C.GetModuleHandleA('crystaljobs.dll')
-        if mod == nil then return nil end
-        local addr = ffi.C.GetProcAddress(mod, 'CrystalJobsGetStatus')
+        local mod = ffi.C.GetModuleHandleA('soulspire_native.dll')
+        local addr = (mod ~= nil) and ffi.C.GetProcAddress(mod, 'SoulspireNativeGetStatus') or nil
+        if addr == nil then
+            mod = ffi.C.GetModuleHandleA('crystaljobs.dll')
+            addr = (mod ~= nil) and ffi.C.GetProcAddress(mod, 'CrystalJobsGetStatus') or nil
+        end
         if addr == nil then return nil end
         local fn = ffi.cast(get_status_sig, addr)
         local st = ffi.new(crystal_status_t)
@@ -312,13 +316,13 @@ ashita.events.register('load', 'soulspire_core_load', function()
     end
 
     local ok, scaling = pcall(require, 'scaling')
-    if ok and scaling and scaling.scaled and scaling.scaled.w > 0 and scaling.scaled.h > 0 then
-        local ptr_ok, operand = pcall(function()
-            return AshitaCore:GetPointerManager():Get('menu')
-        end)
-        if ptr_ok and operand then
-            menu = MenuBridge.new(ashita.memory, scaling, operand)
-        end
+    local ptr_ok, operand = pcall(function()
+        return AshitaCore:GetPointerManager():Get('menu')
+    end)
+    if ok and scaling and scaling.scaled and scaling.scaled.w > 0 and scaling.scaled.h > 0 and ptr_ok and operand then
+        menu = MenuBridge.new(ashita.memory, scaling, operand)
+    else
+        menu = MenuBridge.new(nil, nil, nil)
     end
 
     ui = UI.new(imgui, registry, focus, assets, {
@@ -333,8 +337,8 @@ ashita.events.register('load', 'soulspire_core_load', function()
     })
 
     last_session_active = is_player_in_session()
-    if not menu or not menu:is_available() then
-        log('MenuManager layout unavailable; running in standalone /soulspire mode.')
+    if not menu or not menu.native_hook_supported then
+        log('Waiting for soulspire_native.dll native Commands menu hook; /soulspire remains available.')
     end
 end)
 
@@ -398,11 +402,13 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
         log('XInput bindings:   ' .. serialize_map(b.xinput))
         log('DInput bindings:   ' .. serialize_map(b.dinput))
     elseif sub == 'status' then
+        if menu then menu:refresh_native_status() end
         local native = current_native_menu()
         local active = focus:active_module()
         local diag = menu and menu:diagnostics() or { mode = 'standalone', bridge_available = false, native_hook_supported = false, native_hook_reason = 'menu_bridge_nil' }
         local sn, sn_err = NativeBridge.query()
-        local line1 = ('version=%s mode=%s native_hook=%s bridge=%s modules=%d(%d live) hub_open=%s dock_focused=%s active=%s native_form=%s'):format(
+        local mm, mm_err = NativeBridge.main_menu_status()
+        local line1 = ('version=%s mode=%s native_hook=%s bridge=%s modules=%d(%d live) hub_open=%s active=%s native_form=%s'):format(
             addon.version,
             tostring(diag.mode),
             tostring(diag.native_hook_supported),
@@ -410,7 +416,6 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
             registry:count(),
             #registry:available_modules(),
             tostring(focus.hub_open),
-            tostring(focus.dock_focused),
             tostring(active and active.id or 'none'),
             tostring(native and native.name or 'none')
         )
@@ -425,7 +430,7 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
         log(line2)
         local line3 = ''
         if sn then
-            line3 = ('soulspire_native abi=v%d hooks=%d/%d caps=0x%04X modules=0x%02X/0x%02X banks=%d/%d hash=%s'):format(
+            line3 = ('soulspire_native abi=v%d hooks=%d/%d caps=0x%05X modules=0x%02X/0x%02X banks=%d/%d hash=%s'):format(
                 sn.abi_version, sn.installed_hooks, sn.expected_hooks, sn.capabilities,
                 sn.active_modules_mask, sn.enabled_modules_mask,
                 sn.menu2fon_banks_used, sn.menu2fon_banks_max, sn.registry_hash)
@@ -434,11 +439,22 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
             line3 = 'soulspire_native unavailable: ' .. tostring(sn_err)
             log(line3)
         end
+        local line4 = ''
+        if mm then
+            line4 = ('commands_menu hooks=%s injected=%s btn=%d count=%d frame_h=%d sprite=%s open_inj=%d nav=%d act=%d pending=%d'):format(
+                tostring(mm.hooks_installed), tostring(mm.injected), mm.button_id, mm.button_count,
+                mm.frame_height, tostring(mm.sprite_synthesized), mm.open_injections,
+                mm.nav_overrides, mm.activations, mm.pending_open_requests)
+            log(line4)
+        else
+            line4 = 'commands_menu unavailable: ' .. tostring(mm_err)
+            log(line4)
+        end
         if type(addon.path) == 'string' and addon.path ~= '' then
             pcall(function()
                 local f = io.open(addon.path:gsub('[/\\]+$', '') .. '/soulspire_core-status.log', 'w')
                 if f then
-                    f:write('[soulspire_core] ' .. line1 .. '\n[soulspire_core] ' .. line2 .. '\n[soulspire_core] ' .. line3 .. '\n')
+                    f:write('[soulspire_core] ' .. line1 .. '\n[soulspire_core] ' .. line2 .. '\n[soulspire_core] ' .. line3 .. '\n[soulspire_core] ' .. line4 .. '\n')
                     f:close()
                 end
             end)
@@ -594,8 +610,25 @@ ashita.events.register('d3d_present', 'soulspire_core_present', function()
     end
     last_session_active = in_session
 
+    -- Re-probe soulspire_native.dll if it finished Direct3D initialization after addon load.
+    local now = os.clock()
+    if menu and not menu.native_hook_supported and (now - last_native_probe_at) >= 0.5 then
+        last_native_probe_at = now
+        menu:refresh_native_status()
+    end
+
+    -- Dispatch native FFXI Commands menu "Soulspire" (Btn 16) confirm requests into Core.
+    local open_requests = menu and menu:consume_native_open_request() or NativeBridge.consume_core_open_request()
+    if open_requests > 0 then
+        if menu and not menu.native_hook_supported then
+            menu:refresh_native_status()
+        end
+        focus:open_from_native_menu(focus.active_index)
+        input:arm_open_guard(0.20)
+    end
+
     -- Pump hold-to-repeat for D-Pad / Left Stick / Arrow keys while Core Hub is open
-    input:tick(os.clock(), dispatch_action, focus:is_hub_open())
+    input:tick(now, dispatch_action, focus:is_hub_open())
 
     local native = current_native_menu()
     if watch_menus and menu and menu:is_available() then

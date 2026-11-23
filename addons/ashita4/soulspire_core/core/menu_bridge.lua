@@ -1,23 +1,20 @@
--- SoulspireXI Core: Native FFXI Main Menu Integration Bridge.
+-- SoulspireXI Core: Native FFXI Commands Menu Integration Bridge.
 --
--- Strategy (Zero-Guessing, Isolated & Reversible):
---   1. Probes crystaljobs.dll (read-only FFI) for an optional verified native
---      main-menu hook export (CrystalJobsGetMainMenuBridge). If unsupported
---      by the installed DLL (current 24-hook baseline), fails gracefully without
---      touching FFXiMain.dll memory or any existing Soul identity/equipment hooks.
---   2. Falls back cleanly to verified read-only MenuManager inspection
---      (AshitaCore:GetPointerManager():Get('menu') -> storage - 0x54, identical
---      to crystalsocket/menu.lua) to dock a native-styled "Soulspire" entry onto
---      FFXI's top-level Main Menu (menu    mnu1 / mnu2 / mainmenu / submain).
---   3. If MenuManager layout is unavailable, degrades safely to standalone
---      /soulspire mode without error.
+-- Connects directly to soulspire_native.dll (31-hook ABI v2), which injects a
+-- genuine native "Soulspire" entry (Btn 16) between Status (Btn 1) and
+-- Equipment (Btn 2) inside FFXI's original Commands menu ("menu    menuwind").
+--
+-- Never renders a floating ImGui button or docked overlay substitute.
+-- When soulspire_native.dll is unavailable, degrades cleanly to standalone
+-- /soulspire mode without touching FFXiMain.dll memory.
+
+local ok_nb, NativeBridge = pcall(require, 'core.native_bridge')
+if not ok_nb then NativeBridge = nil end
 
 local MenuBridge = {}
 MenuBridge.__index = MenuBridge
 
--- Recognized FFXI top-level Main Menu form names (Page 1 & Page 2).
--- Verified live on retail Windows FFXI: "menu    menuwind" rect=(1792,48,1904,250).
--- Strictly excludes Equipment (menu    equip), ItemInfo, Magic, Ability, etc.
+-- Recognized FFXI top-level Commands Menu form names (strictly read-only diagnostics).
 MenuBridge.MAIN_MENU_FORMS = {
     ['menu    menuwind'] = true,
     ['menu    mnu1']     = true,
@@ -41,45 +38,42 @@ local function pointer(value, span)
     return address(value, span) and value % 4 == 0
 end
 
--- Safe read-only probe for a future verified native Main Menu hook in crystaljobs.dll.
--- Never patches memory and fails gracefully on missing DLL or missing export.
+-- Read-only probe for soulspire_native.dll's 31-hook native Commands menu entry.
 function MenuBridge.probe_native_hook(custom_probe)
     if type(custom_probe) == 'function' then
         local ok, supported, detail = pcall(custom_probe)
         if ok and supported == true then
-            return true, detail or 'native-hook-active'
+            return true, detail or 'soulspire_native Commands menu active'
         end
         return false, (ok and detail) or 'native hook probe failed'
     end
 
-    local ok, supported, detail = pcall(function()
-        local ffi = require('ffi')
-        pcall(ffi.cdef, 'void* __stdcall GetModuleHandleA(const char* name);')
-        pcall(ffi.cdef, 'void* __stdcall GetProcAddress(void* module, const char* name);')
-        local mod = ffi.C.GetModuleHandleA('crystaljobs.dll')
-        if mod == nil then
-            return false, 'crystaljobs.dll not loaded'
+    if NativeBridge and type(NativeBridge.main_menu_status) == 'function' then
+        local st, err = NativeBridge.main_menu_status()
+        if st then
+            if st.hooks_installed then
+                return true, string.format(
+                    'soulspire_native Commands menu active (btn=%d hooks=%d/%d)',
+                    st.button_id, st.total_hooks, st.expected_hooks)
+            end
+            return false, string.format(
+                'soulspire_native loaded but Commands menu hooks inactive (hooks=%d/%d)',
+                st.total_hooks, st.expected_hooks)
         end
-        local fn = ffi.C.GetProcAddress(mod, 'CrystalJobsGetMainMenuBridge')
-        if fn == nil then
-            return false, 'CrystalJobsGetMainMenuBridge not present in 24-hook crystaljobs.dll'
-        end
-        return true, 'CrystalJobsGetMainMenuBridge export detected'
-    end)
-    if ok then
-        return supported == true, detail
+        return false, tostring(err or 'soulspire_native.dll unavailable')
     end
-    return false, 'FFI probe unavailable'
+    return false, 'NativeBridge unavailable'
 end
 
 function MenuBridge.new(memory, scaling, operand, opts)
-    -- Backward-compatible 4th argument: either main_menu_forms table or opts table
     local main_menu_forms = nil
     local native_probe = nil
+    local open_consumer = nil
     if type(opts) == 'table' then
-        if opts.forms or opts.native_probe then
+        if opts.forms or opts.native_probe or opts.open_consumer then
             main_menu_forms = opts.forms
             native_probe = opts.native_probe
+            open_consumer = opts.open_consumer
         else
             main_menu_forms = opts
         end
@@ -89,16 +83,14 @@ function MenuBridge.new(memory, scaling, operand, opts)
         memory                = memory,
         scaling               = scaling,
         forms                 = main_menu_forms or MenuBridge.MAIN_MENU_FORMS,
+        native_probe          = native_probe,
+        open_consumer         = open_consumer,
         manager               = nil,
         native_hook_supported = false,
         native_hook_reason    = 'not probed',
         mode                  = 'standalone',
         last_error            = nil,
     }, MenuBridge)
-
-    local hook_ok, hook_detail = MenuBridge.probe_native_hook(native_probe)
-    self.native_hook_supported = hook_ok
-    self.native_hook_reason = hook_detail
 
     local ok, manager = pcall(function()
         if not memory or not address(operand, 4) then return nil end
@@ -110,19 +102,37 @@ function MenuBridge.new(memory, scaling, operand, opts)
         self.last_error = tostring(manager)
     end
 
-    if self.native_hook_supported then
-        self.mode = 'native-hook'
-    elseif self.manager ~= nil and self.scaling ~= nil then
-        self.mode = 'native-styled-fallback'
-    else
-        self.mode = 'standalone'
-    end
-
+    self:refresh_native_status()
     return self
 end
 
+function MenuBridge:refresh_native_status()
+    local hook_ok, hook_detail = MenuBridge.probe_native_hook(self.native_probe)
+    self.native_hook_supported = hook_ok
+    self.native_hook_reason = hook_detail
+    if self.native_hook_supported then
+        self.mode = 'native-commands-menu'
+    else
+        self.mode = 'standalone'
+    end
+    return self.native_hook_supported
+end
+
+-- Poll and atomically consume pending open requests emitted when the user
+-- confirms the native "Soulspire" entry inside FFXI's Commands menu.
+function MenuBridge:consume_native_open_request()
+    if type(self.open_consumer) == 'function' then
+        local ok, count = pcall(self.open_consumer)
+        return ok and (tonumber(count) or 0) or 0
+    end
+    if NativeBridge and type(NativeBridge.consume_core_open_request) == 'function' then
+        return NativeBridge.consume_core_open_request()
+    end
+    return 0
+end
+
 function MenuBridge:is_available()
-    return self.manager ~= nil and self.scaling ~= nil
+    return self.native_hook_supported or (self.manager ~= nil and self.scaling ~= nil)
 end
 
 function MenuBridge:get_mode()
@@ -139,9 +149,9 @@ function MenuBridge:diagnostics()
     }
 end
 
--- Walk all visible native FFXI menu windows (strictly read-only).
+-- Walk all visible native FFXI menu windows (strictly read-only diagnostics).
 function MenuBridge:inspect_all()
-    if not self:is_available() then return nil end
+    if self.manager == nil or self.memory == nil then return nil end
     local ok, result = pcall(function()
         local memory = self.memory
         local current = memory.read_uint32(self.manager + 0x54)
@@ -207,8 +217,7 @@ function MenuBridge:inspect_all()
     return result
 end
 
--- Returns a main-menu dock context when an FFXI top-level Main Menu is open and active,
--- or nil when no Main Menu is active (e.g., Equipment, Magic, Gameplay, Cutscene).
+-- Returns read-only context when FFXI's top-level Commands menu is open (for diagnostics).
 function MenuBridge:main_menu_context()
     local state = self:inspect_all()
     if not state or not state.current or not state.current_name then return nil end
@@ -223,42 +232,15 @@ function MenuBridge:main_menu_context()
     end
     if not main_win then return nil end
 
-    local scaling = self.scaling
-    local left, top, right, bottom = main_win.left, main_win.top, main_win.right, main_win.bottom
-    if left < 0 or top < 0 or right <= left or bottom <= top then return nil end
-    if scaling.menu and (right > scaling.menu.w or bottom > scaling.menu.h) then return nil end
-
-    local dock_x = scaling.scale_w(left)
-    local dock_y = scaling.scale_h(bottom + 4)
-    local dock_w = scaling.scale_w(right - left)
-    local dock_right = scaling.scale_w(right)
-    -- Clamp dock cleanly inside screen if main menu sits near bottom/right edge
-    if scaling.scaled and scaling.scaled.h and (dock_y + 38) > scaling.scaled.h then
-        dock_y = math.max(8, scaling.scale_h(top) - 40)
-    end
-    local min_w = 156
-    if dock_w < min_w and scaling.scaled and scaling.scaled.w and (dock_x + min_w) > (scaling.scaled.w - 4) then
-        -- Flush right-align with the FFXI Main Menu's right edge (e.g. menuwind at right=1904)
-        dock_x = math.max(4, dock_right - min_w)
-    elseif scaling.scaled and scaling.scaled.w then
-        dock_x = math.max(4, math.min(dock_x, scaling.scaled.w - math.max(min_w, dock_w) - 4))
-    end
-
     return {
         window = state.current,
         name = state.current_name,
         cursor = state.cursor,
-        mode = self.mode,
-        bounds = {
-            left = left,
-            top = top,
-            right = right,
-            bottom = bottom,
-        },
-        dock = {
-            x = dock_x,
-            y = dock_y,
-            w = dock_w,
+        rect = {
+            left = main_win.left,
+            top = main_win.top,
+            right = main_win.right,
+            bottom = main_win.bottom,
         },
     }
 end

@@ -183,39 +183,41 @@ local scaling = {
     scale_h = function(v) return v * 1.5 end,
 }
 
--- Graceful native hook probe failure -> native-styled-fallback
-local mem1, op1 = make_mock_memory('menu    mnu1    ', { left = 20, top = 40, right = 140, bottom = 240 }, 3)
+-- Native Commands menu active when soulspire_native.dll reports 31-hook Commands menu ready
+local mem1, op1 = make_mock_memory('menu    menuwind', { left = 1792, top = 48, right = 1904, bottom = 266 }, 16)
+local pending_native_opens = 0
+local bridge_native = MenuBridge.new(mem1, scaling, op1, {
+    native_probe = function() return true, 'soulspire_native Commands menu active (btn=16 hooks=31/31)' end,
+    open_consumer = function()
+        local n = pending_native_opens
+        pending_native_opens = 0
+        return n
+    end,
+})
+assert_true(bridge_native:is_available(), 'MenuBridge available when soulspire_native Commands menu active')
+assert_eq(bridge_native:get_mode(), 'native-commands-menu', 'Active native hook reports native-commands-menu')
+local ctx1 = bridge_native:main_menu_context()
+assert_true(ctx1 ~= nil, 'Main menu menuwind detected read-only')
+assert_eq(ctx1.name, 'menu    menuwind', 'Form name trimmed')
+assert_eq(ctx1.cursor, 16, 'Native Soulspire row cursor id=16 reported')
+assert_eq(ctx1.dock, nil, 'No floating dock geometry emitted')
+
+-- Unsupported native hook degrades cleanly to standalone /soulspire mode (NO floating ImGui dock!)
 local bridge1 = MenuBridge.new(mem1, scaling, op1, {
     native_probe = function() return false, 'unsupported on test host' end,
 })
-assert_true(bridge1:is_available(), 'MenuBridge available on valid MenuManager')
-assert_eq(bridge1:get_mode(), 'native-styled-fallback', 'Unsupported native hook falls back cleanly')
-local ctx1 = bridge1:main_menu_context()
-assert_true(ctx1 ~= nil, 'Main menu mnu1 detected')
-assert_eq(ctx1.name, 'menu    mnu1', 'Form name trimmed')
-assert_eq(ctx1.dock.x, 30, 'Dock x scaled')
-assert_eq(ctx1.dock.y, 366, 'Dock y scaled')
-assert_eq(ctx1.dock.w, 180, 'Dock w scaled')
+assert_eq(bridge1:get_mode(), 'standalone', 'Unsupported native hook degrades to standalone without floating dock')
 
 -- Native hook probe throwing error fails gracefully (never crashes)
 local bridge_throw = MenuBridge.new(mem1, scaling, op1, {
     native_probe = function() error('simulated dll error') end,
 })
-assert_eq(bridge_throw:get_mode(), 'native-styled-fallback', 'Throwing probe degrades gracefully')
+assert_eq(bridge_throw:get_mode(), 'standalone', 'Throwing probe degrades gracefully to standalone')
 
--- Verified retail FFXI Main Menu form ("menu    menuwind" at right edge 1792..1904)
-local mem_mw, op_mw = make_mock_memory('menu    menuwind', { left = 1792, top = 48, right = 1904, bottom = 250 }, 1)
-local scaling_1080 = { menu = { w = 1920, h = 1080 }, scaled = { w = 1920, h = 1080 }, scale_w = function(v) return v end, scale_h = function(v) return v end }
-local bridge_mw = MenuBridge.new(mem_mw, scaling_1080, op_mw, { native_probe = function() return false end })
-local ctx_mw = bridge_mw:main_menu_context()
-assert_true(ctx_mw ~= nil and ctx_mw.name == 'menu    menuwind', 'Retail FFXI menu    menuwind must be detected')
-assert_eq(ctx_mw.dock.x, 1748, 'Right-edge menuwind dock flush-aligned to right=1904 (1904-156=1748)')
-assert_eq(ctx_mw.dock.y, 254, 'Dock positioned 4px below menuwind bottom=250')
-
--- Equipment menu strictly excluded (zero interference with crystalsocket & Hook #24)
+-- Equipment menu strictly excluded (zero interference with crystalsocket & Equipment hooks)
 local mem_eq, op_eq = make_mock_memory('menu    equip   ', { left = 20, top = 40, right = 200, bottom = 260 }, 1)
 local bridge_eq = MenuBridge.new(mem_eq, scaling, op_eq, { native_probe = function() return false end })
-assert_eq(bridge_eq:main_menu_context(), nil, 'Equipment menu must NOT activate Soulspire Main Menu dock')
+assert_eq(bridge_eq:main_menu_context(), nil, 'Equipment menu must NOT match Commands menu context')
 
 -- Invalid operand fails closed to standalone mode
 local bridge_bad = MenuBridge.new(mem1, scaling, 0, { native_probe = function() return false end })
@@ -348,20 +350,29 @@ reg:attach_controller('soul_talents', st_mod, true)
 local inp = Input.new({ clock = function() return fake_clock end })
 local function dispatch(action) return focus:handle_action(action, ctx1) end
 
--- Unowned native Main Menu inputs MUST pass through to FFXI
-assert_eq(inp:on_pad('xinput', 1, true, dispatch, focus:is_hub_open()), false, 'D-Pad Down passes through to native Main Menu')
+-- Unowned native Commands menu inputs (D-Pad, LB/RB, Tab, A) MUST ALL pass untouched to FFXI!
+assert_eq(inp:on_pad('xinput', 1, true, dispatch, focus:is_hub_open()), false, 'D-Pad Down passes through to native Commands menu')
 assert_eq(inp:on_pad('xinput', 1, false, dispatch, focus:is_hub_open()), false)
-
--- LB on FFXI Main Menu focuses Soulspire dock; A opens Core Hub
-assert_eq(inp:on_pad('xinput', 8, true, dispatch, focus:is_hub_open()), true, 'LB focuses Soulspire dock')
-assert_eq(inp:on_pad('xinput', 8, false, dispatch, focus:is_hub_open()), true)
-assert_eq(focus.dock_focused, true, 'Dock focused')
+assert_eq(inp:on_pad('xinput', 8, true, dispatch, focus:is_hub_open()), false, 'LB passes through to native FFXI when Core closed')
+assert_eq(inp:on_pad('xinput', 8, false, dispatch, focus:is_hub_open()), false)
+assert_eq(focus.dock_focused, false, 'No floating dock focus mode exists')
 assert_eq(focus.hub_open, false, 'Hub not open yet')
 
-assert_eq(inp:on_pad('xinput', 12, true, dispatch, focus:is_hub_open()), true, 'XInput A opens Core Hub')
-assert_eq(inp:on_pad('xinput', 12, false, dispatch, focus:is_hub_open()), true)
-assert_eq(focus.hub_open, true, 'Hub opened from dock')
+-- Native Confirm on Btn 16 ("Soulspire") inside FFXI Commands menu dispatches into Core Hub!
+pending_native_opens = 1
+assert_eq(bridge_native:consume_native_open_request(), 1, 'Native Commands menu confirm request consumed once')
+assert_eq(bridge_native:consume_native_open_request(), 0, 'Consume is atomic (second read returns 0)')
+focus:open_from_native_menu(focus.active_index)
+inp:arm_open_guard(0.20)
+assert_eq(focus.hub_open, true, 'Hub opened from native Commands menu Soulspire entry')
+assert_eq(focus.last_action, 'open_from_native_menu', 'Recorded native Commands menu open source')
 assert_eq(focus:active_module().id, 'character', 'Initial module is Character')
+
+-- Confirm-guard prevents the opening A/Enter press from immediately double-confirming inside Core
+assert_eq(inp:on_pad('xinput', 12, true, dispatch, focus:is_hub_open()), true, 'Guarded A press consumed without triggering inner confirm')
+assert_eq(inp:on_pad('xinput', 12, false, dispatch, focus:is_hub_open()), true)
+assert_eq(char_mod:has_modal(), false, 'Confirm-guard prevented premature inner modal activation')
+fake_clock = fake_clock + 0.25
 
 -- Character module: D-Pad Down selects Soul branch 2 (owned, not active), A opens Confirm Socket modal, A confirms OP_SELECT!
 local prev_cs_count = #sent_crystal_packets
@@ -492,9 +503,7 @@ assert_eq(inp.xinput_map[12], 'confirm', 'Default XInput A binding restored')
 focus:select_module('weapon_mastery')
 focus:close_hub(ctx1)
 assert_eq(focus.hub_open, false, 'Hub closed')
-assert_eq(focus.dock_focused, true, 'Returned to dock while Main Menu still open')
-focus:handle_action('cancel', ctx1)
-assert_eq(focus.dock_focused, false, 'Returned fully to native FFXI Main Menu')
+assert_eq(focus.dock_focused, false, 'No floating dock focus on close; returned directly to normal FFXI operation')
 assert_eq(focus:owns_input(), false, 'Core no longer owns input')
 -- Verify unmapped & mapped XInput buttons now pass through untouched to FFXI!
 assert_eq(inp:on_pad('xinput', 12, true, dispatch, focus:is_hub_open()), false, 'XInput A restored to FFXI immediately')
@@ -502,7 +511,7 @@ assert_eq(inp:on_pad('xinput', 12, false, dispatch, focus:is_hub_open()), false)
 assert_eq(inp:filter_xinput_state(raw_xi, mod_xi, dispatch, false, 201.0), false, 'xinput_state passes through when Hub closed')
 
 -- Reopening Core preserves previously selected module (Weapon Mastery)
-focus:open_hub(nil, false)
+focus:open_from_native_menu()
 assert_eq(focus:active_module().id, 'weapon_mastery', 'Active module preserved across close/reopen')
 
 -- Zone change / disconnect blurs everything cleanly
@@ -510,19 +519,22 @@ focus:blur_all('zone_change')
 assert_eq(focus:owns_input(), false, 'Zone change clears all focus')
 
 -- =========================================================================
--- 6. Headless Multi-Resolution Render Verification (All Modules + Unavailable + Help)
+-- 6. Headless Multi-Resolution Render Verification (Zero Floating Dock + All Modules)
 -- =========================================================================
 local ui = UI.new(mock_imgui, reg, focus, nil, {
     get_identity = function() return char_mod:get_header_identity() end,
 })
 
--- Clicking docked entry opens Hub
-click_next_btn = '##soulspire_dock_btn'
-ui:draw(ctx1, bridge1:get_mode())
-assert_eq(ui.last_dock.visible, true, 'Main Menu dock rendered')
-assert_eq(ui.last_dock.clicks, 1, 'Main Menu dock click recorded')
-assert_eq(focus.hub_open, true, 'Clicking Main Menu dock opens Core Hub')
-click_next_btn = nil
+-- When Core Hub is closed, ZERO floating ImGui dock or overlay is drawn even when FFXI menuwind is open!
+draw_count = 0
+drawn_texts = {}
+ui:draw(ctx1, bridge_native:get_mode())
+assert_eq(ui.last_dock.visible, false, 'No floating Main Menu dock rendered when Hub closed')
+assert_eq(draw_count, 0, 'Zero draw calls emitted when Hub is closed')
+
+-- Open Core Hub cleanly from native Commands menu
+focus:open_from_native_menu()
+assert_eq(focus.hub_open, true, 'Core Hub opened cleanly')
 
 local resolutions = {
     { w = 1280, h = 720,  expectMode = 'focused' },
@@ -559,8 +571,12 @@ focus.help_open = false
 -- Soulspire Native ABI v2 bridge checks (headless/non-Windows safe)
 local NativeBridge = require('core.native_bridge')
 assert_eq(NativeBridge.EXPECTED_ABI_VERSION, 2, 'NativeBridge must target Soulspire Native ABI v2')
+assert_eq(NativeBridge.CAP_COMMANDS_MENU_ENTRY, 0x10000, 'NativeBridge exposes Commands menu capability bit')
 local bridge_info, bridge_err = NativeBridge.query()
 assert_true(bridge_info == nil and type(bridge_err) == 'string', 'Headless Linux test must fail closed cleanly without Windows DLL')
+local mm_info, mm_err = NativeBridge.main_menu_status()
+assert_true(mm_info == nil and type(mm_err) == 'string', 'Headless main_menu_status fails closed cleanly')
+assert_eq(NativeBridge.consume_core_open_request(), 0, 'Headless consume_core_open_request returns 0')
 
 -- Micro-benchmark: 200 headless frames of unified Core + Weapon Mastery at 2560x1440
 mockDisplay.x, mockDisplay.y = 2560, 1440

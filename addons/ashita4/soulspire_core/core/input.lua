@@ -135,6 +135,7 @@ function Input.new(opts)
         repeat_delay    = tonumber(opts.repeat_delay) or 0.32,
         repeat_interval = tonumber(opts.repeat_interval) or 0.11,
         clock           = opts.clock or os.clock,
+        confirm_guard_until = 0,
         last_device     = 'gamepad',
     }, Input)
 
@@ -206,6 +207,18 @@ function Input:reset()
     self.stick_dir = nil
     self.stick_lx = 0
     self.stick_ly = 0
+    self.confirm_guard_until = 0
+end
+
+-- Suppress accidental double-confirm inside Core immediately after opening from
+-- FFXI's native Commands menu via Confirm (Enter / Gamepad A).
+function Input:arm_open_guard(seconds)
+    local dur = tonumber(seconds) or 0.18
+    self.confirm_guard_until = self.clock() + dur
+end
+
+function Input:_confirm_guarded(action)
+    return action == 'confirm' and self.confirm_guard_until > 0 and self.clock() < self.confirm_guard_until
 end
 
 function Input:release_key(scan)
@@ -269,6 +282,11 @@ function Input:on_key(scan, down, chat_open, dispatch_fn, hub_open, text_input_a
         return false
     end
 
+    if hub_open == true and self:_confirm_guarded(action) then
+        self.key_owner[scan] = true
+        return true
+    end
+
     if action and type(dispatch_fn) == 'function' and dispatch_fn(action) then
         self.key_owner[scan] = true
         self.last_device = 'keyboard'
@@ -303,6 +321,11 @@ function Input:on_pad(source, button_id, down, dispatch_fn, hub_open)
     end
 
     self.pad_owner[token] = false
+    if hub_open == true and self:_confirm_guarded(action) then
+        self.pad_owner[token] = true
+        self.last_device = 'gamepad'
+        return true
+    end
     if action and type(dispatch_fn) == 'function' and dispatch_fn(action) then
         self.pad_owner[token] = true
         self.last_device = 'gamepad'

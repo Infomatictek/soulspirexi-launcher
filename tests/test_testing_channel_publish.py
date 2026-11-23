@@ -322,6 +322,7 @@ class TestingChannelPublishTests(unittest.TestCase):
             "soulspire_core/soulspire_core.lua",
             "soulspire_core/core/foundations.lua",
             "soulspire_core/core/registry.lua",
+            "soulspire_core/core/native_bridge.lua",
             "soulspire_core/core/menu_bridge.lua",
             "soulspire_core/core/input.lua",
             "soulspire_core/core/focus.lua",
@@ -333,14 +334,15 @@ class TestingChannelPublishTests(unittest.TestCase):
             "soulspire_talents/soulforge_state.lua",
             "soulspire_talents/soulforge_ui.lua",
             "soulspire_talents/soulspire_talents.lua",
-            "crystaljobs.dll",
+            "soulspire_native.dll",
         ):
             self.assertIn(required_target, targets, f"Missing {required_target} in testing-core-ui manifest")
 
         self.assertEqual(
-            targets["crystaljobs.dll"]["sourcePath"],
-            "channels/testing-core-ui/payload/plugins/ashita4/crystaljobs.dll",
+            targets["soulspire_native.dll"]["sourcePath"],
+            "channels/testing-core-ui/payload/plugins/ashita4/soulspire_native.dll",
         )
+        self.assertNotIn("crystaljobs.dll", targets)
         # Strict read-only SHA-256 verification on both Stable and Core Testing manifests
         self.assertEqual([], verify_manifest.verify_manifest(REPO_ROOT, manifest_path=stable_path))
         self.assertEqual([], verify_manifest.verify_manifest(REPO_ROOT, manifest_path=core_manifest_path))
