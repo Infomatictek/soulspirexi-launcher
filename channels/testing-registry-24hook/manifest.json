@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.1.9-testing.runtime-identity",
+  "manifestVersion": "2.1.10-testing.runtime-identity",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
     "version": "feat/runtime-soul-identity-and-spacing (hash f8abc95e3c88cce7)",
@@ -9,7 +9,7 @@
     "commit": "f8abc95e3c88cce7",
     "dockerImage": "soulspirexi/server:registry",
     "crystalJobsHooks": 24,
-    "notes": "Data-only Search spacing fix (useGlyphWidths=false, trackingPx=-1 -> uniform [0,7,14] 7px pitch fixing HEL/THV/GOE/FLT/KEN narrow-glyph crush; GMB/BKW unchanged; ZERO DLL rebuild)"
+    "notes": "Data-only badge-to-level alignment pass (offsetXPx=1, trackingPx=-1, useGlyphWidths=false -> [1,8,15], right edge 22-23px; preserves 7px letter spacing, ZERO DLL rebuild)"
   },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
@@ -102,7 +102,7 @@
       "category": "plugin",
       "sourcePath": "plugins/ashita4/data/crystaljobs-presentation.json",
       "targetPath": "data/crystaljobs-presentation.json",
-      "sha256": "506e9f08f1e1b26484dd6117eceb617db46ba23d2316d72c42afed571b1a618e",
+      "sha256": "f1a43b2f9fa4a831dd465b5e431ebc71db34ad6eb66b12cef644cd77e737b09e",
       "size": 119
     },
     {

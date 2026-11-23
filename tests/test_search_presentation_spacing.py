@@ -43,15 +43,15 @@ class SearchPresentationSpacingTests(unittest.TestCase):
         self.assertEqual(cfg["schemaVersion"], 1)
         badge = cfg["searchBadge"]
         self.assertEqual(badge["trackingPx"], -1)
-        self.assertEqual(badge["offsetXPx"], 0)
+        self.assertEqual(badge["offsetXPx"], 1)
         self.assertFalse(badge["useGlyphWidths"])
 
         for abbr in ("HEL", "GMB", "BKW", "GOE", "THV", "FLT", "KEN", "IRN", "SEI"):
             xs, right_edge = compute_layout(abbr, badge["trackingPx"], badge["offsetXPx"], badge["useGlyphWidths"])
-            self.assertEqual(xs, [0, 7, 14], f"{abbr} must use uniform 7px pitch [0, 7, 14]")
-            self.assertGreaterEqual(xs[1] - xs[0], 7)
-            self.assertGreaterEqual(xs[2] - xs[1], 7)
-            self.assertLessEqual(right_edge, 22, f"{abbr} right edge {right_edge} must stay clear of +23 level digits")
+            self.assertEqual(xs, [1, 8, 15], f"{abbr} must preserve uniform 7px pitch at [1, 8, 15]")
+            self.assertEqual(xs[1] - xs[0], 7)
+            self.assertEqual(xs[2] - xs[1], 7)
+            self.assertLessEqual(right_edge, 23, f"{abbr} right edge {right_edge} must stay <= +23 level digits")
 
     def test_all_66_souls_unique_and_within_search_bounds(self):
         ident = json.loads(IDENTITIES_PATH.read_text(encoding="utf-8"))
@@ -68,8 +68,8 @@ class SearchPresentationSpacingTests(unittest.TestCase):
             self.assertNotIn(abbr, seen)
             seen.add(abbr)
             xs, right_edge = compute_layout(abbr, cfg["trackingPx"], cfg["offsetXPx"], cfg["useGlyphWidths"])
-            self.assertEqual(xs, [0, 7, 14])
-            self.assertLessEqual(right_edge, 22)
+            self.assertEqual(xs, [1, 8, 15])
+            self.assertLessEqual(right_edge, 23)
 
 
 if __name__ == "__main__":
