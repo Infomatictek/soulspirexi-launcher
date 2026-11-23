@@ -1,0 +1,15 @@
+{
+  "dllPath": "plugins/ashita4/crystaljobs.dll",
+  "dllSha256": "7f3f3fc0b06351cadfbf73840f36e309fe3ea14424412f979709d84112d7f254",
+  "dllSize": 129536,
+  "compiledRegistryHash": "0e3278fac7296cb3",
+  "searchRenderMode": "legacy-native-text-4f0fdb3 (mode 0)",
+  "sourceCommit": "ee89547d32d0f5f14b66d6579d74d3b28bfef298",
+  "branch": "feat/soul-identity-registry-integration",
+  "ciRunId": "45247824997",
+  "ciRunUrl": "https://github.com/Infomatictek/soulspirexi-launcher/actions/runs/45247824997",
+  "buildTarget": "Win32-x86-MSVC",
+  "ciVerified": true,
+  "clientVerified": false,
+  "notes": "CI-built crystaljobs.dll provenance (legacy-native-text-4f0fdb3 (mode 0)). Never set clientVerified=true until verified in the Windows FFXI client."
+}
