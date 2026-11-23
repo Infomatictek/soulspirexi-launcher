@@ -1,7 +1,7 @@
--- SoulspireXI Core: modular section registry.
--- Phase 1A registers the 7 foundation sections as clearly labeled placeholders.
--- Subsequent phases can replace individual section renderers without rewriting
--- the Core shell, navigation state machine, or menu bridge.
+-- SoulspireXI Core: dynamic modular navigation registry.
+-- Module names, icons, order, availability, and controllers come exclusively
+-- from this registry so the unified top navigation header stays extensible
+-- as new SoulspireXI modules are integrated.
 
 local Registry = {}
 Registry.__index = Registry
@@ -10,119 +10,220 @@ local okSoulReg, soulRegistry = pcall(require, 'core.soul_registry_generated')
 if not okSoulReg or type(soulRegistry) ~= 'table' then soulRegistry = nil end
 Registry.souls = soulRegistry
 
-local DEFAULT_SECTIONS = {
+local DEFAULT_MODULES = {
     {
-        id = 'soul_crystals',
-        label = 'Soul Crystals',
-        short_key = 'crystals',
-        badge = 'PLACEHOLDER',
-        accent = 'gold',
-        summary = 'Socket, inspect, and switch job-specific Soul Crystals.',
-        details = 'Phase 1A placeholder. Existing CrystalSocket addon remains active in the native Equipment menu and continues syncing native job labels and weapon rules via crystaljobs.dll.',
+        id             = 'character',
+        label          = 'Character',
+        short_key      = 'character',
+        aliases        = { 'soul', 'crystals', 'soul_crystals', 'identity' },
+        icon           = 'character',
+        order          = 10,
+        available      = true,
+        badge          = 'LIVE',
+        accent         = 'violet',
+        summary        = 'Inspect your active Soul Identity, job mastery profile, and socketed Soul Crystals.',
+        details        = 'Powered by CrystalSocket protocol (0x11F/0x1FF CRYS) and verified crystaljobs.dll read-only diagnostics. All Soul swaps remain server-authoritative.',
         existing_addon = 'crystalsocket',
     },
     {
-        id = 'ws_talents',
-        label = 'Weapon Skill Talents',
-        short_key = 'talents',
-        badge = 'PLACEHOLDER',
-        accent = 'cyan',
-        summary = 'Browse and allocate Weapon Skill evolution and talent trees in The Soulforge.',
-        details = 'Powered by SoulspireXI Core UI Foundations (core/foundations.lua). Open The Soulforge directly via /talents or /tal.',
+        id             = 'weapon_mastery',
+        label          = 'Weapon Mastery',
+        short_key      = 'soulforge',
+        aliases        = { 'ws', 'ws_talents', 'weapons', 'forge' },
+        icon           = 'weapon_mastery',
+        order          = 20,
+        available      = true,
+        badge          = 'LIVE',
+        accent         = 'gold',
+        summary        = 'Forge Weapon Skill talent trees, Skillchain augment tiers, and 4-slot spec mastery in The Soulforge.',
+        details        = 'Powered by shared Soulforge state and UI (0x11F/0x1FD OXTL). Supports full D-Pad, Left Stick, keyboard, and mouse navigation.',
         existing_addon = 'soulspire_talents',
     },
     {
-        id = 'soul_mastery',
-        label = 'Soul Mastery',
-        short_key = 'mastery',
-        badge = 'PLACEHOLDER',
-        accent = 'gold',
-        summary = 'Review Soul progression, active Soul Actions, and Universal Soul HUD trackers.',
-        details = 'Universal Soul HUD (/soulhud) shares SoulspireXI Core UI Foundations with Minimal, Standard, and Expanded combat display modes.',
+        id             = 'soul_talents',
+        label          = 'Soul Talents',
+        short_key      = 'talents',
+        aliases        = { 'mastery', 'soul_mastery', 'progression' },
+        icon           = 'soul_talents',
+        order          = 30,
+        available      = true,
+        badge          = 'LIVE',
+        accent         = 'cyan',
+        summary        = 'Review your Soul talent point ledger, active 4-WS spec loadout, invested techniques, and live Soul mechanics.',
+        details        = 'Synchronizes live Soulforge point allocation with your active Soul identity and Universal Soul HUD telemetry.',
+        existing_addon = 'soulspire_soulhud',
+    },
+    {
+        id             = 'abilities',
+        label          = 'Abilities',
+        short_key      = 'abilities',
+        aliases        = { 'actions', 'spells' },
+        icon           = 'abilities',
+        order          = 40,
+        available      = false,
+        badge          = 'UNAVAILABLE',
+        accent         = 'cyan',
+        summary        = 'Unified Soul Actions, spells, and macro reference.',
+        details        = 'Integration pending. Native FFXI Magic & Job Ability menus continue showing live Soul action names and filtering via soulspire_soul_actions and crystaljobs.dll.',
         existing_addon = 'soulspire_soul_actions',
     },
     {
-        id = 'combat_records',
-        label = 'Combat Records',
-        short_key = 'records',
-        badge = 'PLACEHOLDER',
-        accent = 'cyan',
-        summary = 'View personal encounters, combat logs, and Soul performance metrics.',
-        details = 'Phase 1A placeholder. Existing metrics addon and server combat analytics remain active and independent.',
+        id             = 'equipment',
+        label          = 'Equipment',
+        short_key      = 'equipment',
+        aliases        = { 'gear', 'equip' },
+        icon           = 'equipment',
+        order          = 50,
+        available      = false,
+        badge          = 'UNAVAILABLE',
+        accent         = 'gold',
+        summary        = 'Unified Soul-aware equipment sets and weapon configuration inspector.',
+        details        = 'Integration pending. FFXI native Equipment menu, CrystalSocket dock, and Hook #24 weapon rules remain active and untouched.',
+        existing_addon = 'crystalsocket',
+    },
+    {
+        id             = 'journal',
+        label          = 'Journal',
+        short_key      = 'journal',
+        aliases        = { 'records', 'combat_records', 'expeditions', 'guides', 'player_guides' },
+        icon           = 'journal',
+        order          = 60,
+        available      = false,
+        badge          = 'UNAVAILABLE',
+        accent         = 'violet',
+        summary        = 'Expedition logs, combat records, and in-game SoulspireXI guides.',
+        details        = 'Integration pending. Existing metrics addon and web Combat Analytics remain active independently.',
         existing_addon = 'metrics',
-    },
-    {
-        id = 'expeditions',
-        label = 'Expeditions',
-        short_key = 'expeditions',
-        badge = 'PLACEHOLDER',
-        accent = 'gold',
-        summary = 'Track SoulspireXI custom expeditions, delves, and seasonal objectives.',
-        details = 'Phase 1A placeholder. Reserved for future unified expedition tracking and party readiness tools.',
-        existing_addon = nil,
-    },
-    {
-        id = 'player_guides',
-        label = 'Player Guides',
-        short_key = 'guides',
-        badge = 'PLACEHOLDER',
-        accent = 'cyan',
-        summary = 'In-game reference for Soul mechanics, weapon rules, and server systems.',
-        details = 'Phase 1A placeholder. Reserved for concise in-client Soul guides synchronized with server design contracts.',
-        existing_addon = nil,
-    },
-    {
-        id = 'settings',
-        label = 'Settings',
-        short_key = 'settings',
-        badge = 'PLACEHOLDER',
-        accent = 'gold',
-        summary = 'Configure SoulspireXI Core menu integration, navigation, and HUD preferences.',
-        details = 'Phase 1A placeholder. Displays current integration mode (native-styled Main Menu fallback) and navigation bindings.',
-        existing_addon = nil,
     },
 }
 
-local function copy_section(src)
+local function copy_list(src)
+    if type(src) ~= 'table' then return {} end
+    local out = {}
+    for i, v in ipairs(src) do out[i] = v end
+    return out
+end
+
+local function copy_module(src, insert_seq)
     local dst = {}
     for k, v in pairs(src) do
-        dst[k] = v
+        if k == 'aliases' then
+            dst[k] = copy_list(v)
+        else
+            dst[k] = v
+        end
     end
+    dst.aliases = dst.aliases or {}
+    dst.icon = dst.icon or dst.id
+    dst.order = tonumber(dst.order) or (insert_seq * 10)
+    if dst.available == nil then
+        dst.available = (dst.badge ~= 'UNAVAILABLE' and dst.badge ~= 'PLACEHOLDER')
+    else
+        dst.available = (dst.available == true)
+    end
+    dst.badge = dst.badge or (dst.available and 'LIVE' or 'UNAVAILABLE')
+    dst._seq = insert_seq
     return dst
 end
 
-function Registry.new(initial_sections)
+function Registry.new(initial_modules)
     local self = setmetatable({
         _ordered = {},
-        _by_id = {},
+        _by_id   = {},
+        _seq     = 0,
     }, Registry)
-    local list = initial_sections or DEFAULT_SECTIONS
-    for _, sec in ipairs(list) do
-        self:register(sec)
+    local list = initial_modules or DEFAULT_MODULES
+    for _, mod in ipairs(list) do
+        self:register(mod)
     end
     return self
 end
 
-function Registry:register(section)
-    assert(type(section) == 'table' and type(section.id) == 'string' and section.id ~= '',
-        'Section requires a non-empty string id')
-    assert(type(section.label) == 'string' and section.label ~= '',
-        'Section requires a non-empty string label')
-
-    local entry = copy_section(section)
-    local existing_idx = self._by_id[entry.id]
-    if existing_idx then
-        self._ordered[existing_idx] = entry
-        return existing_idx
+function Registry:_rebuild_index()
+    table.sort(self._ordered, function(a, b)
+        if a.order ~= b.order then
+            return a.order < b.order
+        end
+        return (a._seq or 0) < (b._seq or 0)
+    end)
+    self._by_id = {}
+    for idx, entry in ipairs(self._ordered) do
+        self._by_id[entry.id] = idx
     end
-    local idx = #self._ordered + 1
-    self._ordered[idx] = entry
-    self._by_id[entry.id] = idx
-    return idx
+end
+
+function Registry:register(mod)
+    assert(type(mod) == 'table' and type(mod.id) == 'string' and mod.id ~= '',
+        'Module requires a non-empty string id')
+    assert(type(mod.label) == 'string' and mod.label ~= '',
+        'Module requires a non-empty string label')
+
+    local existing_idx = self._by_id[mod.id]
+    local seq = existing_idx and self._ordered[existing_idx]._seq or (self._seq + 1)
+    if not existing_idx then
+        self._seq = seq
+    end
+
+    local entry = copy_module(mod, seq)
+    if existing_idx then
+        -- Preserve attached controller unless explicitly replaced
+        if entry.controller == nil and self._ordered[existing_idx].controller ~= nil then
+            entry.controller = self._ordered[existing_idx].controller
+        end
+        self._ordered[existing_idx] = entry
+    else
+        self._ordered[#self._ordered + 1] = entry
+    end
+    self:_rebuild_index()
+    return self._by_id[entry.id]
+end
+
+function Registry:unregister(id)
+    local idx = self._by_id[id]
+    if not idx then return false end
+    table.remove(self._ordered, idx)
+    self:_rebuild_index()
+    return true
+end
+
+function Registry:attach_controller(id, controller, available)
+    local idx = self._by_id[id]
+    if not idx then return false end
+    local entry = self._ordered[idx]
+    entry.controller = controller
+    if available ~= nil then
+        entry.available = (available == true)
+        entry.badge = entry.available and 'LIVE' or 'UNAVAILABLE'
+    end
+    return true
+end
+
+function Registry:set_available(id, available, reason)
+    local idx = self._by_id[id]
+    if not idx then return false end
+    local entry = self._ordered[idx]
+    entry.available = (available == true)
+    entry.badge = entry.available and 'LIVE' or 'UNAVAILABLE'
+    if type(reason) == 'string' and reason ~= '' then
+        entry.unavailable_reason = reason
+    end
+    return true
 end
 
 function Registry:sections()
     return self._ordered
+end
+
+Registry.modules = Registry.sections
+
+function Registry:available_modules()
+    local out = {}
+    for _, entry in ipairs(self._ordered) do
+        if entry.available then
+            out[#out + 1] = entry
+        end
+    end
+    return out
 end
 
 function Registry:count()
@@ -133,15 +234,51 @@ function Registry:get(index)
     return self._ordered[index]
 end
 
+function Registry:get_by_id(id)
+    local idx = self._by_id[id]
+    return idx and self._ordered[idx] or nil
+end
+
+function Registry:index_of(id)
+    return self._by_id[id]
+end
+
+-- Step module index forward/backward with wrap-around; optionally skip unavailable modules.
+function Registry:step_index(current_idx, delta, skip_unavailable)
+    local n = #self._ordered
+    if n == 0 then return nil end
+    local cur = tonumber(current_idx) or 1
+    if cur < 1 or cur > n then cur = 1 end
+    local step = (delta and delta < 0) and -1 or 1
+
+    for _ = 1, n do
+        cur = ((cur - 1 + step) % n) + 1
+        if not skip_unavailable or self._ordered[cur].available then
+            return cur
+        end
+    end
+    return current_idx
+end
+
 function Registry:find_index(query)
     if type(query) ~= 'string' or query == '' then return nil end
     local q = query:lower():gsub('^%s+', ''):gsub('%s+$', '')
     if self._by_id[q] then return self._by_id[q] end
-    for idx, sec in ipairs(self._ordered) do
-        if (sec.short_key and sec.short_key:lower() == q)
-            or sec.label:lower() == q
-            or sec.id:lower():find(q, 1, true)
-            or sec.label:lower():find(q, 1, true) then
+    for idx, entry in ipairs(self._ordered) do
+        if entry.short_key and entry.short_key:lower() == q then
+            return idx
+        end
+        if entry.label:lower() == q then
+            return idx
+        end
+        for _, alias in ipairs(entry.aliases or {}) do
+            if tostring(alias):lower() == q then
+                return idx
+            end
+        end
+    end
+    for idx, entry in ipairs(self._ordered) do
+        if entry.id:lower():find(q, 1, true) or entry.label:lower():find(q, 1, true) then
             return idx
         end
     end
