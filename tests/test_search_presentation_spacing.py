@@ -71,6 +71,16 @@ class SearchPresentationSpacingTests(unittest.TestCase):
             self.assertEqual(xs, [1, 8, 15])
             self.assertLessEqual(right_edge, 23)
 
+    def test_h_glyph_maps_to_verified_vanilla_sch_coords(self):
+        cpp = (REPO_ROOT / "native" / "crystaljobs" / "crystaljobs.cpp").read_text(encoding="utf-8")
+        self.assertIn("{118, 214, 7}, // H (SCH)", cpp)
+        self.assertNotIn("{59, 184, 7},  // H (WHM)", cpp)
+        cfg = json.loads(PRESENTATION_PATH.read_text(encoding="utf-8"))["searchBadge"]
+        for abbr in ("HRB", "HEL", "HLC"):
+            xs, right_edge = compute_layout(abbr, cfg["trackingPx"], cfg["offsetXPx"], cfg["useGlyphWidths"])
+            self.assertEqual(xs, [1, 8, 15])
+            self.assertLessEqual(right_edge, 23)
+
 
 if __name__ == "__main__":
     unittest.main()

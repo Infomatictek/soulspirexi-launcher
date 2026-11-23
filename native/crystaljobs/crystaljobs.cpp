@@ -168,7 +168,7 @@ static constexpr MenuGlyph menu_glyphs[26] = {
     {204, 214, 7}, // E (GEO)
     {143, 184, 8}, // F (THF)
     {196, 214, 8}, // G (GEO)
-    {59, 184, 7},  // H (WHM)
+    {118, 214, 7}, // H (SCH) — verified against ROM/118/111.DAT menu2fon DXT3; avoids WHM u=59 W-serif bleed
     {59, 194, 8},  // I (NIN)
     {94, 161, 8},  // J
     {41, 184, 8},  // K (MNK)

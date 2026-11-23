@@ -431,16 +431,22 @@ jobs:
           import json
           from pathlib import Path
           reg = json.loads(Path("registry_sync.json").read_text(encoding="utf-8"))
+          runtime_identities = json.loads(Path("plugins/ashita4/data/soul-identities.json").read_text(encoding="utf-8"))
           seen_shas = set()
           for cand in ("search-legacy-text", "registry-24hook", "search-aligned-text"):
               prov = json.loads(Path(f"ci-crystaljobs/ci-builds/{cand}/crystaljobs-provenance.json").read_text(encoding="utf-8-sig"))
-              assert prov["compiledRegistryHash"] == reg["registryHash"], (
-                  f"{cand} registry hash mismatch: dll={prov['compiledRegistryHash']} vs sync={reg['registryHash']}"
-              )
+              if reg.get("runtimeIdentityLoader"):
+                  assert runtime_identities["registryHash"] == reg["registryHash"], (
+                      f"{cand} runtime identity hash mismatch: data={runtime_identities['registryHash']} vs sync={reg['registryHash']}"
+                  )
+              else:
+                  assert prov["compiledRegistryHash"] == reg["registryHash"], (
+                      f"{cand} registry hash mismatch: dll={prov['compiledRegistryHash']} vs sync={reg['registryHash']}"
+                  )
               assert prov["clientVerified"] is False, f"{cand} provenance must keep clientVerified=false"
               assert prov["dllSha256"] not in seen_shas, f"Duplicate DLL sha256 across candidates: {prov['dllSha256']}"
               seen_shas.add(prov["dllSha256"])
-              print(f"Verified {cand}: sha256={prov['dllSha256']} mode={prov.get('searchRenderMode')} registryHash={prov['compiledRegistryHash']}")
+              print(f"Verified {cand}: sha256={prov['dllSha256']} mode={prov.get('searchRenderMode')} compiledHash={prov['compiledRegistryHash']} runtimeHash={runtime_identities['registryHash']}")
           PY
 
       - name: Publish isolated Candidate A, B (fixed menu2fon), and C manifests
@@ -453,10 +459,10 @@ jobs:
             --build-info ci-crystaljobs/ci-builds/search-legacy-text/crystaljobs-build-info.txt \
             --provenance-json ci-crystaljobs/ci-builds/search-legacy-text/crystaljobs-provenance.json \
             --repo-branch "${{ github.ref_name }}" \
-            --manifest-version "2.1.7-testing.search-legacy-text" \
-            --server-version "feat/runtime-soul-identity-and-spacing (1938472)" \
+            --manifest-version "2.1.12-testing.search-legacy-text" \
+            --server-version "feat/runtime-soul-identity-and-spacing (b28a7a3)" \
             --server-branch "feat/runtime-soul-identity-and-spacing" \
-            --server-commit "1938472" \
+            --server-commit "b28a7a3" \
             --server-image "soulspirexi/server:registry" \
             --crystaljobs-hooks 24 \
             --notes "Candidate A (Historical 4f0fdb3): 24-hook runtime identity loader + legacy 0.75x native_text fallback"
@@ -467,13 +473,13 @@ jobs:
             --build-info ci-crystaljobs/ci-builds/registry-24hook/crystaljobs-build-info.txt \
             --provenance-json ci-crystaljobs/ci-builds/registry-24hook/crystaljobs-provenance.json \
             --repo-branch "${{ github.ref_name }}" \
-            --manifest-version "2.1.7-testing.runtime-identity" \
-            --server-version "feat/runtime-soul-identity-and-spacing (1938472)" \
+            --manifest-version "2.1.12-testing.runtime-identity" \
+            --server-version "feat/runtime-soul-identity-and-spacing (b28a7a3)" \
             --server-branch "feat/runtime-soul-identity-and-spacing" \
-            --server-commit "1938472" \
+            --server-commit "b28a7a3" \
             --server-image "soulspirexi/server:registry" \
             --crystaljobs-hooks 24 \
-            --notes "Runtime Soul Identity Loader (data/soul-identities.json) + Configurable menu2fon Glyph Spacing (data/crystaljobs-presentation.json, trackingPx=-1) + SoA tile+0xC0 fix"
+            --notes "Native H glyph repair ({118, 214, 7} from vanilla SCH in ROM/118/111.DAT) + Runtime Soul Identity Loader (66 approved Souls, cf86aa59ff8d16c6) + 7px uniform Search pitch"
 
           python scripts/publish-testing-channel.py \
             --candidate search-aligned-text \
@@ -481,10 +487,10 @@ jobs:
             --build-info ci-crystaljobs/ci-builds/search-aligned-text/crystaljobs-build-info.txt \
             --provenance-json ci-crystaljobs/ci-builds/search-aligned-text/crystaljobs-provenance.json \
             --repo-branch "${{ github.ref_name }}" \
-            --manifest-version "2.1.7-testing.search-aligned-text" \
-            --server-version "feat/runtime-soul-identity-and-spacing (1938472)" \
+            --manifest-version "2.1.12-testing.search-aligned-text" \
+            --server-version "feat/runtime-soul-identity-and-spacing (b28a7a3)" \
             --server-branch "feat/runtime-soul-identity-and-spacing" \
-            --server-commit "1938472" \
+            --server-commit "b28a7a3" \
             --server-image "soulspirexi/server:registry" \
             --crystaljobs-hooks 24 \
             --notes "Candidate C (Fallback): 24-hook runtime identity loader + fixed-column aligned native_text"
@@ -505,7 +511,7 @@ jobs:
             echo "No changes to Search testing candidates."
             exit 0
           fi
-          git commit -m "chore(testing-candidate): publish runtime-identity + spacing crystaljobs.dll (2.1.7-testing.runtime-identity)"
+          git commit -m "chore(testing-candidate): publish H-glyph fix crystaljobs.dll (2.1.12-testing.runtime-identity)"
           git push origin "HEAD:${{ github.ref_name }}"
 
   publish-release:

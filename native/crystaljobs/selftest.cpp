@@ -1411,6 +1411,24 @@ static void runtime_identity_and_spacing_checks() {
     int16_t www_x[3]{};
     compute_search_glyph_positions(www_w, wide, www_x);
     assert(www_x[0] >= kMinGlyphX0 && (www_x[2] + www_w[2]) <= 24);
+
+    // Regression check: H glyph must map to clean vanilla SCH H {118, 214, 7} (not legacy WHM {59, 184, 7}),
+    // and HRB / HEL / HLC must preserve uniform 7px pitch at {1, 8, 15} under production spacing config.
+    const MenuGlyph h_glyph = menu_glyphs['H' - 'A'];
+    assert(h_glyph.u == 118 && h_glyph.v == 214 && h_glyph.w == 7);
+    SearchPresentationConfig prod_pres = default_presentation_config();
+    prod_pres.tracking_px = -1; prod_pres.offset_x_px = 1; prod_pres.use_glyph_widths = false;
+    const char* h_abbrs[3] = {"HRB", "HEL", "HLC"};
+    for (const char* abbr : h_abbrs) {
+        const uint8_t hw[3] = {
+            menu_glyphs[abbr[0] - 'A'].w,
+            menu_glyphs[abbr[1] - 'A'].w,
+            menu_glyphs[abbr[2] - 'A'].w,
+        };
+        int16_t hx[3]{};
+        compute_search_glyph_positions(hw, prod_pres, hx);
+        assert(hx[0] == 1 && hx[1] == 8 && hx[2] == 15 && (hx[2] + hw[2]) <= 23);
+    }
 #endif
     publish_runtime_identity_snapshot(t1);
     publish_search_presentation(pres);
