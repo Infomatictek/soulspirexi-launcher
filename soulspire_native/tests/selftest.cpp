@@ -1069,6 +1069,7 @@ static void dat_virtualization_poc_checks() {
     dat_virt_mgr.configure(true);
     state = {};
     soul_override = {};
+    transport = {};
     uint8_t mock_job = 3; // WHM
     main_job_slot = &mock_job;
     selftest_alive = true;
@@ -1086,14 +1087,14 @@ static void dat_virtualization_poc_checks() {
     assert(gen1 >= 1u);
 
     // 2. Verify Soul-scoped isolation on shared spell ID 28 (WHM Zealot vs WHM Valkyrie vs unsocketed)
-    assert(SoulspireNativeSetActiveSoul(3, 2, 1) == 0); // WHM Zealot
+    assert(SoulspireNativeSetActiveSoul(3, 2, 0) == 0); // WHM Zealot
     const char* zealot_name = resolve_magic_row_name(28);
     assert(zealot_name != nullptr && std::strcmp(zealot_name, "Dawnfire") == 0);
     const char* zealot_desc = resolve_magic_desc(28);
     assert(zealot_desc != nullptr && std::strstr(zealot_desc, "light") != nullptr);
 
     // Switch Soul -> stale Zealot identity MUST immediately invalidate!
-    assert(SoulspireNativeSetActiveSoul(3, 3, 1) == 0); // WHM Valkyrie
+    assert(SoulspireNativeSetActiveSoul(3, 3, 0) == 0); // WHM Valkyrie
     const char* valk_name = resolve_magic_row_name(28);
     assert(valk_name != nullptr && std::strcmp(valk_name, "Vigil Lance") == 0);
 
@@ -1121,7 +1122,7 @@ static void dat_virtualization_poc_checks() {
     assert(dat_virt_mgr.load_from_json(updated_json, static_cast<size_t>(n), false));
     assert(dat_virt_mgr.generation() == gen1 + 1u);
 
-    assert(SoulspireNativeSetActiveSoul(3, 2, 1) == 0);
+    assert(SoulspireNativeSetActiveSoul(3, 2, 0) == 0);
     const char* updated_name = resolve_magic_row_name(28);
     assert(updated_name != nullptr && std::strcmp(updated_name, "Solaris Flare") == 0);
 
