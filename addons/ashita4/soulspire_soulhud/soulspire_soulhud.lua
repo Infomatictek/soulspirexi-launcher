@@ -445,8 +445,8 @@ ashita.events.register('command', 'ox_soulhud_command', function(e)
         cfg.mode = sub
         settingsMod.save(cfg)
         logMessage('Mode: ' .. cfg.mode)
-    elseif sub == 'compact' or sub == 'expanded' then
-        cfg.layout = sub
+    elseif sub == 'minimal' or sub == 'standard' or sub == 'compact' or sub == 'expanded' then
+        cfg.layout = (sub == 'compact') and 'standard' or sub
         settingsMod.save(cfg)
         logMessage('Layout: ' .. cfg.layout)
     elseif sub == 'lock' or sub == 'unlock' then
@@ -536,7 +536,7 @@ ashita.events.register('command', 'ox_soulhud_command', function(e)
             tostring(cfg.locked), tostring(cfg.autoHideOnMenu), tostring(cfg.pill), tostring(state.hiddenReason)
         ))
     else
-        logMessage('Usage: /soulhud [toggle|show|hide|auto|compact|expanded|lock|unlock|autohide|pill|menuname|config|scale|opacity|demo|sync|status|reset]')
+        logMessage('Usage: /soulhud [toggle|show|hide|auto|minimal|standard|expanded|lock|unlock|autohide|pill|menuname|config|scale|opacity|demo|sync|status|reset]')
     end
 end)
 
