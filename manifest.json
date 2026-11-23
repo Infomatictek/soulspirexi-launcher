@@ -416,8 +416,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/crystalsocket/soul_registry_generated.lua",
       "targetPath": "crystalsocket/soul_registry_generated.lua",
-      "sha256": "ea0c5970d73647ccbee7dd33faf0ad134e85cb996cb3492b20b02244e24b268b",
-      "size": 18852
+      "sha256": "3f9534c12a9be7a16381a082bb2a4beddb69475938b58f434c766ef4c72350be",
+      "size": 18834
     },
     {
       "category": "addon",
@@ -6002,8 +6002,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/soul_registry_generated.lua",
       "targetPath": "soulspire_core/core/soul_registry_generated.lua",
-      "sha256": "ea0c5970d73647ccbee7dd33faf0ad134e85cb996cb3492b20b02244e24b268b",
-      "size": 18852
+      "sha256": "3f9534c12a9be7a16381a082bb2a4beddb69475938b58f434c766ef4c72350be",
+      "size": 18834
     },
     {
       "category": "addon",
@@ -6296,8 +6296,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_soul_actions/soul_registry_generated.lua",
       "targetPath": "soulspire_soul_actions/soul_registry_generated.lua",
-      "sha256": "ea0c5970d73647ccbee7dd33faf0ad134e85cb996cb3492b20b02244e24b268b",
-      "size": 18852
+      "sha256": "3f9534c12a9be7a16381a082bb2a4beddb69475938b58f434c766ef4c72350be",
+      "size": 18834
     },
     {
       "category": "addon",
@@ -7577,8 +7577,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_soulhud/soulhud_roster_generated.lua",
       "targetPath": "soulspire_soulhud/soulhud_roster_generated.lua",
-      "sha256": "974990d657fa738453e3d85eefcf1edac044fcc20b29be35ef13d53e8c8931b6",
-      "size": 15546
+      "sha256": "11995e2b0f7345ff60ada6936cdc70c77b1b9123fd246890b26641d963e14f10",
+      "size": 15491
     },
     {
       "category": "addon",
@@ -7941,8 +7941,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_talents/soul_registry_generated.lua",
       "targetPath": "soulspire_talents/soul_registry_generated.lua",
-      "sha256": "ea0c5970d73647ccbee7dd33faf0ad134e85cb996cb3492b20b02244e24b268b",
-      "size": 18852
+      "sha256": "3f9534c12a9be7a16381a082bb2a4beddb69475938b58f434c766ef4c72350be",
+      "size": 18834
     },
     {
       "category": "addon",
@@ -9954,8 +9954,8 @@
     }
   ],
   "registry": {
-    "version": "2026.11.22-phase2-locked",
-    "hash": "de6314e97385e328",
+    "version": "2026.11.22-66-souls-approved",
+    "hash": "0e3278fac7296cb3",
     "idLockStatus": "locked",
     "nativeDllCompiledHash": "legacy-pre-registry",
     "nativeDllSha256": "8e10ac388d13531c1d8e3572af1cab196a96d9d61a43f4ce0194960cfc3133e3",

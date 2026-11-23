@@ -1,9 +1,9 @@
 {
   "schemaVersion": "1.0.0",
-  "registryVersion": "2026.11.22-phase2-locked",
+  "registryVersion": "2026.11.22-66-souls-approved",
   "entitiesVersion": "2026.11.22-phase4-complete",
   "idLockStatus": "locked",
-  "registryHash": "de6314e97385e328",
+  "registryHash": "0e3278fac7296cb3",
   "counts": {
     "souls": 66,
     "actions": 160,

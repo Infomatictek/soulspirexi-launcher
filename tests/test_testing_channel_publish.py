@@ -155,6 +155,8 @@ class TestingChannelPublishTests(unittest.TestCase):
                 )
 
             # Publishing via explicit --candidate registry-24hook succeeds in its own isolated path
+            sync_data = json.loads((REPO_ROOT / "registry_sync.json").read_text(encoding="utf-8"))
+            expected_hash = sync_data["registryHash"]
             real_dll = REPO_ROOT / "plugins" / "ashita4" / "crystaljobs.dll"
             new_dll = tmp_repo / "ci_crystaljobs.dll"
             shutil.copy2(real_dll, new_dll)
@@ -164,7 +166,7 @@ class TestingChannelPublishTests(unittest.TestCase):
                 json.dumps(
                     {
                         "dllSha256": real_sha,
-                        "compiledRegistryHash": "de6314e97385e328",
+                        "compiledRegistryHash": expected_hash,
                         "clientVerified": False,
                     }
                 ),
@@ -190,7 +192,7 @@ class TestingChannelPublishTests(unittest.TestCase):
             self.assertEqual(cand["candidateId"], "registry-24hook")
             self.assertEqual(cand["registry"]["crystalJobsHooks"], 24)
             self.assertFalse(cand["registry"]["nativeDllClientVerified"])
-            self.assertEqual(cand["registry"]["nativeDllCompiledHash"], "de6314e97385e328")
+            self.assertEqual(cand["registry"]["nativeDllCompiledHash"], expected_hash)
             self.assertEqual(cand["registry"]["nativeDllSha256"], real_sha)
             self.assertTrue((tmp_repo / "channels" / "testing-registry-24hook" / "crystaljobs-provenance.json").is_file())
             self.assertEqual(
