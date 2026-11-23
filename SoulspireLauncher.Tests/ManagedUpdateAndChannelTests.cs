@@ -692,4 +692,49 @@ public sealed class ManagedUpdateAndChannelTests
         Assert.False(ManifestUpdateService.IsValidManifestForChannel(coreManifest, UpdateChannel.Testing));
         Assert.False(ManifestUpdateService.IsValidManifestForChannel(coreManifest, UpdateChannel.TestingRegistry24Hook));
     }
+
+    [Fact]
+    public void RemoveRetiredPlugins_CleansUpObsoleteCrystalJobsWhenSoulspireNativeActive()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"soulspire_mig_{Guid.NewGuid():N}");
+        try
+        {
+            var ashitaDir = Path.Combine(tempRoot, "Ashita");
+            var pluginDir = Path.Combine(ashitaDir, "plugins");
+            var dataDir = Path.Combine(pluginDir, "data");
+            Directory.CreateDirectory(dataDir);
+
+            var legacyDll = Path.Combine(pluginDir, "crystaljobs.dll");
+            var legacyPres = Path.Combine(dataDir, "crystaljobs-presentation.json");
+            var nativeDll = Path.Combine(pluginDir, "soulspire_native.dll");
+            var nativeCfg = Path.Combine(dataDir, "soulspire_native.json");
+            File.WriteAllText(legacyDll, "LEGACY");
+            File.WriteAllText(legacyPres, "{}");
+            File.WriteAllText(nativeDll, "NATIVE");
+            File.WriteAllText(nativeCfg, "{}");
+
+            var settings = new LauncherSettings { AshitaPath = ashitaDir };
+            var manifest = new LauncherManifest
+            {
+                Channel = "stable",
+                Files =
+                [
+                    new ManifestFileEntry { Category = "plugin", SourcePath = "plugins/ashita4/soulspire_native.dll", TargetPath = "soulspire_native.dll", Sha256 = new string('a', 64) },
+                    new ManifestFileEntry { Category = "plugin", SourcePath = "plugins/ashita4/data/soulspire_native.json", TargetPath = "data/soulspire_native.json", Sha256 = new string('b', 64) },
+                ]
+            };
+
+            var removed = ManifestUpdateService.RemoveRetiredPlugins(manifest, settings);
+
+            Assert.Equal(2, removed);
+            Assert.False(File.Exists(legacyDll));
+            Assert.False(File.Exists(legacyPres));
+            Assert.True(File.Exists(nativeDll));
+            Assert.True(File.Exists(nativeCfg));
+        }
+        finally
+        {
+            if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, recursive: true);
+        }
+    }
 }

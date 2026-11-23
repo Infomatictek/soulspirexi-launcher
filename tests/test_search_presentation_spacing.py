@@ -8,7 +8,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 IDENTITIES_PATH = REPO_ROOT / "plugins" / "ashita4" / "data" / "soul-identities.json"
-PRESENTATION_PATH = REPO_ROOT / "plugins" / "ashita4" / "data" / "crystaljobs-presentation.json"
+PRESENTATION_PATH = REPO_ROOT / "plugins" / "ashita4" / "data" / "soulspire_native.json"
 
 MENU_GLYPH_WIDTHS = {
     "A": 7, "B": 8, "C": 8, "D": 8, "E": 7, "F": 8, "G": 8, "H": 7, "I": 8,
@@ -46,7 +46,7 @@ class SearchPresentationSpacingTests(unittest.TestCase):
         self.assertEqual(badge["offsetXPx"], 1)
         self.assertFalse(badge["useGlyphWidths"])
 
-        for abbr in ("HEL", "GMB", "BKW", "GOE", "THV", "FLT", "KEN", "IRN", "SEI"):
+        for abbr in ("HEL", "GMB", "BKW", "GOE", "TVL", "FLT", "KEN", "IRN", "SEI", "BSP", "CNL", "PTM", "SNI", "CRY", "CRG", "CFL"):
             xs, right_edge = compute_layout(abbr, badge["trackingPx"], badge["offsetXPx"], badge["useGlyphWidths"])
             self.assertEqual(xs, [1, 8, 15], f"{abbr} must preserve uniform 7px pitch at [1, 8, 15]")
             self.assertEqual(xs[1] - xs[0], 7)
@@ -67,6 +67,16 @@ class SearchPresentationSpacingTests(unittest.TestCase):
             self.assertTrue(abbr.isalpha() and abbr.isupper())
             self.assertNotIn(abbr, seen)
             seen.add(abbr)
+            xs, right_edge = compute_layout(abbr, cfg["trackingPx"], cfg["offsetXPx"], cfg["useGlyphWidths"])
+            self.assertEqual(xs, [1, 8, 15])
+            self.assertLessEqual(right_edge, 23)
+
+    def test_h_glyph_maps_to_verified_vanilla_sch_coords(self):
+        hdr = (REPO_ROOT / "soulspire_native" / "rendering" / "menu2fon.h").read_text(encoding="utf-8")
+        self.assertIn("{118, 214, 7}, // H (SCH)", hdr)
+        self.assertNotIn("{59, 184, 7},  // H (WHM)", hdr)
+        cfg = json.loads(PRESENTATION_PATH.read_text(encoding="utf-8"))["searchBadge"]
+        for abbr in ("HRB", "HEL", "HLC"):
             xs, right_edge = compute_layout(abbr, cfg["trackingPx"], cfg["offsetXPx"], cfg["useGlyphWidths"])
             self.assertEqual(xs, [1, 8, 15])
             self.assertLessEqual(right_edge, 23)

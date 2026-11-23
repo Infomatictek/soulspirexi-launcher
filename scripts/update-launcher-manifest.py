@@ -195,14 +195,30 @@ def main(argv: list[str] | None = None) -> int:
 
     # Embed coordinated registry version/hash and native DLL provenance metadata when present.
     reg_sync_path = repo_root / "registry_sync.json"
-    dll_state_path = repo_root / "native" / "crystaljobs" / "dll_sync_state.json"
+    dll_state_path = repo_root / "soulspire_native" / "dll_sync_state.json"
+    if not dll_state_path.is_file():
+        dll_state_path = repo_root / "native" / "crystaljobs" / "dll_sync_state.json"
     if reg_sync_path.is_file():
         reg_sync = json.loads(reg_sync_path.read_text(encoding="utf-8"))
         dll_state = json.loads(dll_state_path.read_text(encoding="utf-8")) if dll_state_path.is_file() else {}
         dll_entry = next(
-            (e for e in entries if e["category"] == "plugin" and str(e["targetPath"]).lower().endswith("crystaljobs.dll")),
+            (
+                e
+                for e in entries
+                if e["category"] == "plugin" and str(e["targetPath"]).lower().endswith("soulspire_native.dll")
+            ),
             None,
         )
+        if dll_entry is None:
+            dll_entry = next(
+                (
+                    e
+                    for e in entries
+                    if e["category"] == "plugin" and str(e["targetPath"]).lower().endswith("crystaljobs.dll")
+                ),
+                None,
+            )
+        expected_hooks = int(dll_state.get("expectedHooks") or 27)
         manifest["registry"] = {
             "version": str(reg_sync.get("registryVersion") or ""),
             "hash": str(reg_sync.get("registryHash") or ""),
@@ -210,7 +226,8 @@ def main(argv: list[str] | None = None) -> int:
             "nativeDllCompiledHash": str(dll_state.get("compiledRegistryHash") or ""),
             "nativeDllSha256": str(dll_entry["sha256"]) if dll_entry else str(dll_state.get("dllSha256") or ""),
             "nativeDllClientVerified": bool(dll_state.get("clientVerified", False)),
-            "crystalJobsHooks": 24,
+            "nativeHooks": expected_hooks,
+            "crystalJobsHooks": expected_hooks,
         }
 
     with manifest_path.open("w", encoding="utf-8", newline="\n") as f:

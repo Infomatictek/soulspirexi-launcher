@@ -6,8 +6,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DAT_114 = ROOT / "dat-overlay/ROM/118/114.DAT"
 SOUL_ACTIONS_TSV = ROOT / "addons/ashita4/soulspire_soul_actions/data/soul_actions.tsv"
 VISIBILITY_TSV = ROOT / "addons/ashita4/soulspire_soul_actions/data/visibility.tsv"
-CRYSTALJOBS_CPP = ROOT / "native/crystaljobs/crystaljobs.cpp"
-ACTIONS_H = ROOT / "native/crystaljobs/actions.h"
+SOULSPIRE_NATIVE_CPP = ROOT / "soulspire_native/soulspire_native.cpp"
+ACTIONS_H = ROOT / "soulspire_native/actions/action_catalog.h"
 
 
 def _rol(byte: int, shift: int) -> int:
@@ -162,14 +162,13 @@ class SoulSpellClientAuditTests(unittest.TestCase):
         self.assertIn(("shinobi", "spell", "339", "37", "unlock"), rows)
         self.assertIn(("kagemusha", "spell", "339", "10", "unlock"), rows)
 
-    def test_crystaljobs_detours_can_use_spell_and_formats_descriptions(self):
-        cpp = CRYSTALJOBS_CPP.read_text(encoding="utf-8")
+    def test_soulspire_native_detours_can_use_spell_and_formats_descriptions(self):
+        cpp = SOULSPIRE_NATIVE_CPP.read_text(encoding="utf-8")
         hdr = ACTIONS_H.read_text(encoding="utf-8")
         self.assertIn("can_use_spell_detour{0x22CDE0", cpp)
-        self.assertIn("can_use_spell_detour.install(base, &original_can_show_spell)", cpp)
-        self.assertIn("can_use_spell_detour.restore()", cpp)
-        self.assertIn("missing_spell_bit_detour.install(base)", cpp)
-        self.assertIn("missing_spell_bit_detour.restore()", cpp)
+        self.assertIn("missing_spell_bit_detour{0x22CB44", cpp)
+        self.assertIn("d->install(base, tramp_out)", cpp)
+        self.assertIn("detour_at(j)->restore()", cpp)
         self.assertIn("{0x22E64D, reinterpret_cast<void*>(&menu_spell_elig_hook)}", cpp)
         self.assertIn("original_spell_elig = reinterpret_cast<uintptr_t>(base + 0x1021A0)", cpp)
         self.assertIn("format_action_description(", cpp)

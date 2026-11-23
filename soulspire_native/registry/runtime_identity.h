@@ -4,12 +4,12 @@
 #include <cstdio>
 #include <cstring>
 
-namespace crystaljobs {
+namespace soulspire::native {
 
 static constexpr uint32_t kIdentitySchemaVersion = 1;
 static constexpr uint32_t kPresentationSchemaVersion = 1;
 static constexpr size_t   kMaxIdentityFileBytes = 65536;
-static constexpr size_t   kMaxPresentationFileBytes = 8192;
+static constexpr size_t   kMaxPresentationFileBytes = 16384;
 static constexpr size_t   kMaxSoulNameLen = 31;
 static constexpr int32_t  kMinTrackingPx = -2;
 static constexpr int32_t  kMaxTrackingPx = 2;
@@ -18,6 +18,13 @@ static constexpr int32_t  kMaxOffsetXPx = 3;
 static constexpr int32_t  kMinGlyphX0 = -2;
 static constexpr int32_t  kMaxGlyphX0 = 21;
 static constexpr size_t   kGlyphX0Span = static_cast<size_t>(kMaxGlyphX0 - kMinGlyphX0 + 1); // 24
+
+enum LogLevel : uint32_t {
+    LOG_LEVEL_ERROR = 0,
+    LOG_LEVEL_WARN  = 1,
+    LOG_LEVEL_INFO  = 2,
+    LOG_LEVEL_DEBUG = 3,
+};
 
 enum IdentityLoadStatus : uint32_t {
     IDENTITY_STATUS_COMPILED_FALLBACK = 0,
@@ -57,8 +64,14 @@ struct SearchPresentationConfig {
     int32_t tracking_px;
     int32_t offset_x_px;
     bool use_glyph_widths;
+    uint32_t log_level;
+    uint32_t enabled_modules_mask;
+    uint32_t action_row_max_chars;
     char warning[128];
 };
+
+static constexpr uint32_t kAllModulesMask =
+    (1u << 0) | (1u << 1) | (1u << 2) | (1u << 3) | (1u << 4);
 
 inline SearchPresentationConfig default_presentation_config() noexcept {
     SearchPresentationConfig cfg{};
@@ -67,6 +80,9 @@ inline SearchPresentationConfig default_presentation_config() noexcept {
     cfg.tracking_px = -1;
     cfg.offset_x_px = 0;
     cfg.use_glyph_widths = true;
+    cfg.log_level = LOG_LEVEL_WARN;
+    cfg.enabled_modules_mask = kAllModulesMask;
+    cfg.action_row_max_chars = 16;
     return cfg;
 }
 
@@ -115,7 +131,7 @@ struct JsonCursor {
                 }
             }
             if (out != nullptr && out_cap > 0) {
-                if (n + 1 >= out_cap) return false; // Reject overlong strings
+                if (n + 1 >= out_cap) return false;
                 out[n++] = ch;
             }
         }
@@ -250,7 +266,6 @@ inline bool parse_runtime_identity_json(
         std::snprintf(out.warning, sizeof(out.warning), "soul-identities.json exceeds 64 KiB limit");
         return false;
     }
-    // Skip optional UTF-8 BOM
     if (len >= 3 && static_cast<uint8_t>(data[0]) == 0xEF &&
         static_cast<uint8_t>(data[1]) == 0xBB && static_cast<uint8_t>(data[2]) == 0xBF) {
         data += 3;
@@ -454,7 +469,7 @@ inline bool parse_presentation_config_json(
     SearchPresentationConfig& out) noexcept {
     out = default_presentation_config();
     if (data == nullptr || len == 0 || len > kMaxPresentationFileBytes) {
-        std::snprintf(out.warning, sizeof(out.warning), "presentation config missing or oversized; using defaults");
+        std::snprintf(out.warning, sizeof(out.warning), "soulspire_native.json missing or oversized; using defaults");
         return false;
     }
     if (len >= 3 && static_cast<uint8_t>(data[0]) == 0xEF &&
@@ -464,7 +479,7 @@ inline bool parse_presentation_config_json(
     }
     detail::JsonCursor cur{data, data + len};
     if (!cur.consume('{')) {
-        std::snprintf(out.warning, sizeof(out.warning), "presentation config root is not an object");
+        std::snprintf(out.warning, sizeof(out.warning), "soulspire_native.json root is not an object");
         return false;
     }
     bool seen_schema = false;
@@ -472,12 +487,15 @@ inline bool parse_presentation_config_json(
     int64_t tracking = out.tracking_px;
     int64_t offset_x = out.offset_x_px;
     bool use_widths = out.use_glyph_widths;
+    uint32_t log_level = out.log_level;
+    uint32_t modules_mask = out.enabled_modules_mask;
+    int64_t row_limit = static_cast<int64_t>(out.action_row_max_chars);
 
     if (!cur.consume('}')) {
         for (;;) {
             char key[48]{};
             if (!cur.parse_string(key, sizeof(key)) || !cur.consume(':')) {
-                std::snprintf(out.warning, sizeof(out.warning), "malformed key in presentation config");
+                std::snprintf(out.warning, sizeof(out.warning), "malformed key in soulspire_native.json");
                 return false;
             }
             if (std::strcmp(key, "schemaVersion") == 0) {
@@ -503,6 +521,68 @@ inline bool parse_presentation_config_json(
                         break;
                     }
                 }
+            } else if (std::strcmp(key, "logging") == 0) {
+                if (!cur.consume('{')) return false;
+                if (!cur.consume('}')) {
+                    for (;;) {
+                        char lk[48]{};
+                        if (!cur.parse_string(lk, sizeof(lk)) || !cur.consume(':')) return false;
+                        if (std::strcmp(lk, "level") == 0) {
+                            char lvl[24]{};
+                            if (!cur.parse_string(lvl, sizeof(lvl))) return false;
+                            if (std::strcmp(lvl, "error") == 0) log_level = LOG_LEVEL_ERROR;
+                            else if (std::strcmp(lvl, "warn") == 0) log_level = LOG_LEVEL_WARN;
+                            else if (std::strcmp(lvl, "info") == 0) log_level = LOG_LEVEL_INFO;
+                            else if (std::strcmp(lvl, "debug") == 0) log_level = LOG_LEVEL_DEBUG;
+                            else {
+                                std::snprintf(out.warning, sizeof(out.warning), "invalid logging.level");
+                                return false;
+                            }
+                        } else {
+                            if (!cur.skip_value()) return false;
+                        }
+                        if (cur.consume(',')) continue;
+                        if (!cur.consume('}')) return false;
+                        break;
+                    }
+                }
+            } else if (std::strcmp(key, "modules") == 0) {
+                if (!cur.consume('{')) return false;
+                if (!cur.consume('}')) {
+                    for (;;) {
+                        char mk[48]{};
+                        if (!cur.parse_string(mk, sizeof(mk)) || !cur.consume(':')) return false;
+                        bool flag = true;
+                        auto apply_bit = [&](uint32_t bit) -> bool {
+                            if (!cur.parse_bool(flag)) return false;
+                            if (flag) modules_mask |= bit;
+                            else modules_mask &= ~bit;
+                            return true;
+                        };
+                        if (std::strcmp(mk, "jobIdentity") == 0) {
+                            if (!apply_bit(1u << 0)) return false;
+                        } else if (std::strcmp(mk, "actions") == 0) {
+                            if (!apply_bit(1u << 1)) return false;
+                        } else if (std::strcmp(mk, "equipment") == 0) {
+                            if (!apply_bit(1u << 2)) return false;
+                        } else if (std::strcmp(mk, "rendering") == 0) {
+                            if (!apply_bit(1u << 3)) return false;
+                        } else if (std::strcmp(mk, "datVirtualization") == 0) {
+                            if (!apply_bit(1u << 4)) return false;
+                        } else {
+                            if (!cur.skip_value()) return false;
+                        }
+                        if (cur.consume(',')) continue;
+                        if (!cur.consume('}')) return false;
+                        break;
+                    }
+                }
+            } else if (std::strcmp(key, "actionRowMaxChars") == 0) {
+                if (!cur.parse_int(row_limit)) return false;
+                if (row_limit < 8 || row_limit > 48) {
+                    std::snprintf(out.warning, sizeof(out.warning), "actionRowMaxChars out of range [8,48]");
+                    return false;
+                }
             } else {
                 if (!cur.skip_value()) return false;
             }
@@ -512,12 +592,12 @@ inline bool parse_presentation_config_json(
         }
     }
     if (!seen_schema || schema != static_cast<int64_t>(kPresentationSchemaVersion)) {
-        std::snprintf(out.warning, sizeof(out.warning), "unsupported presentation schemaVersion=%lld", schema);
+        std::snprintf(out.warning, sizeof(out.warning), "unsupported soulspire_native.json schemaVersion=%lld", schema);
         return false;
     }
     if (tracking < kMinTrackingPx || tracking > kMaxTrackingPx ||
         offset_x < kMinOffsetXPx || offset_x > kMaxOffsetXPx) {
-        std::snprintf(out.warning, sizeof(out.warning), "presentation spacing out of safe bounds");
+        std::snprintf(out.warning, sizeof(out.warning), "searchBadge spacing out of safe bounds");
         return false;
     }
     out.from_file = true;
@@ -525,8 +605,11 @@ inline bool parse_presentation_config_json(
     out.tracking_px = static_cast<int32_t>(tracking);
     out.offset_x_px = static_cast<int32_t>(offset_x);
     out.use_glyph_widths = use_widths;
+    out.log_level = log_level;
+    out.enabled_modules_mask = modules_mask;
+    out.action_row_max_chars = static_cast<uint32_t>(row_limit);
     out.warning[0] = '\0';
     return true;
 }
 
-} // namespace crystaljobs
+} // namespace soulspire::native

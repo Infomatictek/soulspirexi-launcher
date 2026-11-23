@@ -22,7 +22,7 @@ local DEFAULT_MODULES = {
         badge          = 'LIVE',
         accent         = 'violet',
         summary        = 'Inspect your active Soul Identity, job mastery profile, and socketed Soul Crystals.',
-        details        = 'Powered by CrystalSocket protocol (0x11F/0x1FF CRYS) and verified crystaljobs.dll read-only diagnostics. All Soul swaps remain server-authoritative.',
+        details        = 'Powered by CrystalSocket protocol (0x11F/0x1FF CRYS) and verified soulspire_native.dll read-only diagnostics. All Soul swaps remain server-authoritative.',
         existing_addon = 'crystalsocket',
     },
     {

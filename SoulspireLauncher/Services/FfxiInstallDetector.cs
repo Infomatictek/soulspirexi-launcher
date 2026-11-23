@@ -52,7 +52,8 @@ public sealed class FfxiInstallDetector
         diag.CrystalSocketAddonSynced = !string.IsNullOrWhiteSpace(ashitaDir) &&
                                         File.Exists(Path.Combine(ashitaDir, "addons", "crystalsocket", "crystalsocket.lua")) &&
                                         File.Exists(Path.Combine(ashitaDir, "addons", "crystalsocket", "job_labels.lua")) &&
-                                        File.Exists(Path.Combine(ashitaDir, "plugins", "crystaljobs.dll"));
+                                        (File.Exists(Path.Combine(ashitaDir, "plugins", "soulspire_native.dll")) ||
+                                         File.Exists(Path.Combine(ashitaDir, "plugins", "crystaljobs.dll")));
 
         diag.MetricsAddonSynced = !string.IsNullOrWhiteSpace(ashitaDir) &&
                                   File.Exists(Path.Combine(ashitaDir, "addons", "metrics", "metrics.lua"));
@@ -107,14 +108,30 @@ public sealed class FfxiInstallDetector
             _ => settings.UpdateChannel.ToString()
         };
 
-        var dllPath = string.IsNullOrWhiteSpace(settings.AshitaPath)
-            ? string.Empty
-            : Path.Combine(settings.AshitaPath, "plugins", "crystaljobs.dll");
-        diag.NativeDllFilePath = string.IsNullOrWhiteSpace(dllPath) ? "UNKNOWN (Ashita path not set)" : dllPath;
-
         var dllEntry = manifest?.Files.FirstOrDefault(f =>
             f.Category.Equals("plugin", StringComparison.OrdinalIgnoreCase) &&
+            f.TargetPath.Replace('\\', '/').EndsWith("soulspire_native.dll", StringComparison.OrdinalIgnoreCase))
+            ?? manifest?.Files.FirstOrDefault(f =>
+            f.Category.Equals("plugin", StringComparison.OrdinalIgnoreCase) &&
             f.TargetPath.Replace('\\', '/').EndsWith("crystaljobs.dll", StringComparison.OrdinalIgnoreCase));
+
+        var expectedDllFileName = "soulspire_native.dll";
+        if (dllEntry is not null &&
+            dllEntry.TargetPath.Replace('\\', '/').EndsWith("crystaljobs.dll", StringComparison.OrdinalIgnoreCase))
+        {
+            expectedDllFileName = "crystaljobs.dll";
+        }
+        else if (dllEntry is null && !string.IsNullOrWhiteSpace(settings.AshitaPath) &&
+                 !File.Exists(Path.Combine(settings.AshitaPath, "plugins", "soulspire_native.dll")) &&
+                 File.Exists(Path.Combine(settings.AshitaPath, "plugins", "crystaljobs.dll")))
+        {
+            expectedDllFileName = "crystaljobs.dll";
+        }
+
+        var dllPath = string.IsNullOrWhiteSpace(settings.AshitaPath)
+            ? string.Empty
+            : Path.Combine(settings.AshitaPath, "plugins", expectedDllFileName);
+        diag.NativeDllFilePath = string.IsNullOrWhiteSpace(dllPath) ? "UNKNOWN (Ashita path not set)" : dllPath;
 
         var expectedSha = dllEntry?.Sha256?.Trim().ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(expectedSha))
@@ -126,7 +143,10 @@ public sealed class FfxiInstallDetector
         var compiledHash = manifest?.Registry?.NativeDllCompiledHash?.Trim();
         diag.NativeRegistryCompiledHash = string.IsNullOrWhiteSpace(compiledHash) ? "UNKNOWN" : compiledHash;
 
-        var hookCount = manifest?.Registry?.CrystalJobsHooks ?? manifest?.ServerCompatibility?.CrystalJobsHooks;
+        var hookCount = manifest?.Registry?.NativeHooks
+            ?? manifest?.Registry?.CrystalJobsHooks
+            ?? manifest?.ServerCompatibility?.NativeHooks
+            ?? manifest?.ServerCompatibility?.CrystalJobsHooks;
         diag.NativeHookCount = hookCount is > 0 ? hookCount.Value.ToString() : "UNKNOWN";
 
         if (string.IsNullOrWhiteSpace(dllPath) || !File.Exists(dllPath))
@@ -239,28 +259,47 @@ public sealed class FfxiInstallDetector
                 {
                     try
                     {
+                        ProcessModule? nativeMod = null;
+                        ProcessModule? legacyMod = null;
                         foreach (ProcessModule mod in proc.Modules)
                         {
-                            if (mod.ModuleName.Equals("crystaljobs.dll", StringComparison.OrdinalIgnoreCase))
+                            if (mod.ModuleName.Equals("soulspire_native.dll", StringComparison.OrdinalIgnoreCase))
                             {
-                                var loadedPath = mod.FileName ?? string.Empty;
-                                if (!string.IsNullOrWhiteSpace(expectedDllPath) &&
-                                    loadedPath.Equals(expectedDllPath, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    diag.NativeLoadedModuleStatus = "PASS";
-                                    diag.NativeLoadedModuleDetail = $"Loaded in pol.exe (PID {proc.Id}) from expected path";
-                                }
-                                else
-                                {
-                                    diag.NativeLoadedModuleStatus = "FAIL";
-                                    diag.NativeLoadedModuleDetail = $"Loaded in pol.exe (PID {proc.Id}) from unexpected path: {loadedPath}";
-                                }
-                                return;
+                                nativeMod = mod;
+                            }
+                            else if (mod.ModuleName.Equals("crystaljobs.dll", StringComparison.OrdinalIgnoreCase))
+                            {
+                                legacyMod = mod;
                             }
                         }
 
+                        if (nativeMod is not null && legacyMod is not null)
+                        {
+                            diag.NativeLoadedModuleStatus = "FAIL";
+                            diag.NativeLoadedModuleDetail = $"CONFLICT: both soulspire_native.dll and legacy crystaljobs.dll loaded in pol.exe (PID {proc.Id})";
+                            return;
+                        }
+
+                        var activeMod = nativeMod ?? legacyMod;
+                        if (activeMod is not null)
+                        {
+                            var loadedPath = activeMod.FileName ?? string.Empty;
+                            if (!string.IsNullOrWhiteSpace(expectedDllPath) &&
+                                loadedPath.Equals(expectedDllPath, StringComparison.OrdinalIgnoreCase))
+                            {
+                                diag.NativeLoadedModuleStatus = "PASS";
+                                diag.NativeLoadedModuleDetail = $"Loaded {activeMod.ModuleName} in pol.exe (PID {proc.Id}) from expected path";
+                            }
+                            else
+                            {
+                                diag.NativeLoadedModuleStatus = "FAIL";
+                                diag.NativeLoadedModuleDetail = $"Loaded {activeMod.ModuleName} in pol.exe (PID {proc.Id}) from unexpected path: {loadedPath}";
+                            }
+                            return;
+                        }
+
                         diag.NativeLoadedModuleStatus = "FAIL";
-                        diag.NativeLoadedModuleDetail = $"pol.exe (PID {proc.Id}) running, but crystaljobs.dll not observed in loaded modules";
+                        diag.NativeLoadedModuleDetail = $"pol.exe (PID {proc.Id}) running, but soulspire_native.dll not observed in loaded modules";
                         return;
                     }
                     catch

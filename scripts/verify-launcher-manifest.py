@@ -387,7 +387,9 @@ def verify_manifest(repo_root: Path, manifest_path: Path | None = None) -> list[
     # Validate coordinated registry metadata consistency when present.
     reg_meta = manifest.get("registry")
     reg_sync_path = repo_root / "registry_sync.json"
-    dll_state_path = repo_root / "native" / "crystaljobs" / "dll_sync_state.json"
+    dll_state_path = repo_root / "soulspire_native" / "dll_sync_state.json"
+    if not dll_state_path.is_file():
+        dll_state_path = repo_root / "native" / "crystaljobs" / "dll_sync_state.json"
     if isinstance(reg_meta, dict):
         if reg_sync_path.is_file():
             reg_sync = json.loads(reg_sync_path.read_text(encoding="utf-8"))
@@ -396,12 +398,25 @@ def verify_manifest(repo_root: Path, manifest_path: Path | None = None) -> list[
                     f"manifest.json registry.hash ({reg_meta.get('hash')!r}) != registry_sync.json ({reg_sync.get('registryHash')!r})"
                 )
         dll_entry = next(
-            (e for e in manifest.get("files", []) if e.get("category") == "plugin" and str(e.get("targetPath", "")).lower().endswith("crystaljobs.dll")),
+            (
+                e
+                for e in manifest.get("files", [])
+                if e.get("category") == "plugin" and str(e.get("targetPath", "")).lower().endswith("soulspire_native.dll")
+            ),
             None,
         )
+        if dll_entry is None:
+            dll_entry = next(
+                (
+                    e
+                    for e in manifest.get("files", [])
+                    if e.get("category") == "plugin" and str(e.get("targetPath", "")).lower().endswith("crystaljobs.dll")
+                ),
+                None,
+            )
         if dll_entry and reg_meta.get("nativeDllSha256") and reg_meta.get("nativeDllSha256").lower() != str(dll_entry.get("sha256", "")).lower():
             errors.append(
-                f"manifest.json registry.nativeDllSha256 ({reg_meta.get('nativeDllSha256')}) != crystaljobs.dll sha256 ({dll_entry.get('sha256')})"
+                f"manifest.json registry.nativeDllSha256 ({reg_meta.get('nativeDllSha256')}) != {dll_entry.get('targetPath')} sha256 ({dll_entry.get('sha256')})"
             )
         if declared_channel == "testing" and str(manifest.get("candidateId") or "").strip() in ("registry-24hook", "search-legacy-text", "search-aligned-text", "core-ui-24hook"):
             prov_path = (manifest_path or (repo_root / "manifest.json")).parent / "crystaljobs-provenance.json"

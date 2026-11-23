@@ -23,6 +23,8 @@ assert(brd_adv.job == 10, 'BRD job id must be 10')
 assert(brd_adv.branch == 1, 'Adventurer branch must be 1')
 assert(brd_adv.min_effective_level == 10, 'BRD Adventurer min level must be 10')
 assert(brd_adv.mode == WC.MODES.DUAL_1H, 'mode must be DUAL_1H (1)')
+assert(WC.MODES.DUAL_2H == 2, 'MODES.DUAL_2H must be 2')
+assert(WC.MODES.TWOHAND_SHIELD == 3, 'MODES.TWOHAND_SHIELD must be 3')
 assert(brd_adv.main_skill_mask == bit.bor(dagger_bit, sword_bit), 'main_skill_mask must allow Dagger + Sword')
 assert(brd_adv.sub_skill_mask == bit.bor(dagger_bit, sword_bit), 'sub_skill_mask must allow Dagger + Sword')
 assert(brd_adv.main_item_id == 0 and brd_adv.sub_item_id == 0, 'item_id overrides default to 0 (any Dagger/Sword)')
@@ -108,16 +110,16 @@ assert(ui:key('back', 4, bottom_nav) == true and mock_state.open == false,
 assert(ui:key('back', 5, bottom_nav) == true and ui.focused == false,
     'Back must return focus to native Equipment menu')
 
--- 5. Per-hook diagnostics FFI struct (60 bytes) and human-readable formatting
+-- 5. Per-hook diagnostics FFI struct (60 bytes) and human-readable formatting (27 hooks)
 local diag_ok = labels:hook_diagnostics(function(buf, sz)
-    assert(sz == 60, 'CrystalJobsHookDiagnostics must be 60 bytes')
+    assert(sz == 60, 'SoulspireNativeHookDiagnostics must be 60 bytes')
     buf[0].size = 60
     buf[0].version = 1
-    buf[0].total_hooks = 24
-    buf[0].expected_hooks = 24
-    buf[0].installed_mask = 0xFFFFFF
-    buf[0].site_set_mask = 0xFFFFFF
-    buf[0].capabilities = 0x3FFF
+    buf[0].total_hooks = 27
+    buf[0].expected_hooks = 27
+    buf[0].installed_mask = 0x7FFFFFF
+    buf[0].site_set_mask = 0x7FFFFFF
+    buf[0].capabilities = 0x7FFF
     buf[0].ffxi_base = 0x04860000
     buf[0].ffxi_timestamp = 0x6ae818b4
     buf[0].ffxi_image_size = 0x00c17000
@@ -126,38 +128,41 @@ local diag_ok = labels:hook_diagnostics(function(buf, sz)
     buf[0].failed_index = 0xFFFFFFFF
     return 0
 end)
-assert(diag_ok ~= nil and diag_ok.total_hooks == 24 and diag_ok.expected_hooks == 24)
+assert(diag_ok ~= nil and diag_ok.total_hooks == 27 and diag_ok.expected_hooks == 27)
 local lines_ok = Labels.format_hook_diagnostics(diag_ok)
-assert(lines_ok[1]:find('sub_weapon_hook=OK', 1, true) ~= nil, '24/24 diag must report sub_weapon_hook=OK')
-assert(lines_ok[3] == 'missing_hooks=[none]', '24/24 diag must report no missing hooks')
+assert(lines_ok[1]:find('sub_weapon_hook=OK', 1, true) ~= nil, '27/27 diag must report sub_weapon_hook=OK')
+assert(lines_ok[3] == 'missing_hooks=[none]', '27/27 diag must report no missing hooks')
 
--- Simulate 21/24 where the 3 PrologueDetours are missing (1 overwritten, 2 not installed)
+-- Simulate 21/27 where Hook #22 (bit 21) and the 5 PrologueDetours (bits 22..26) are missing (bit 24 overwritten)
 local diag_21 = labels:hook_diagnostics(function(buf, sz)
     assert(sz == 60)
     buf[0].size = 60
     buf[0].version = 1
     buf[0].total_hooks = 21
-    buf[0].expected_hooks = 24
-    buf[0].installed_mask = 0x1FFFFF -- bits 0..20 installed; bits 21..23 missing
-    buf[0].site_set_mask = 0x9FFFFF  -- bit 23 was installed then overwritten
+    buf[0].expected_hooks = 27
+    buf[0].installed_mask = 0x1FFFFF  -- bits 0..20 installed; bits 21..26 missing
+    buf[0].site_set_mask = 0x11FFFFF  -- bit 24 (0x133D56) was installed then overwritten
     buf[0].capabilities = 0x0FFF
     buf[0].ffxi_base = 0x04860000
     buf[0].ffxi_timestamp = 0x6ae818b4
     buf[0].ffxi_image_size = 0x00c17000
     buf[0].init_stage = 6
     buf[0].failed_rva = 0x133D56
-    buf[0].failed_index = 23
+    buf[0].failed_index = 24
     buf[0].observed_bytes[0] = 0xE9
     buf[0].observed_bytes[1] = 0x11
     return 0
 end)
 assert(diag_21 ~= nil and diag_21.total_hooks == 21)
 local lines_21 = Labels.format_hook_diagnostics(diag_21)
-assert(lines_21[1]:find('installed=21/24', 1, true) ~= nil)
+assert(lines_21[1]:find('installed=21/27', 1, true) ~= nil)
 assert(lines_21[1]:find('sub_weapon_hook=MISSING', 1, true) ~= nil)
+assert(lines_21[3]:find('0x133E33 soul_can_equip_in_slot:not_installed', 1, true) ~= nil)
 assert(lines_21[3]:find('0x22CDE0 can_use_spell_detour:not_installed', 1, true) ~= nil)
 assert(lines_21[3]:find('0x22CB44 missing_spell_bit_detour:not_installed', 1, true) ~= nil)
 assert(lines_21[3]:find('0x133D56 soul_sub_weapon_detour:overwritten', 1, true) ~= nil)
+assert(lines_21[3]:find('0x21DF85 soul_sub_menu_filter_detour:not_installed', 1, true) ~= nil)
+assert(lines_21[3]:find('0x133DD3 soul_sub_2h_main_detour:not_installed', 1, true) ~= nil)
 assert(lines_21[4]:find('rva=0x133D56 observed=E9 11', 1, true) ~= nil)
 
 print('Crystal Socket native weapon_config & UI tests passed.')

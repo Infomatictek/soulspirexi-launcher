@@ -1,7 +1,10 @@
 @echo off
 setlocal enabledelayedexpansion
-set "CJ_DIR=%~dp0"
-cd /d "%CJ_DIR%"
+set "SN_DIR=%~dp0"
+cd /d "%SN_DIR%"
+
+set "EXTRA_FLAGS=%SOULSPIRE_NATIVE_EXTRA_CXXFLAGS%"
+if "%EXTRA_FLAGS%"=="" set "EXTRA_FLAGS=%CRYSTALJOBS_EXTRA_CXXFLAGS%"
 
 set "VCVARS="
 if exist "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars32.bat" (
@@ -17,12 +20,12 @@ if exist "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\B
 if not "%VCVARS%"=="" (
     call "%VCVARS%" >nul
     if errorlevel 1 exit /b 1
-    cd /d "%CJ_DIR%"
+    cd /d "%SN_DIR%"
 
-    cl /nologo /std:c++17 /W4 /WX /EHsc /O2 /MT /LD %CRYSTALJOBS_EXTRA_CXXFLAGS% crystaljobs.cpp /link /DEF:crystaljobs.def /OUT:crystaljobs.dll
+    cl /nologo /std:c++17 /W4 /WX /EHsc /O2 /MT /LD %EXTRA_FLAGS% soulspire_native.cpp /link /DEF:soulspire_native.def /OUT:soulspire_native.dll
     if errorlevel 1 exit /b 1
 
-    cl /nologo /std:c++17 /W4 /WX /EHsc /O2 /MT %CRYSTALJOBS_EXTRA_CXXFLAGS% selftest.cpp /Fe:selftest.exe
+    cl /nologo /std:c++17 /W4 /WX /EHsc /O2 /MT %EXTRA_FLAGS% tests\selftest.cpp /Fe:selftest.exe
     if errorlevel 1 exit /b 1
 ) else (
     where i686-w64-mingw32-clang++ >nul 2>&1
@@ -32,8 +35,29 @@ if not "%VCVARS%"=="" (
     )
 
     (
-        echo LIBRARY crystaljobs
+        echo LIBRARY soulspire_native
         echo EXPORTS
+        echo     SoulspireNativeInitialize=SoulspireNativeInitialize@0
+        echo     SoulspireNativeShutdown=SoulspireNativeShutdown@0
+        echo     SoulspireNativeGetStatus=SoulspireNativeGetStatus@8
+        echo     SoulspireNativeSetState=SoulspireNativeSetState@8
+        echo     SoulspireNativeReloadConfig=SoulspireNativeReloadConfig@0
+        echo     SoulspireNativeReplaceCatalog=SoulspireNativeReplaceCatalog@8
+        echo     SoulspireNativeUpsertAction=SoulspireNativeUpsertAction@4
+        echo     SoulspireNativeClearCatalog=SoulspireNativeClearCatalog@0
+        echo     SoulspireNativeSetActiveSoul=SoulspireNativeSetActiveSoul@12
+        echo     SoulspireNativeClearActiveSoul=SoulspireNativeClearActiveSoul@0
+        echo     SoulspireNativeGetActionStatus=SoulspireNativeGetActionStatus@8
+        echo     SoulspireNativeSetActionRowLimit=SoulspireNativeSetActionRowLimit@4
+        echo     SoulspireNativeReplaceVisibility=SoulspireNativeReplaceVisibility@8
+        echo     SoulspireNativeClearVisibility=SoulspireNativeClearVisibility@0
+        echo     SoulspireNativeGetVisibilityStatus=SoulspireNativeGetVisibilityStatus@8
+        echo     SoulspireNativeReplaceWeaponRules=SoulspireNativeReplaceWeaponRules@8
+        echo     SoulspireNativeClearWeaponRules=SoulspireNativeClearWeaponRules@0
+        echo     SoulspireNativeGetWeaponStatus=SoulspireNativeGetWeaponStatus@8
+        echo     SoulspireNativeGetHookDiagnostics=SoulspireNativeGetHookDiagnostics@8
+        echo     SoulspireNativeGetIdentityDiagnostics=SoulspireNativeGetIdentityDiagnostics@8
+        echo     SoulspireNativeGetInterfaceInfo=SoulspireNativeGetInterfaceInfo@8
         echo     CrystalJobsInitialize=CrystalJobsInitialize@0
         echo     CrystalJobsShutdown=CrystalJobsShutdown@0
         echo     CrystalJobsGetStatus=CrystalJobsGetStatus@8
@@ -56,24 +80,24 @@ if not "%VCVARS%"=="" (
         echo     expCreatePlugin=expCreatePlugin@4
         echo     expDestroyPlugin=expDestroyPlugin@4
         echo     expGetInterfaceVersion=expGetInterfaceVersion@0
-    ) > crystaljobs.mingw.def
+    ) > soulspire_native.mingw.def
 
-    i686-w64-mingw32-clang++ -std=c++17 -O2 -Wall -Wextra -Werror -fms-extensions -fasm-blocks -static -shared crystaljobs.cpp crystaljobs.mingw.def -o crystaljobs.dll
+    i686-w64-mingw32-clang++ -std=c++17 -O2 -Wall -Wextra -Werror -fms-extensions -fasm-blocks -static -shared soulspire_native.cpp soulspire_native.mingw.def -o soulspire_native.dll
     set "BUILD_RC=!ERRORLEVEL!"
-    del /q crystaljobs.mingw.def 2>nul
+    del /q soulspire_native.mingw.def 2>nul
     if not "!BUILD_RC!"=="0" exit /b !BUILD_RC!
 
-    i686-w64-mingw32-clang++ -std=c++17 -O2 -Wall -Wextra -Werror -fms-extensions -fasm-blocks -static selftest.cpp -o selftest.exe
+    i686-w64-mingw32-clang++ -std=c++17 -O2 -Wall -Wextra -Werror -fms-extensions -fasm-blocks -static tests\selftest.cpp -o selftest.exe
     if errorlevel 1 exit /b 1
 )
 
 selftest.exe
 if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
 
-if not exist "%CJ_DIR%..\..\plugins\ashita4" mkdir "%CJ_DIR%..\..\plugins\ashita4"
-copy /y "%CJ_DIR%crystaljobs.dll" "%CJ_DIR%..\..\plugins\ashita4\crystaljobs.dll" >nul
+if not exist "%SN_DIR%..\plugins\ashita4" mkdir "%SN_DIR%..\plugins\ashita4"
+copy /y "%SN_DIR%soulspire_native.dll" "%SN_DIR%..\plugins\ashita4\soulspire_native.dll" >nul
 if errorlevel 1 exit /b 1
 
 del /q *.obj *.exp *.lib 2>nul
-if not "%CRYSTALJOBS_KEEP_SELFTEST%"=="1" del /q selftest.exe 2>nul
-echo Built and verified crystaljobs.dll to plugins\ashita4\crystaljobs.dll
+if not "%SOULSPIRE_NATIVE_KEEP_SELFTEST%"=="1" if not "%CRYSTALJOBS_KEEP_SELFTEST%"=="1" del /q selftest.exe 2>nul
+echo Built and verified soulspire_native.dll to plugins\ashita4\soulspire_native.dll

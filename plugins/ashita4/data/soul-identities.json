@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "registryVersion": "2026.11.22-66-souls-approved",
-  "registryHash": "f8abc95e3c88cce7",
-  "integrityFnv1a64": "f09c4e3815f6ce5e",
+  "registryHash": "cf86aa59ff8d16c6",
+  "integrityFnv1a64": "14127306521c790c",
   "soulCount": 66,
   "souls": [
     {
@@ -45,7 +45,7 @@
       "jobId": 3,
       "branch": 1,
       "name": "Bishop",
-      "abbr": "BSH"
+      "abbr": "BSP"
     },
     {
       "jobId": 3,
@@ -69,7 +69,7 @@
       "jobId": 4,
       "branch": 2,
       "name": "Channeler",
-      "abbr": "CHN"
+      "abbr": "CNL"
     },
     {
       "jobId": 4,
@@ -81,7 +81,7 @@
       "jobId": 5,
       "branch": 1,
       "name": "Thornveil",
-      "abbr": "THV"
+      "abbr": "TVL"
     },
     {
       "jobId": 5,
@@ -93,7 +93,7 @@
       "jobId": 5,
       "branch": 3,
       "name": "Conflux",
-      "abbr": "CFX"
+      "abbr": "CFL"
     },
     {
       "jobId": 6,
@@ -111,7 +111,7 @@
       "jobId": 6,
       "branch": 3,
       "name": "Phantom",
-      "abbr": "PHN"
+      "abbr": "PTM"
     },
     {
       "jobId": 7,
@@ -225,7 +225,7 @@
       "jobId": 13,
       "branch": 1,
       "name": "Shinobi",
-      "abbr": "SHN"
+      "abbr": "SNI"
     },
     {
       "jobId": 13,
@@ -291,7 +291,7 @@
       "jobId": 16,
       "branch": 3,
       "name": "Chrysalis",
-      "abbr": "CHY"
+      "abbr": "CRY"
     },
     {
       "jobId": 17,
@@ -351,7 +351,7 @@
       "jobId": 20,
       "branch": 1,
       "name": "Chirurgeon",
-      "abbr": "CHG"
+      "abbr": "CRG"
     },
     {
       "jobId": 20,

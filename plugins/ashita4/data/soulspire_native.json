@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "searchBadge": {
+    "trackingPx": -1,
+    "offsetXPx": 1,
+    "useGlyphWidths": false
+  },
+  "logging": {
+    "level": "warn"
+  },
+  "actionRowMaxChars": 16,
+  "modules": {
+    "jobIdentity": true,
+    "actions": true,
+    "equipment": true,
+    "rendering": true,
+    "datVirtualization": true
+  }
+}

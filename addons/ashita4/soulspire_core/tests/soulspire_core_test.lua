@@ -556,6 +556,12 @@ ui:draw(ctx1, bridge1:get_mode())
 assert_true(table.concat(drawn_texts, '\n'):find('CONTROLS & DETAILS', 1, true) ~= nil, 'Help overlay rendered')
 focus.help_open = false
 
+-- Soulspire Native ABI v2 bridge checks (headless/non-Windows safe)
+local NativeBridge = require('core.native_bridge')
+assert_eq(NativeBridge.EXPECTED_ABI_VERSION, 2, 'NativeBridge must target Soulspire Native ABI v2')
+local bridge_info, bridge_err = NativeBridge.query()
+assert_true(bridge_info == nil and type(bridge_err) == 'string', 'Headless Linux test must fail closed cleanly without Windows DLL')
+
 -- Micro-benchmark: 200 headless frames of unified Core + Weapon Mastery at 2560x1440
 mockDisplay.x, mockDisplay.y = 2560, 1440
 local t0 = os.clock()

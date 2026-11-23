@@ -145,6 +145,9 @@ public sealed class ManifestServerCompatibility
     [JsonPropertyName("dockerImage")]
     public string DockerImage { get; set; } = string.Empty;
 
+    [JsonPropertyName("nativeHooks")]
+    public int? NativeHooks { get; set; }
+
     [JsonPropertyName("crystalJobsHooks")]
     public int? CrystalJobsHooks { get; set; }
 
@@ -172,8 +175,11 @@ public sealed class ManifestRegistryMetadata
     [JsonPropertyName("nativeDllClientVerified")]
     public bool NativeDllClientVerified { get; set; }
 
+    [JsonPropertyName("nativeHooks")]
+    public int? NativeHooks { get; set; }
+
     [JsonPropertyName("crystalJobsHooks")]
-    public int CrystalJobsHooks { get; set; } = 24;
+    public int CrystalJobsHooks { get; set; } = 27;
 }
 
 public sealed class InstalledClientState

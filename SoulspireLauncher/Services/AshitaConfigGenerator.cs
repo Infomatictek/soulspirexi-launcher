@@ -227,6 +227,8 @@ public sealed class AshitaConfigGenerator
                 var trimmed = rawLine.Trim();
                 if (trimmed.Equals("/load crystaljobs", StringComparison.OrdinalIgnoreCase) ||
                     trimmed.Equals("/unload crystaljobs", StringComparison.OrdinalIgnoreCase) ||
+                    trimmed.Equals("/load soulspire_native", StringComparison.OrdinalIgnoreCase) ||
+                    trimmed.Equals("/unload soulspire_native", StringComparison.OrdinalIgnoreCase) ||
                     trimmed.Equals("/addon load soulspire_talents", StringComparison.OrdinalIgnoreCase) ||
                     trimmed.Equals("/addon unload soulspire_talents", StringComparison.OrdinalIgnoreCase) ||
                     trimmed.Equals("/addon load overlords_talents", StringComparison.OrdinalIgnoreCase) ||
@@ -283,11 +285,11 @@ public sealed class AshitaConfigGenerator
             var addonsIdx = lines.FindIndex(l => l.Trim().Equals("/load addons", StringComparison.OrdinalIgnoreCase));
             if (addonsIdx >= 0)
             {
-                lines.Insert(addonsIdx + 1, "/load crystaljobs");
+                lines.Insert(addonsIdx + 1, "/load soulspire_native");
             }
             else
             {
-                EnsureLine(lines, "/load crystaljobs", insertAtTop: false);
+                EnsureLine(lines, "/load soulspire_native", insertAtTop: false);
             }
         }
 

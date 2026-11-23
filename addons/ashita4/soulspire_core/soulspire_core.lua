@@ -1,16 +1,15 @@
 -- SoulspireXI Core: Unified Native-Feeling In-Game UI & Full Gamepad Integration.
 --
 -- Integrates existing SoulspireXI systems behind one cohesive dark-fantasy interface
--- accessible directly from FFXI's Main Menu (or via /soulspire / /ss):
+-- accessible directly from FFXI's native Commands Menu (or via /soulspire / /ss):
 --   - Character / Soul Identity (reuses crystalsocket protocol, state & assets)
 --   - Weapon Mastery / The Soulforge (reuses soulspire_talents state, UI & assets)
 --   - Soul Talents (live Soul spec loadout, invested nodes & Soul HUD telemetry)
 --   - Extensible Dynamic Header driven strictly by core/registry.lua
 --
 -- Native Menu Integration:
---   Probes crystaljobs.dll safely (read-only) for any verified native Main Menu hook,
---   and falls back cleanly to verified read-only MenuManager docking without modifying
---   FFXiMain.dll or interfering with any of the 24 existing crystaljobs.dll hooks.
+--   Connects directly to soulspire_native.dll (ABI v2) native Commands Menu entry
+--   (inserted between Status and Equipment inside FFXI's native menu    menuwind).
 
 addon.name    = 'soulspire_core'
 addon.author  = 'SoulspireXI'
@@ -23,6 +22,7 @@ local ffi           = require('ffi')
 local imgui         = require('imgui')
 local Registry      = require('core.registry')
 local MenuBridge    = require('core.menu_bridge')
+local NativeBridge  = require('core.native_bridge')
 local Focus         = require('core.focus')
 local Input         = require('core.input')
 local Assets        = require('core.assets')
@@ -401,6 +401,7 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
         local native = current_native_menu()
         local active = focus:active_module()
         local diag = menu and menu:diagnostics() or { mode = 'standalone', bridge_available = false, native_hook_supported = false, native_hook_reason = 'menu_bridge_nil' }
+        local sn, sn_err = NativeBridge.query()
         local line1 = ('version=%s mode=%s native_hook=%s bridge=%s modules=%d(%d live) hub_open=%s dock_focused=%s active=%s native_form=%s'):format(
             addon.version,
             tostring(diag.mode),
@@ -422,11 +423,22 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
         )
         log(line1)
         log(line2)
+        local line3 = ''
+        if sn then
+            line3 = ('soulspire_native abi=v%d hooks=%d/%d caps=0x%04X modules=0x%02X/0x%02X banks=%d/%d hash=%s'):format(
+                sn.abi_version, sn.installed_hooks, sn.expected_hooks, sn.capabilities,
+                sn.active_modules_mask, sn.enabled_modules_mask,
+                sn.menu2fon_banks_used, sn.menu2fon_banks_max, sn.registry_hash)
+            log(line3)
+        else
+            line3 = 'soulspire_native unavailable: ' .. tostring(sn_err)
+            log(line3)
+        end
         if type(addon.path) == 'string' and addon.path ~= '' then
             pcall(function()
                 local f = io.open(addon.path:gsub('[/\\]+$', '') .. '/soulspire_core-status.log', 'w')
                 if f then
-                    f:write('[soulspire_core] ' .. line1 .. '\n[soulspire_core] ' .. line2 .. '\n')
+                    f:write('[soulspire_core] ' .. line1 .. '\n[soulspire_core] ' .. line2 .. '\n[soulspire_core] ' .. line3 .. '\n')
                     f:close()
                 end
             end)

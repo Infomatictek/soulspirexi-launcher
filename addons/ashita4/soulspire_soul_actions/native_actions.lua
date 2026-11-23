@@ -47,7 +47,10 @@ M.CAPABILITIES = {
     { bit = 512,  name = 'Ability/WS menu icons' },
     { bit = 1024, name = 'Magic/Ninjutsu menu visibility filter' },
     { bit = 2048, name = 'Ability/WS menu visibility filter' },
-    { bit = 4096, name = 'Soul cast lookup' },
+    { bit = 4096,  name = 'Soul cast lookup' },
+    { bit = 8192,  name = 'Soul Sub weapon' },
+    { bit = 16384, name = 'Soul Sub 2H' },
+    { bit = 32768, name = 'DAT virtualization' },
 }
 
 function M.soulToPair(soulKey)
@@ -104,15 +107,15 @@ if okFfi and ffi then
     if ok4 then vis_status_t = t4 end
 
     local sigs = {
-        CrystalJobsReplaceCatalog    = 'uint32_t (__stdcall *)(const void*, uint32_t)',
-        CrystalJobsClearCatalog      = 'uint32_t (__stdcall *)(void)',
-        CrystalJobsSetActiveSoul     = 'uint32_t (__stdcall *)(uint32_t, uint32_t, uint32_t)',
-        CrystalJobsClearActiveSoul   = 'uint32_t (__stdcall *)(void)',
-        CrystalJobsGetActionStatus   = 'uint32_t (__stdcall *)(void*, uint32_t)',
-        CrystalJobsSetActionRowLimit = 'uint32_t (__stdcall *)(uint32_t)',
-        CrystalJobsReplaceVisibility = 'uint32_t (__stdcall *)(const void*, uint32_t)',
-        CrystalJobsClearVisibility   = 'uint32_t (__stdcall *)(void)',
-        CrystalJobsGetVisibilityStatus = 'uint32_t (__stdcall *)(void*, uint32_t)',
+        ReplaceCatalog      = 'uint32_t (__stdcall *)(const void*, uint32_t)',
+        ClearCatalog        = 'uint32_t (__stdcall *)(void)',
+        SetActiveSoul       = 'uint32_t (__stdcall *)(uint32_t, uint32_t, uint32_t)',
+        ClearActiveSoul     = 'uint32_t (__stdcall *)(void)',
+        GetActionStatus     = 'uint32_t (__stdcall *)(void*, uint32_t)',
+        SetActionRowLimit   = 'uint32_t (__stdcall *)(uint32_t)',
+        ReplaceVisibility   = 'uint32_t (__stdcall *)(const void*, uint32_t)',
+        ClearVisibility     = 'uint32_t (__stdcall *)(void)',
+        GetVisibilityStatus = 'uint32_t (__stdcall *)(void*, uint32_t)',
     }
     for name, sig in pairs(sigs) do
         local okT, tp = pcall(ffi.typeof, sig)
@@ -120,9 +123,14 @@ if okFfi and ffi then
     end
 end
 
-local function resolveFn(name)
-    if not (ffi and fn_types[name]) then return nil end
-    local handle = ffi.C.GetModuleHandleA('crystaljobs.dll')
+local function resolveFn(shortName)
+    if not (ffi and fn_types[shortName]) then return nil end
+    local handle = ffi.C.GetModuleHandleA('soulspire_native.dll')
+    local prefix = 'SoulspireNative'
+    if handle == nil then
+        handle = ffi.C.GetModuleHandleA('crystaljobs.dll')
+        prefix = 'CrystalJobs'
+    end
     if handle == nil then
         cache.module = nil
         cache.fns = {}
@@ -132,11 +140,14 @@ local function resolveFn(name)
         cache.module = handle
         cache.fns = {}
     end
-    if cache.fns[name] then return cache.fns[name] end
-    local addr = ffi.C.GetProcAddress(handle, name)
+    if cache.fns[shortName] then return cache.fns[shortName] end
+    local addr = ffi.C.GetProcAddress(handle, prefix .. shortName)
+    if addr == nil and prefix == 'SoulspireNative' then
+        addr = ffi.C.GetProcAddress(handle, 'CrystalJobs' .. shortName)
+    end
     if addr == nil then return nil end
-    local fn = ffi.cast(fn_types[name], addr)
-    cache.fns[name] = fn
+    local fn = ffi.cast(fn_types[shortName], addr)
+    cache.fns[shortName] = fn
     return fn
 end
 
@@ -144,8 +155,8 @@ function M.syncCatalog(catalog)
     if not (ffi and entry_arr_t and catalog and type(catalog.souls) == 'table') then
         return false, 'FFI or catalog unavailable'
     end
-    local replaceFn = resolveFn('CrystalJobsReplaceCatalog')
-    if not replaceFn then return false, 'crystaljobs.dll Action API unavailable' end
+    local replaceFn = resolveFn('ReplaceCatalog')
+    if not replaceFn then return false, 'soulspire_native.dll Action API unavailable' end
 
     local flat = {}
     for soulKey, kinds in pairs(catalog.souls) do
@@ -175,7 +186,7 @@ function M.syncCatalog(catalog)
 
     local count = #flat
     if count == 0 then
-        local clearFn = resolveFn('CrystalJobsClearCatalog')
+        local clearFn = resolveFn('ClearCatalog')
         if clearFn then clearFn() end
         return true, 0
     end
@@ -200,7 +211,7 @@ function M.syncCatalog(catalog)
         return tonumber(replaceFn(arr, count))
     end)
     if not ok or rc ~= 0 then
-        return false, 'CrystalJobsReplaceCatalog failed: ' .. tostring(rc)
+        return false, 'SoulspireNativeReplaceCatalog failed: ' .. tostring(rc)
     end
     return true, count
 end
@@ -208,14 +219,14 @@ end
 function M.setActiveSoul(soulKey, characterId)
     local job, branch = M.soulToPair(soulKey)
     if not (job and branch) then return M.clearActiveSoul() end
-    local fn = resolveFn('CrystalJobsSetActiveSoul')
+    local fn = resolveFn('SetActiveSoul')
     if not fn then return false end
     local ok, rc = pcall(fn, job, branch, tonumber(characterId) or 0)
     return ok and tonumber(rc) == 0
 end
 
 function M.clearActiveSoul()
-    local fn = resolveFn('CrystalJobsClearActiveSoul')
+    local fn = resolveFn('ClearActiveSoul')
     if not fn then return false end
     local ok, rc = pcall(fn)
     return ok and tonumber(rc) == 0
@@ -224,7 +235,7 @@ end
 function M.setActionRowLimit(limit)
     local n = tonumber(limit)
     if not n or n % 1 ~= 0 or n < 8 or n > 48 then return false end
-    local fn = resolveFn('CrystalJobsSetActionRowLimit')
+    local fn = resolveFn('SetActionRowLimit')
     if not fn then return false end
     local ok, rc = pcall(fn, n)
     return ok and tonumber(rc) == 0
@@ -232,7 +243,7 @@ end
 
 function M.readStatus()
     if not (ffi and action_status_t) then return nil end
-    local fn = resolveFn('CrystalJobsGetActionStatus')
+    local fn = resolveFn('GetActionStatus')
     if not fn then return nil end
     local ok, res = pcall(function()
         local buf = ffi.new(action_status_t)
@@ -261,10 +272,10 @@ function M.syncVisibility(policy)
     if not (ffi and vis_entry_arr_t) then
         return false, 'FFI visibility types unavailable'
     end
-    local replaceFn = resolveFn('CrystalJobsReplaceVisibility')
-    if not replaceFn then return false, 'crystaljobs.dll Visibility API unavailable' end
+    local replaceFn = resolveFn('ReplaceVisibility')
+    if not replaceFn then return false, 'soulspire_native.dll Visibility API unavailable' end
     if type(policy) ~= 'table' or type(policy.souls) ~= 'table' then
-        local clearFn = resolveFn('CrystalJobsClearVisibility')
+        local clearFn = resolveFn('ClearVisibility')
         if clearFn then clearFn() end
         return true, 0
     end
@@ -296,7 +307,7 @@ function M.syncVisibility(policy)
 
     local count = #flat
     if count == 0 then
-        local clearFn = resolveFn('CrystalJobsClearVisibility')
+        local clearFn = resolveFn('ClearVisibility')
         if clearFn then clearFn() end
         return true, 0
     end
@@ -318,13 +329,13 @@ function M.syncVisibility(policy)
         return tonumber(replaceFn(arr, count))
     end)
     if not ok or rc ~= 0 then
-        return false, 'CrystalJobsReplaceVisibility failed: ' .. tostring(rc)
+        return false, 'SoulspireNativeReplaceVisibility failed: ' .. tostring(rc)
     end
     return true, count
 end
 
 function M.clearVisibility()
-    local fn = resolveFn('CrystalJobsClearVisibility')
+    local fn = resolveFn('ClearVisibility')
     if not fn then return false end
     local ok, rc = pcall(fn)
     return ok and tonumber(rc) == 0
@@ -332,7 +343,7 @@ end
 
 function M.readVisibilityStatus()
     if not (ffi and vis_status_t) then return nil end
-    local fn = resolveFn('CrystalJobsGetVisibilityStatus')
+    local fn = resolveFn('GetVisibilityStatus')
     if not fn then return nil end
     local ok, res = pcall(function()
         local buf = ffi.new(vis_status_t)
