@@ -446,6 +446,8 @@ static void multi_job_checks() {
     std::memcpy(mock_node + 0x10, &tile_ptr, sizeof(tile_ptr));
     uint8_t* node_ptr = mock_node;
     std::memcpy(mock_sprite + 0x04, &node_ptr, sizeof(node_ptr));
+    std::memcpy(mock_sprite + 0x08, &node_ptr, sizeof(node_ptr)); // CYyList tail
+    std::memcpy(mock_sprite + 0x0C, &node_ptr, sizeof(node_ptr)); // CYyList cursor
     const uint32_t one_tile = 1;
     std::memcpy(mock_sprite + 0x14, &one_tile, sizeof(one_tile));
     uint8_t* sprite_entries[2] = {nullptr, mock_sprite};
@@ -529,6 +531,44 @@ static void multi_job_checks() {
     assert(std::memcmp(mock_sprite, orig_sprite_copy, sizeof(orig_sprite_copy)) == 0);
     assert(std::memcmp(mock_node, orig_node_copy, sizeof(orig_node_copy)) == 0);
     assert(std::memcmp(mock_tile, orig_tile_copy, sizeof(orig_tile_copy)) == 0);
+
+    // Flintlock (COR job 17, branch 1 = "FLT") reproduction + CYyList tail/cursor repointing
+    // + simulated FFXI WAR TLVERTEX [0x50..0xBF] mutations across 25 scrolls/searches.
+    reset_menu2fon_banks_for_test();
+    recorded_sprite_count = 0;
+    make_row(row_a, 650, marker | 1, 17); state.decoded(row_a); // COR branch 1 = FLT
+    const char* flt_abr = label_for(17, 1, false);
+    assert(flt_abr != nullptr && std::strcmp(flt_abr, "FLT") == 0);
+    for (int scroll = 0; scroll < 25; ++scroll) {
+        // Simulate FFXI 0x121110 updating screen Y and diffuse color in WAR's TLVERTEX buffer [0x50..0xBF]
+        const float fake_y = 100.0f + static_cast<float>(scroll * 16);
+        const uint32_t fake_color = 0x80808080u + static_cast<uint32_t>(scroll);
+        std::memcpy(mock_tile + 0x54, &fake_y, sizeof(fake_y));
+        std::memcpy(mock_tile + 0x60, &fake_color, sizeof(fake_color));
+        sprite_calls = 0; text_calls = 0;
+        const size_t rec_start = recorded_sprite_count;
+        assert(sprite_abi(reinterpret_cast<void*>(&normal_sprite_hook), row_a));
+        assert(sprite_calls == 3 && text_calls == 0); // Must NEVER exhaust banks or fall back to native_text!
+        for (int gi = 0; gi < 3; ++gi) {
+            const uint8_t* spr = recorded_sprites[rec_start + gi];
+            const uint8_t* head = *reinterpret_cast<uint8_t* const*>(spr + 0x04);
+            const uint8_t* tail = *reinterpret_cast<uint8_t* const*>(spr + 0x08);
+            const uint8_t* cur  = *reinterpret_cast<uint8_t* const*>(spr + 0x0C);
+            assert(head != mock_node && tail == head && cur == head);
+            const uint8_t* tile = *reinterpret_cast<uint8_t* const*>(head + 0x10);
+            const MenuGlyph g = menu_glyphs[flt_abr[gi] - 'A'];
+            int16_t obs_corners[8]{};
+            std::memcpy(obs_corners, tile + 0xC0, sizeof(obs_corners));
+            assert(obs_corners[0] == static_cast<int16_t>(gi * 8));
+            assert(obs_corners[2] == static_cast<int16_t>(gi * 8 + g.w));
+            assert(obs_corners[2] <= 23); // Fits flush before level digits at +23
+        }
+    }
+    // Confirm only 1 bank was claimed across all 25 TLVERTEX mutations!
+    size_t active_banks = 0;
+    for (size_t bi = 0; bi < kMaxMenu2fonBanks; ++bi) if (g_menu2fon_banks[bi].active) ++active_banks;
+    assert(active_banks == 1);
+    std::memcpy(mock_tile, orig_tile_copy, sizeof(orig_tile_copy));
 
     // Safe capacity exhaustion test: exhaust all kMaxMenu2fonBanks distinct sheet reloads,
     // verify the (kMaxMenu2fonBanks + 1)-th reload falls back cleanly to native_text WITHOUT

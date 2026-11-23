@@ -31,7 +31,7 @@ public sealed class ManifestUpdateService
     public const string StableManifestRelativePath = "manifest.json";
     public const string TestingManifestRelativePath = "channels/testing/manifest.json";
     public const string TestingRegistry24HookManifestRelativePath = "channels/testing-registry-24hook/manifest.json";
-    public const string TestingRegistry24HookBranch = "fix/native-search-label-and-testing-candidate";
+    public const string TestingRegistry24HookBranch = "fix/flintlock-search-label-and-dll-diagnostics";
     public const string InstalledStateFileName = ".soulspire-state.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new()

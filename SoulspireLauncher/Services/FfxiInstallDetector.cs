@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.IO;
+using System.Security.Cryptography;
 using Microsoft.Win32;
 using SoulspireLauncher.Models;
 
@@ -83,7 +85,202 @@ public sealed class FfxiInstallDetector
         diag.DirectPlayEnabled = CheckDirectPlayPresent();
         diag.VcRedistX86Present = CheckVcRedistX86Present();
 
+        PopulateNativeDllDiagnostics(diag, settings, manifest);
+
         return diag;
+    }
+
+    public static void PopulateNativeDllDiagnostics(
+        InstallDiagnostics diag,
+        LauncherSettings settings,
+        LauncherManifest? manifest,
+        bool inspectRunningProcess = true)
+    {
+        diag.NativeSelectedChannel = settings.UpdateChannel switch
+        {
+            UpdateChannel.Stable => "Stable",
+            UpdateChannel.Testing => "Testing (27-Hook Weapon Templates)",
+            UpdateChannel.TestingRegistry24Hook => "Testing — Registry 24-Hook (Search Fix)",
+            _ => settings.UpdateChannel.ToString()
+        };
+
+        var dllPath = string.IsNullOrWhiteSpace(settings.AshitaPath)
+            ? string.Empty
+            : Path.Combine(settings.AshitaPath, "plugins", "crystaljobs.dll");
+        diag.NativeDllFilePath = string.IsNullOrWhiteSpace(dllPath) ? "UNKNOWN (Ashita path not set)" : dllPath;
+
+        var dllEntry = manifest?.Files.FirstOrDefault(f =>
+            f.Category.Equals("plugin", StringComparison.OrdinalIgnoreCase) &&
+            f.TargetPath.Replace('\\', '/').EndsWith("crystaljobs.dll", StringComparison.OrdinalIgnoreCase));
+
+        var expectedSha = dllEntry?.Sha256?.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(expectedSha))
+        {
+            expectedSha = manifest?.Registry?.NativeDllSha256?.Trim().ToLowerInvariant();
+        }
+        diag.NativeExpectedDllSha256 = string.IsNullOrWhiteSpace(expectedSha) ? "UNKNOWN" : expectedSha;
+
+        var compiledHash = manifest?.Registry?.NativeDllCompiledHash?.Trim();
+        diag.NativeRegistryCompiledHash = string.IsNullOrWhiteSpace(compiledHash) ? "UNKNOWN" : compiledHash;
+
+        var hookCount = manifest?.Registry?.CrystalJobsHooks ?? manifest?.ServerCompatibility?.CrystalJobsHooks;
+        diag.NativeHookCount = hookCount is > 0 ? hookCount.Value.ToString() : "UNKNOWN";
+
+        if (string.IsNullOrWhiteSpace(dllPath) || !File.Exists(dllPath))
+        {
+            diag.NativeInstalledDllSha256 = "MISSING";
+            diag.NativeDllSha256Status = "FAIL";
+            diag.NativeDllArchitecture = "UNKNOWN (file missing)";
+            diag.NativeDllArchitectureStatus = "FAIL";
+        }
+        else
+        {
+            try
+            {
+                using var stream = new FileStream(dllPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                var sha = Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
+                diag.NativeInstalledDllSha256 = sha;
+
+                if (string.IsNullOrWhiteSpace(expectedSha))
+                {
+                    diag.NativeDllSha256Status = "UNKNOWN";
+                }
+                else
+                {
+                    diag.NativeDllSha256Status = sha.Equals(expectedSha, StringComparison.OrdinalIgnoreCase)
+                        ? "PASS"
+                        : "FAIL";
+                }
+
+                stream.Position = 0;
+                var (archStatus, archLabel) = InspectPeArchitectureReadOnly(stream);
+                diag.NativeDllArchitectureStatus = archStatus;
+                diag.NativeDllArchitecture = archLabel;
+            }
+            catch (Exception ex)
+            {
+                diag.NativeInstalledDllSha256 = $"UNREADABLE ({ex.Message})";
+                diag.NativeDllSha256Status = "UNKNOWN";
+                diag.NativeDllArchitecture = "UNKNOWN";
+                diag.NativeDllArchitectureStatus = "UNKNOWN";
+            }
+        }
+
+        if (!inspectRunningProcess)
+        {
+            diag.NativeLoadedModuleStatus = "UNKNOWN";
+            diag.NativeLoadedModuleDetail = "Process inspection skipped";
+            return;
+        }
+
+        InspectLoadedCrystalJobsModule(diag, dllPath);
+    }
+
+    private static (string Status, string Label) InspectPeArchitectureReadOnly(Stream stream)
+    {
+        try
+        {
+            if (stream.Length < 64)
+            {
+                return ("FAIL", "Invalid PE (file too small)");
+            }
+
+            using var reader = new BinaryReader(stream, System.Text.Encoding.ASCII, leaveOpen: true);
+            if (reader.ReadUInt16() != 0x5A4D) // MZ
+            {
+                return ("FAIL", "Invalid PE (missing MZ header)");
+            }
+
+            stream.Position = 0x3C;
+            var peOffset = reader.ReadInt32();
+            if (peOffset < 0 || peOffset + 6 > stream.Length)
+            {
+                return ("FAIL", "Invalid PE (bad e_lfanew)");
+            }
+
+            stream.Position = peOffset;
+            if (reader.ReadUInt32() != 0x00004550) // PE\0\0
+            {
+                return ("FAIL", "Invalid PE (missing PE signature)");
+            }
+
+            var machine = reader.ReadUInt16();
+            return machine switch
+            {
+                0x014C => ("PASS", "PE32 x86 (0x014C)"),
+                0x8664 => ("FAIL", "PE32+ x64 (0x8664 — expected x86)"),
+                _ => ("FAIL", $"Unexpected PE machine (0x{machine:X4})")
+            };
+        }
+        catch
+        {
+            return ("UNKNOWN", "UNKNOWN");
+        }
+    }
+
+    private static void InspectLoadedCrystalJobsModule(InstallDiagnostics diag, string expectedDllPath)
+    {
+        try
+        {
+            var polProcesses = Process.GetProcessesByName("pol");
+            if (polProcesses.Length == 0)
+            {
+                diag.NativeLoadedModuleStatus = "UNKNOWN";
+                diag.NativeLoadedModuleDetail = "FFXI / pol.exe is not running";
+                return;
+            }
+
+            try
+            {
+                foreach (var proc in polProcesses)
+                {
+                    try
+                    {
+                        foreach (ProcessModule mod in proc.Modules)
+                        {
+                            if (mod.ModuleName.Equals("crystaljobs.dll", StringComparison.OrdinalIgnoreCase))
+                            {
+                                var loadedPath = mod.FileName ?? string.Empty;
+                                if (!string.IsNullOrWhiteSpace(expectedDllPath) &&
+                                    loadedPath.Equals(expectedDllPath, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    diag.NativeLoadedModuleStatus = "PASS";
+                                    diag.NativeLoadedModuleDetail = $"Loaded in pol.exe (PID {proc.Id}) from expected path";
+                                }
+                                else
+                                {
+                                    diag.NativeLoadedModuleStatus = "FAIL";
+                                    diag.NativeLoadedModuleDetail = $"Loaded in pol.exe (PID {proc.Id}) from unexpected path: {loadedPath}";
+                                }
+                                return;
+                            }
+                        }
+
+                        diag.NativeLoadedModuleStatus = "FAIL";
+                        diag.NativeLoadedModuleDetail = $"pol.exe (PID {proc.Id}) running, but crystaljobs.dll not observed in loaded modules";
+                        return;
+                    }
+                    catch
+                    {
+                        diag.NativeLoadedModuleStatus = "UNKNOWN";
+                        diag.NativeLoadedModuleDetail = $"pol.exe (PID {proc.Id}) running; module list not observable (permissions/WOW64)";
+                        return;
+                    }
+                }
+            }
+            finally
+            {
+                foreach (var proc in polProcesses)
+                {
+                    proc.Dispose();
+                }
+            }
+        }
+        catch
+        {
+            diag.NativeLoadedModuleStatus = "UNKNOWN";
+            diag.NativeLoadedModuleDetail = "Unable to query running processes";
+        }
     }
 
     public static string ResolveXiloaderPath(string ashitaDir)

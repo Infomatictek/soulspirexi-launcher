@@ -8,9 +8,9 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>SoulspireLauncher</AssemblyName>
     <RootNamespace>SoulspireLauncher</RootNamespace>
-    <Version>2.1.2</Version>
-    <FileVersion>2.1.2.0</FileVersion>
-    <AssemblyVersion>2.1.2.0</AssemblyVersion>
+    <Version>2.1.3</Version>
+    <FileVersion>2.1.3.0</FileVersion>
+    <AssemblyVersion>2.1.3.0</AssemblyVersion>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <AssemblyTitle>SoulspireXI Launcher</AssemblyTitle>
     <Product>SoulspireXI Launcher</Product>

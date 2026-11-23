@@ -74,6 +74,24 @@ public sealed class ChannelToLabelConverter : IValueConverter
         throw new NotSupportedException();
 }
 
+public sealed class DiagStatusToBrushConverter : IValueConverter
+{
+    private static readonly Brush PassBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#39CFE5"));
+    private static readonly Brush FailBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F87171"));
+    private static readonly Brush UnknownBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E8BD70"));
+
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        (value as string)?.Trim().ToUpperInvariant() switch
+        {
+            "PASS" => PassBrush,
+            "FAIL" => FailBrush,
+            _ => UnknownBrush
+        };
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
 public sealed class BoolToReadyTextConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>

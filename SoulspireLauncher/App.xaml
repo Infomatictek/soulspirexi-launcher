@@ -12,6 +12,7 @@
         <conv:ChannelToBrushConverter x:Key="ChannelToBrush" />
         <conv:ChannelToBadgeBackgroundConverter x:Key="ChannelToBadgeBg" />
         <conv:ChannelToLabelConverter x:Key="ChannelToLabel" />
+        <conv:DiagStatusToBrushConverter x:Key="DiagStatusToBrush" />
 
         <!-- SoulspireXI Official Design Palette -->
         <SolidColorBrush x:Key="AbyssBrush" Color="#0B1019" />
