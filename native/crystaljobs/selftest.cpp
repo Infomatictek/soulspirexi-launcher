@@ -657,15 +657,15 @@ static void equipment_persona_checks() {
     assert(persona_text_calls == 4 && std::strcmp(last_persona_text, "Kagemusha") == 0);
     ev[3] = 3; state.update(ev, 8, GetTickCount());
     assert(persona_abi(reinterpret_cast<void*>(&persona_job_hook), 0x80808080u));
-    assert(persona_text_calls == 5 && std::strcmp(last_persona_text, "Nightblade") == 0);
+    assert(persona_text_calls == 5 && std::strcmp(last_persona_text, "Fuin") == 0);
 
-    // Other jobs (e.g., BLM Astromancer, RDM Crimson Duelist).
+    // Other jobs (e.g., BLM Goetist, RDM Thornveil).
     mock_main_job = 4; ev[2] = 4; ev[3] = 1; state.update(ev, 8, GetTickCount());
     assert(persona_abi(reinterpret_cast<void*>(&persona_job_hook), 0x80808080u));
-    assert(persona_text_calls == 6 && std::strcmp(last_persona_text, "Astromancer") == 0);
+    assert(persona_text_calls == 6 && std::strcmp(last_persona_text, "Goetist") == 0);
     mock_main_job = 5; ev[2] = 5; ev[3] = 1; state.update(ev, 8, GetTickCount());
     assert(persona_abi(reinterpret_cast<void*>(&persona_job_hook), 0x80808080u));
-    assert(persona_text_calls == 7 && std::strcmp(last_persona_text, "Crimson Duelist") == 0);
+    assert(persona_text_calls == 7 && std::strcmp(last_persona_text, "Thornveil") == 0);
 
     // Fallback to stock sprite on job mismatch, no Soul, explicit revoke, or disabled session.
     mock_main_job = 13; // state.job is still 5
