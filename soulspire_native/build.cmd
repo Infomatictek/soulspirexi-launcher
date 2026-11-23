@@ -93,7 +93,7 @@ if not "%VCVARS%"=="" (
 )
 
 selftest.exe
-if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
+if !ERRORLEVEL! neq 0 exit /b !ERRORLEVEL!
 
 if not exist "%SN_DIR%..\plugins\ashita4" mkdir "%SN_DIR%..\plugins\ashita4"
 copy /y "%SN_DIR%soulspire_native.dll" "%SN_DIR%..\plugins\ashita4\soulspire_native.dll" >nul

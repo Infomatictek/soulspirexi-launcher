@@ -1067,6 +1067,11 @@ static void dat_virtualization_poc_checks() {
     action_catalog.clear();
     dat_virt_mgr.reset();
     dat_virt_mgr.configure(true);
+    state = {};
+    soul_override = {};
+    uint8_t mock_job = 3; // WHM
+    main_job_slot = &mock_job;
+    selftest_alive = true;
 
     // 1. Load the actual registry-compiled plugins/ashita4/data/dat-text-overrides.json
     std::unique_ptr<char[]> file_buf(new char[kMaxDatTextFileBytes + 1]);
@@ -1144,6 +1149,8 @@ static void dat_virtualization_poc_checks() {
 
     assert(SoulspireNativeClearActiveSoul() == 0);
     dat_virt_mgr.reset();
+    main_job_slot = nullptr;
+    selftest_alive = false;
 }
 
 int main() {
