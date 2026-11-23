@@ -133,21 +133,23 @@ for _, ts in ipairs(testSouls) do
     assert_true(drawCount > 25, ts.key .. ' rendered cleanly')
 end
 
--- 4. Inactive / unbuilt provider safe fallback
--- Pick any roster entry without bespoke layout (or pass empty kv/def)
-local fallbackKey = nil
-for _, e in ipairs(roster.list or {}) do
-    fallbackKey = e.key
-    break
+-- 4. Full 66-Soul canonical roster compatibility pass (all 3 display modes)
+local demoMod = require('soulhud_demo')
+assert_eq(#(roster.list or {}), 66, 'canonical 66-Soul roster count')
+for _, e in ipairs(roster.list) do
+    local def = registry.getSoul(e.key)
+    local rt  = def and registry.newRuntimeState(def) or nil
+    local kv  = demoMod.kv(e.key, 100) or {}
+    if def and rt then registry.applyServerData(def, rt, kv, 100) end
+    for _, mode in ipairs({ 'minimal', 'standard', 'expanded' }) do
+        cfg.layout = mode
+        gauge.render(mockImgui, {
+            soulKey = e.key, kv = kv, def = def, rt = rt,
+            buffs = {}, now = 100, syncAt = 100, cfg = cfg, level = 75,
+        })
+    end
 end
-if fallbackKey then
-    drawCount = 0
-    gauge.render(mockImgui, {
-        soulKey = fallbackKey, kv = {}, def = nil, rt = nil,
-        buffs = {}, now = 100, syncAt = 100, cfg = cfg, level = 75,
-    })
-    assert_true(drawCount > 10, 'inactive provider fallback rendered safely')
-end
+cfg.layout = 'expanded'
 
 -- 5. Viewport clamping when positioned off-screen
 cfg.x, cfg.y = 5000, 5000

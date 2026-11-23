@@ -655,10 +655,31 @@ function M.render(imgui, ctx)
                     valStr  = rem > 0 and fmtTime(rem) or 'IDLE'
                     rowFill = C.cyan
                     tagStr  = res.shortLabel or res.label
+                elseif res.type == 'toggle' or res.type == 'status' or res.type == 'combo' then
+                    local active = st.active == true or (tonumber(st.current) or 0) > 0
+                    curVal  = active and 1 or 0
+                    maxVal  = 1
+                    if type(res.format) == 'function' then
+                        local okF, formatted = pcall(res.format, st, res)
+                        valStr = (okF and formatted and formatted ~= '') and tostring(formatted) or (active and 'ACTIVE' or 'OFF')
+                    elseif st.text and st.text ~= '' then
+                        valStr = st.text
+                    else
+                        valStr = active and 'ACTIVE' or 'OFF'
+                    end
+                    rowFill = active and C.gold or C.border_strong
+                    tagStr  = res.shortLabel or res.label
                 else
                     curVal  = tonumber(st.current) or 0
                     maxVal  = math.max(1, tonumber(st.max) or tonumber(res.max) or 1)
-                    valStr  = (st.text and st.text ~= '') and st.text or ('%d/%d'):format(math.floor(curVal + 0.5), math.floor(maxVal + 0.5))
+                    if type(res.format) == 'function' then
+                        local okF, formatted = pcall(res.format, st, res)
+                        valStr = (okF and formatted and formatted ~= '') and tostring(formatted) or ('%d/%d'):format(math.floor(curVal + 0.5), math.floor(maxVal + 0.5))
+                    elseif st.text and st.text ~= '' then
+                        valStr = st.text
+                    else
+                        valStr = ('%d/%d'):format(math.floor(curVal + 0.5), math.floor(maxVal + 0.5))
+                    end
                     rowFill = pal.body
                     tagStr  = res.shortLabel or res.label
                 end

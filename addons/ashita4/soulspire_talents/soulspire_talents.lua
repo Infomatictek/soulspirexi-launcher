@@ -222,7 +222,13 @@ local function setStatus(msg)
 end
 
 local function isPendingActive()
-    return state.pendingOp ~= nil and (os.clock() - (state.pendingOp.sentAt or 0)) < 5.0
+    if state.pendingOp == nil then return false end
+    if (os.clock() - (state.pendingOp.sentAt or 0)) < 5.0 then
+        return true
+    end
+    state.pendingOp = nil
+    setStatus('Server request timed out — click SYNC to refresh.')
+    return false
 end
 
 local function requestWS(wsId)
@@ -313,9 +319,19 @@ local function handleProtoLine(payload)
         state.specName    = resolveSpecDisplayName(parts[9])
         if state.pendingOp and state.pendingOp.kind == 'reset_all' then
             state.pendingOp = nil
+            if state.selectedWsId ~= nil then
+                requestWS(state.selectedWsId)
+            end
         end
-        if (prevJob ~= state.jobKey or prevSpec ~= state.specName) and state.selectedWsId ~= nil and state.open[1] then
-            requestWS(state.selectedWsId)
+        if prevJob ~= state.jobKey or prevSpec ~= state.specName then
+            soulforgeUI.resetTransientState(state)
+            state.inspectedNodeKey = nil
+            state.pendingOp        = nil
+            state.rejectedNodeKey  = nil
+            state.rejectedMsg      = nil
+            if state.open[1] then
+                requestFullSync()
+            end
         end
     elseif kind == 'SPENT_BEGIN' then
         state.tempSpent    = {}
@@ -462,6 +478,7 @@ local function handleProtoLine(payload)
         state.rejectedMsg = msg
         state.rejectedAt  = os.clock()
         state.pendingOp   = nil
+        if state.ui then state.ui.confirmAction = nil end
         setStatus(msg)
     end
 end
@@ -599,13 +616,16 @@ ashita.events.register('command', 'ox_talents_cmd', function(e)
         state.ui.canvasZoom = 1.0
         state.ui.panX, state.ui.panY = 0, 0
         state.ui.drawerOpen = nil
+        state.ui.forceCenter = true
         savePrefs()
         setStatus('Soulforge view reset to defaults.')
         return
     end
 
     state.open[1] = not state.open[1]
-    if state.open[1] then
+    if not state.open[1] then
+        soulforgeUI.resetTransientState(state)
+    else
         if not state.synced then
             requestFullSync()
         else

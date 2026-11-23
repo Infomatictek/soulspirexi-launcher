@@ -7549,8 +7549,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_soulhud/soulhud_gauge.lua",
       "targetPath": "soulspire_soulhud/soulhud_gauge.lua",
-      "sha256": "100aa36cfcd7ee9cf169c745284058345363cb5811977357aed050ad3c4a3145",
-      "size": 33564
+      "sha256": "6a51e8db0a4d24e081601f1c17a6dae8eb5478eb8d78833fc6f5211ca9601113",
+      "size": 34837
     },
     {
       "category": "addon",
@@ -7661,8 +7661,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_soulhud/tests/soulhud_gauge_test.lua",
       "targetPath": "soulspire_soulhud/tests/soulhud_gauge_test.lua",
-      "sha256": "8407909a2600e95d2bbdf0ce0b4a53624963b8689f82435a8612876aca268fcd",
-      "size": 7039
+      "sha256": "beda49f2c0642f2b64bd4089f4288d82eff39b431c0048e3e60d70c902d81b74",
+      "size": 7274
     },
     {
       "category": "addon",
@@ -7969,22 +7969,22 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_talents/soulforge_ui.lua",
       "targetPath": "soulspire_talents/soulforge_ui.lua",
-      "sha256": "50e4f2efef9aebb8226e8fdb2352f804e34c8567dab1cac6f75254051962b835",
-      "size": 58835
+      "sha256": "280aeed9d9c60cad01d15bb9f99860f152af5a6178b4ebd932a0935b53913071",
+      "size": 62165
     },
     {
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_talents/soulspire_talents.lua",
       "targetPath": "soulspire_talents/soulspire_talents.lua",
-      "sha256": "6fddf3b78e140bf296847658d0d56ca71ee4027326da3621bc2d46ccc9cfdffc",
-      "size": 25214
+      "sha256": "ecf202c563534857929af5361a6ee867d93ecd5cd48825992761484e39c25d47",
+      "size": 25849
     },
     {
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_talents/tests/soulforge_test.lua",
       "targetPath": "soulspire_talents/tests/soulforge_test.lua",
-      "sha256": "1c0df4cea1054a210306b5c42b82c6f0f7fa04003085d412b30caf0be99fb874",
-      "size": 10591
+      "sha256": "58d0aa540911f8b20a4de3def2f64f2c92031efb16d6d482c72e1ca5514b8a9a",
+      "size": 11799
     },
     {
       "category": "addon",

@@ -79,24 +79,75 @@ function UI.isSkillchainNode(node)
     return k:match('^evsc_t%d+$') ~= nil or k:match('^sc_t%d+$') ~= nil
 end
 
--- Extract the 4 Skillchain Forging / Mastery slots from real server nodes.
-function UI.getMasterySlots(detail)
+-- Extract the 4 Skillchain Forging slots (T1/T2 Lv1, T3 Lv2, T4 Lv3) from real server nodes,
+-- accurately reflecting server unlock rules (Evo: wsSpent >= tier; Legacy: sc_tX.rank > 0).
+local SC_TIER_LEVEL = { 'Lv1', 'Lv1', 'Lv2', 'Lv3' }
+
+function UI.getSkillchainSlots(detail)
     local slots = {}
     if not detail or not detail.byKey then return slots end
-    local prefix = UI.isEvolutionTree(detail) and 'evsc_t' or 'sc_t'
+    local isEvo = UI.isEvolutionTree(detail)
+    local wsSpent = tonumber(detail.spent) or 0
+    local prefix = isEvo and 'evsc_t' or 'sc_t'
     for tier = 1, 4 do
         local sc = detail.byKey[prefix .. tier] or detail.byKey['evsc_t' .. tier] or detail.byKey['sc_t' .. tier]
         if sc then
+            local unlocked = isEvo and (wsSpent >= tier) or ((tonumber(sc.rank) or 0) > 0)
+            local scId = tonumber(sc.scId) or 0
             slots[#slots + 1] = {
-                tier   = tier,
-                node   = sc,
-                scId   = tonumber(sc.scId) or 0,
-                scName = (tonumber(sc.scId) or 0) > 0 and (sc.scName ~= '' and sc.scName or 'ACTIVE') or 'OFF',
-                active = (tonumber(sc.scId) or 0) > 0,
+                tier     = tier,
+                scLevel  = SC_TIER_LEVEL[tier] or 'Lv1',
+                node     = sc,
+                scId     = scId,
+                scName   = scId > 0 and (sc.scName ~= '' and sc.scName or 'ACTIVE') or 'OFF',
+                unlocked = unlocked,
+                active   = unlocked and scId > 0,
+                lockHint = isEvo and ('CH.' .. tier) or 'RANK 0',
             }
         end
     end
     return slots
+end
+
+-- Backward-compatible alias
+UI.getMasterySlots = UI.getSkillchainSlots
+
+-- Return the up-to-4 invested Weapon Skills for the current Soul/spec (server cap: 4 WS per spec).
+UI.MAX_SPEC_WS_SLOTS = 4
+
+function UI.getInvestedWeaponskills(state)
+    local out = {}
+    if not state or type(state.spentByWs) ~= 'table' then return out end
+    for wsId, pts in pairs(state.spentByWs) do
+        local nPts = tonumber(pts) or 0
+        if nPts > 0 then
+            local cat = state.catalogById and state.catalogById[wsId]
+            local isEvoWs = (wsId == 1 or wsId == 47)
+            local cap = isEvoWs and 5 or 56
+            out[#out + 1] = {
+                id       = wsId,
+                name     = (cat and cat.name) or ('WS #' .. tostring(wsId)),
+                spent    = nPts,
+                cap      = cap,
+                mastered = nPts >= cap,
+            }
+        end
+    end
+    table.sort(out, function(a, b)
+        if a.spent ~= b.spent then return a.spent > b.spent end
+        return a.id < b.id
+    end)
+    return out
+end
+
+function UI.resetTransientState(state)
+    if not state then return end
+    state.confirmResetAll = false
+    if state.ui then
+        state.ui.confirmAction  = nil
+        state.ui.confirmResetWs = false
+        state.ui.drawerOpen     = nil
+    end
 end
 
 -- Evaluate node prerequisites & human-readable unavailability reason.
@@ -197,18 +248,13 @@ local function drawAssetOrFallback(dl, assetName, x, y, w, h, tint)
 end
 
 local function ensureUiState(state)
-    state.ui = state.ui or {
-        scale           = 1.0,
-        canvasZoom      = 1.0,
-        panX            = 0,
-        panY            = 0,
-        drawerOpen      = nil,   -- nil | 'arsenal' | 'inspector' (Focused mode)
-        confirmAction   = nil,   -- { kind = 'invest'|'refund', wsId, nodeKey, nodeIdx, name, fromRank, toRank, cost }
-        confirmResetWs  = false,
-        confirmResetWsAt = 0,
-        lastViewportW   = 0,
-        lastViewportH   = 0,
-    }
+    state.ui = state.ui or {}
+    if type(state.ui.scale) ~= 'number' then state.ui.scale = 1.0 end
+    if type(state.ui.canvasZoom) ~= 'number' then state.ui.canvasZoom = 1.0 end
+    if type(state.ui.panX) ~= 'number' then state.ui.panX = 0 end
+    if type(state.ui.panY) ~= 'number' then state.ui.panY = 0 end
+    if type(state.ui.lastViewportW) ~= 'number' then state.ui.lastViewportW = 0 end
+    if type(state.ui.lastViewportH) ~= 'number' then state.ui.lastViewportH = 0 end
     return state.ui
 end
 
@@ -263,23 +309,38 @@ local function drawHeader(state, action, L, x, y, w, h)
             string.format('%s  Lv.%d', state.jobKey or '---', state.jobLevel or 1),
             F.u32.text_primary, 0.88 * s, 'l')
 
-        -- Points bar & counters
+        -- Points & 4-WS Spec Mastery Slot counter
         local avail  = tonumber(state.avail) or 0
         local spent  = tonumber(state.spent) or 0
         local earned = math.max(1, tonumber(state.earned) or (avail + spent))
-        local ptsText = string.format('%d AVAILABLE   |   %d / %d SPENT', avail, spent, earned)
+        local investedList = UI.getInvestedWeaponskills(state)
+        local ptsText = string.format('%d AVAIL  |  %d/%d SPENT  |  WS SLOTS: %d/%d',
+            avail, spent, earned, #investedList, UI.MAX_SPEC_WS_SLOTS)
         F.drawShadowText(imgui, dl, idX, y + 40 * s, ptsText,
-            avail > 0 and F.u32.aether_cyan or F.u32.text_secondary, 0.84 * s, 'l')
+            avail > 0 and F.u32.aether_cyan or F.u32.text_secondary, 0.82 * s, 'l')
 
         if L.mode == 'expanded' then
-            local barX = idX + 240 * s
-            local barW = math.max(100 * s, math.min(200 * s, (x + w - 310 * s) - barX))
-            if barW >= 90 * s then
-                F.drawSegmentedGauge(imgui, dl, barX, y + 41 * s, barW, math.floor(14 * s), spent, earned, {
-                    fill      = F.rgba.soul_gold,
-                    border    = F.u32.soul_gold_dim,
-                    fontScale = 0.70 * s,
-                })
+            local slotX = idX + 318 * s
+            local maxSlotArea = (x + w - 265 * s) - slotX
+            if maxSlotArea >= 180 * s then
+                local sg = math.floor(4 * s)
+                local sw = math.floor((math.min(340 * s, maxSlotArea) - sg * 3) / 4)
+                local sh = math.floor(20 * s)
+                local sy = y + 38 * s
+                for i = 1, UI.MAX_SPEC_WS_SLOTS do
+                    local sx = slotX + (i - 1) * (sw + sg)
+                    local item = investedList[i]
+                    local isCur = item and (state.selectedWsId == item.id)
+                    local lbl = item and F.fitText(imgui, item.name, sw - 8 * s, 0.66 * s) or ('OPEN ' .. i)
+                    local variant = isCur and 'gold' or (item and 'violet' or 'neutral')
+                    if F.drawActionButton(imgui, dl, '##sf_spec_slot_' .. i, sx, sy, sw, sh, lbl, variant, {
+                        fontScale = 0.66 * s, disabled = (item == nil), rounding = 3,
+                    }) and item then
+                        state.inspectedNodeKey = nil
+                        ui.confirmAction = nil
+                        action.requestWS(item.id)
+                    end
+                end
             end
         end
     else
@@ -304,6 +365,7 @@ local function drawHeader(state, action, L, x, y, w, h)
     local closeW = math.floor(58 * s)
     rx = rx - closeW
     if F.drawActionButton(imgui, dl, '##sf_close', rx, btnY, closeW, btnH, 'CLOSE', 'neutral', { fontScale = 0.80 * s }) then
+        UI.resetTransientState(state)
         state.open[1] = false
     end
 
@@ -409,7 +471,9 @@ local function drawArsenal(state, action, L, x, y, w, h)
             local selected = (state.selectedWsId == ws.id)
             local pts      = tonumber(state.spentByWs[ws.id]) or 0
             local unlocked = state.unlockedByWs[ws.id] == true
-            local mastered = unlocked and pts >= 5
+            local isEvoWs  = (ws.id == 1 or ws.id == 47)
+            local capPts   = isEvoWs and 5 or 56
+            local mastered = unlocked and pts >= capPts
 
             imgui.InvisibleButton('##sf_ws_' .. ws.id, { rowW, rowH })
             local hovered = imgui.IsItemHovered()
@@ -601,8 +665,8 @@ local function drawSoulforgeCanvas(state, action, L, x, y, w, h)
             fontScale = 0.72 * s,
         })
 
-    -- B. Four Mastery Slots (Skillchain Forging Bar)
-    local slots = UI.getMasterySlots(d)
+    -- B. Four Skillchain Forging Tiers (T1/T2 Lv1, T3 Lv2, T4 Lv3 — distinct from the 4 Spec WS Slots)
+    local slots = UI.getSkillchainSlots(d)
     local curY = hy + heroH + math.floor(8 * s)
     if #slots > 0 then
         local slotBarH = math.floor(46 * s)
@@ -616,11 +680,11 @@ local function drawSoulforgeCanvas(state, action, L, x, y, w, h)
             shadow   = false,
         })
 
-        local labelW = (L.mode == 'focused') and math.floor(64 * s) or math.floor(114 * s)
+        local labelW = (L.mode == 'focused') and math.floor(66 * s) or math.floor(124 * s)
         F.drawShadowText(imgui, dl, hx + 10 * s, curY + 8 * s,
-            L.mode == 'focused' and 'MASTERY' or 'MASTERY SLOTS', F.u32.crystal_violet_bright, 0.76 * s, 'l')
+            L.mode == 'focused' and 'SC FORGE' or 'SKILLCHAIN FORGING', F.u32.crystal_violet_bright, 0.74 * s, 'l')
         F.drawShadowText(imgui, dl, hx + 10 * s, curY + 24 * s,
-            L.mode == 'focused' and 'SC FORGE' or 'Skillchain Forging', F.u32.text_muted, 0.70 * s, 'l')
+            L.mode == 'focused' and 'Lv1-Lv3' or 'Optional (up to 3)', F.u32.text_muted, 0.68 * s, 'l')
 
         local slotsX = hx + labelW + 6 * s
         local slotsAvailW = math.max(160, hw - labelW - 14 * s)
@@ -631,19 +695,21 @@ local function drawSoulforgeCanvas(state, action, L, x, y, w, h)
 
         for idx, sl in ipairs(slots) do
             local sx = slotsX + (idx - 1) * (slotW + slotGap)
-            local border = sl.active and F.u32.soul_gold or F.u32.border_strong
+            local border = sl.active and F.u32.soul_gold
+                or (sl.unlocked and F.u32.aether_cyan_dim or F.u32.border_subtle)
             local fill   = sl.active and F.abgr(F.rgba.soul_gold_wash, 0.90) or F.u32.abyss_solid
             dl:AddRectFilled({ sx, slotY }, { sx + slotW, slotY + slotH }, fill, 4)
             dl:AddRect({ sx, slotY }, { sx + slotW, slotY + slotH }, border, 4, 0, sl.active and 1.3 or 1.0)
 
-            -- Socket roman numeral + active SC property
+            local headerStr = string.format('T%d %s%s', sl.tier, sl.scLevel, sl.unlocked and '' or (' [' .. sl.lockHint .. ']'))
             F.drawShadowText(imgui, dl, sx + 6 * s, slotY + 3 * s,
-                'SLOT ' .. (ROMAN[sl.tier] or tostring(sl.tier)),
-                sl.active and F.u32.soul_gold or F.u32.text_muted, 0.68 * s, 'l')
+                F.fitText(imgui, headerStr, math.max(24, slotW - 44 * s), 0.66 * s),
+                sl.active and F.u32.soul_gold or (sl.unlocked and F.u32.aether_cyan or F.u32.text_muted), 0.66 * s, 'l')
             local propMaxW = math.max(24, slotW - 44 * s)
+            local propLabel = sl.unlocked and sl.scName or (sl.scId > 0 and (sl.scName .. ' (Locked)') or 'LOCKED')
             F.drawShadowText(imgui, dl, sx + 6 * s, slotY + 18 * s,
-                F.fitText(imgui, sl.scName, propMaxW, 0.78 * s),
-                sl.active and F.u32.text_primary or F.u32.text_muted, 0.78 * s, 'l')
+                F.fitText(imgui, propLabel, propMaxW, 0.76 * s),
+                sl.active and F.u32.text_primary or F.u32.text_muted, 0.76 * s, 'l')
 
             -- Cycle buttons (< / >) using real OP_CYCLE_SC = 6
             local cBtnW = math.floor(16 * s)
@@ -1212,11 +1278,12 @@ function UI.draw(state, action)
     local vw, vh = F.getViewportSize(imgui)
     local L = UI.computeLayout(state, vw, vh)
 
-    -- Recalculate & recenter cleanly when FFXI viewport changes
-    local resized = (ui.lastViewportW ~= vw or ui.lastViewportH ~= vh)
+    -- Recalculate & recenter cleanly when FFXI viewport changes or resetview requested
+    local resized = (ui.lastViewportW ~= vw or ui.lastViewportH ~= vh) or (ui.forceCenter == true)
     if resized then
         ui.lastViewportW = vw
         ui.lastViewportH = vh
+        ui.forceCenter   = false
         if not L.drawerMode then ui.drawerOpen = nil end
     end
 

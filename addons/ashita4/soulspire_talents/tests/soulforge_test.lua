@@ -125,14 +125,33 @@ end
 local st = makeSampleState()
 local d  = st.wsDetail
 
--- 1. Verify Evolution detection & 4 Mastery Slots extraction
+-- 1. Verify Evolution detection, 4 Skillchain Forging slots (with unlock rules), and 4 Spec WS Slots
 assert_true(UI.isEvolutionTree(d), 'Combo detected as Evolution tree')
 assert_true(UI.isWsUnlocked(st), 'Combo detected as unlocked')
-local slots = UI.getMasterySlots(d)
-assert_eq(#slots, 4, '4 mastery slots extracted')
+local slots = UI.getSkillchainSlots(d)
+assert_eq(#slots, 4, '4 skillchain forging slots extracted')
 assert_eq(slots[1].scName, 'Impaction', 'slot 1 SC name')
+assert_eq(slots[1].unlocked, true, 'slot 1 unlocked at 2 spent')
+assert_eq(slots[1].active, true, 'slot 1 active when unlocked and scId>0')
 assert_eq(slots[2].scName, 'OFF', 'slot 2 OFF')
+assert_eq(slots[2].unlocked, true, 'slot 2 unlocked at 2 spent')
 assert_eq(slots[3].scName, 'Fusion', 'slot 3 SC name')
+assert_eq(slots[3].unlocked, false, 'slot 3 locked at 2 spent (requires 3 stages)')
+assert_eq(slots[3].active, false, 'slot 3 inactive while locked')
+assert_eq(slots[4].unlocked, false, 'slot 4 locked at 2 spent (requires 4 stages)')
+
+local invested = UI.getInvestedWeaponskills(st)
+assert_eq(#invested, 1, '1 invested WS in spec mastery slots')
+assert_eq(invested[1].id, 1, 'invested WS id matches Combo')
+assert_eq(invested[1].mastered, false, 'Combo at 2/5 not yet mastered')
+
+st.ui = { confirmAction = { kind = 'invest' }, confirmResetWs = true, drawerOpen = 'arsenal' }
+st.confirmResetAll = true
+UI.resetTransientState(st)
+assert_eq(st.ui.confirmAction, nil, 'resetTransientState clears confirmAction')
+assert_eq(st.ui.confirmResetWs, false, 'resetTransientState clears confirmResetWs')
+assert_eq(st.confirmResetAll, false, 'resetTransientState clears confirmResetAll')
+assert_eq(st.ui.drawerOpen, nil, 'resetTransientState clears drawerOpen')
 
 -- 2. Verify all node evaluation states
 local evMax = UI.evaluateNode(st, d, d.byKey.e_co_open, false, 10)
