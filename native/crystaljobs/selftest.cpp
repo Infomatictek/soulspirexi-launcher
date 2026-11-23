@@ -5,10 +5,27 @@
 static uint8_t row_a[72]{}, row_b[72]{};
 static uint32_t sprite_calls, simple_sprite_calls, text_calls, persona_text_calls, last_persona_color;
 static const char* last_text;
+static char last_text_buf[32]{};
 static const char* last_persona_text;
 static int __cdecl fake_text(int x, int y, const char* text, uint32_t color, float sx, float sy, int center) {
+#if CRYSTALJOBS_SEARCH_RENDER_MODE == 2
+    assert(text != nullptr && color == 0x80808080u && center == 0);
+    if (std::strlen(text) == 1) {
+        assert(x >= 100 && x <= 116 && y == 51 && sx == 0.72f && sy == 0.78f);
+    } else {
+        assert(x == 100 && y == 50 && sx == 0.75f && sy == 0.75f);
+    }
+#else
     assert(x == 100 && y == 50 && color == 0x80808080 && sx == 0.75f && sy == 0.75f && center == 0);
-    ++text_calls; last_text = text; return x;
+#endif
+    ++text_calls;
+    if (text != nullptr) {
+        std::snprintf(last_text_buf, sizeof(last_text_buf), "%s", text);
+        last_text = last_text_buf;
+    } else {
+        last_text = nullptr;
+    }
+    return x;
 }
 static int __cdecl fake_persona_text(int x, int y, const char* text, uint32_t color, float sx, float sy, int center) {
     assert(x == 142 && y == 69 && sx == 1.0f && sy == 1.0f && center == 0);
@@ -481,7 +498,7 @@ static void multi_job_checks() {
         for (uint8_t b = 1; b <= 3; ++b) {
             const char* abr = label_for(j, b, false);
             assert(abr != nullptr && std::strlen(abr) == 3);
-            SpriteArgs sa{100, 200, 1.0f, 1.0f, 0xFFFFFFFFu, 0, 0, 1};
+            SpriteArgs sa{100, 50, 1.0f, 1.0f, 0x80808080u, 0, 0, 1};
             sprite_calls = 0; text_calls = 0;
             draw_aligned_native_text_label(abr, &sa);
             assert(sprite_calls == 0 && text_calls == 3);
@@ -1314,7 +1331,11 @@ int main() {
     selftest_alive = true;
     assert(sprite_abi(reinterpret_cast<void*>(&normal_sprite_hook), row_a));
     assert(sprite_abi(reinterpret_cast<void*>(&master_sprite_hook), row_a));
+#if CRYSTALJOBS_SEARCH_RENDER_MODE == 2
+    assert(text_calls == 6 && sprite_calls == 0 && std::strcmp(last_text, "R") == 0);
+#else
     assert(text_calls == 2 && sprite_calls == 0 && std::strcmp(last_text, "CDR") == 0);
+#endif
     assert(std::strcmp(full_abi(row_a, 1), "Commander") == 0);
     assert(std::strcmp(full_abi(row_a, 2), "Monk") == 0);
     selftest_alive = false;
