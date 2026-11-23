@@ -262,8 +262,12 @@ local function init_modules()
     local sf_state_mod = load_sibling_lua('soulspire_talents', 'soulforge_state.lua')
     local ws_reg       = load_sibling_lua('soulspire_talents', 'ws_registry_generated.lua')
     sf_art             = load_sibling_lua('soulspire_talents', 'art.lua')
-    if sf_art and sf_art.setRoot then
-        sf_art.setRoot(sibling_root() .. '/soulspire_talents')
+    if sf_art then
+        if sf_art.setRoot then
+            sf_art.setRoot(sibling_root() .. '/soulspire_talents')
+        end
+        -- Ensure soulforge_ui.lua's require('art') reuses this rooted instance
+        package.loaded['art'] = sf_art
     end
     sf_ui = load_sibling_lua('soulspire_talents', 'soulforge_ui.lua')
 
@@ -394,8 +398,8 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
     elseif sub == 'status' then
         local native = current_native_menu()
         local active = focus:active_module()
-        local diag = menu and menu:diagnostics() or { mode = 'standalone', bridge_available = false, native_hook_supported = false }
-        log(('version=%s mode=%s native_hook=%s bridge=%s modules=%d(%d live) hub_open=%s dock_focused=%s active=%s native_form=%s'):format(
+        local diag = menu and menu:diagnostics() or { mode = 'standalone', bridge_available = false, native_hook_supported = false, native_hook_reason = 'menu_bridge_nil' }
+        local line1 = ('version=%s mode=%s native_hook=%s bridge=%s modules=%d(%d live) hub_open=%s dock_focused=%s active=%s native_form=%s'):format(
             addon.version,
             tostring(diag.mode),
             tostring(diag.native_hook_supported),
@@ -406,7 +410,25 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
             tostring(focus.dock_focused),
             tostring(active and active.id or 'none'),
             tostring(native and native.name or 'none')
-        ))
+        )
+        local line2 = ('native_hook_reason=%s last_action=%s last_device=%s ui_scale=%.2f sf_synced=%s'):format(
+            tostring(diag.native_hook_reason),
+            tostring(focus.last_action),
+            tostring(input.last_device),
+            tonumber(ui and ui.ui_scale or 1.0),
+            tostring(sf_state ~= nil and sf_state.synced == true)
+        )
+        log(line1)
+        log(line2)
+        if type(addon.path) == 'string' and addon.path ~= '' then
+            pcall(function()
+                local f = io.open(addon.path:gsub('[/\\]+$', '') .. '/soulspire_core-status.log', 'w')
+                if f then
+                    f:write('[soulspire_core] ' .. line1 .. '\n[soulspire_core] ' .. line2 .. '\n')
+                    f:close()
+                end
+            end)
+        end
     elseif sub == 'debug' then
         if not menu or not menu:is_available() then
             log('MenuBridge unavailable.')

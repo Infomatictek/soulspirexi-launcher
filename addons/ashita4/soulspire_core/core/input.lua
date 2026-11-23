@@ -411,6 +411,7 @@ end
 -- Filter raw Ashita v4 XINPUT_STATE table/cdata:
 -- Reads Left Stick for Core navigation AND zeroes modified state when Core Hub owns focus
 -- so FFXI character movement / camera / macro triggers never fire behind Core.
+-- All cdata field accesses are pcall-guarded so differing Ashita v4 FFI layouts never error.
 function Input:filter_xinput_state(state_obj, modified_obj, dispatch_fn, hub_open, now)
     if not hub_open then
         self.stick_dir = nil
@@ -418,30 +419,43 @@ function Input:filter_xinput_state(state_obj, modified_obj, dispatch_fn, hub_ope
         return false
     end
 
-    if state_obj then
-        local gp = state_obj.Gamepad or state_obj
-        if gp then
-            local lx = tonumber(gp.sThumbLX) or 0
-            local ly = tonumber(gp.sThumbLY) or 0
+    if state_obj ~= nil then
+        local ok, lx, ly = pcall(function()
+            local gp = nil
+            local okG, g1 = pcall(function() return state_obj.Gamepad end)
+            if okG and g1 ~= nil then
+                gp = g1
+            else
+                local okG2, g2 = pcall(function() return state_obj.gamepad end)
+                gp = (okG2 and g2 ~= nil) and g2 or state_obj
+            end
+            return tonumber(gp.sThumbLX) or 0, tonumber(gp.sThumbLY) or 0
+        end)
+        if ok then
             self.stick_lx = math.max(-1, math.min(1, lx / 32767))
             self.stick_ly = math.max(-1, math.min(1, ly / 32767))
             self:on_left_stick(self.stick_lx, self.stick_ly, dispatch_fn, true, now)
         end
     end
 
-    if modified_obj then
-        local mgp = modified_obj.Gamepad or modified_obj
-        if mgp then
-            pcall(function()
-                mgp.wButtons      = 0
-                mgp.bLeftTrigger  = 0
-                mgp.bRightTrigger = 0
-                mgp.sThumbLX      = 0
-                mgp.sThumbLY      = 0
-                mgp.sThumbRX      = 0
-                mgp.sThumbRY      = 0
-            end)
-        end
+    if modified_obj ~= nil then
+        pcall(function()
+            local mgp = nil
+            local okG, g1 = pcall(function() return modified_obj.Gamepad end)
+            if okG and g1 ~= nil then
+                mgp = g1
+            else
+                local okG2, g2 = pcall(function() return modified_obj.gamepad end)
+                mgp = (okG2 and g2 ~= nil) and g2 or modified_obj
+            end
+            mgp.wButtons      = 0
+            mgp.bLeftTrigger  = 0
+            mgp.bRightTrigger = 0
+            mgp.sThumbLX      = 0
+            mgp.sThumbLY      = 0
+            mgp.sThumbRX      = 0
+            mgp.sThumbRY      = 0
+        end)
     end
     return true
 end
@@ -454,14 +468,14 @@ function Input:filter_dinput_state(state_obj, modified_obj, dispatch_fn, hub_ope
     end
 
     local is_unsigned = false
-    if state_obj then
-        local lx = tonumber(state_obj.lX)
-        local ly = tonumber(state_obj.lY)
-        if lx and ly then
+    if state_obj ~= nil then
+        local ok, lx, ly = pcall(function()
+            return tonumber(state_obj.lX), tonumber(state_obj.lY)
+        end)
+        if ok and lx and ly then
             if lx > 2000 or ly > 2000 then
                 is_unsigned = true
                 self.stick_lx = math.max(-1, math.min(1, (lx - 32767.5) / 32767.5))
-                -- DirectInput Y is inverted (0 = up, 65535 = down)
                 self.stick_ly = math.max(-1, math.min(1, -(ly - 32767.5) / 32767.5))
             else
                 self.stick_lx = math.max(-1, math.min(1, lx / 1000))
@@ -471,21 +485,21 @@ function Input:filter_dinput_state(state_obj, modified_obj, dispatch_fn, hub_ope
         end
     end
 
-    if modified_obj then
+    if modified_obj ~= nil then
         pcall(function()
             local center = is_unsigned and 32767 or 0
-            if modified_obj.lX ~= nil then modified_obj.lX = center end
-            if modified_obj.lY ~= nil then modified_obj.lY = center end
-            if modified_obj.lZ ~= nil then modified_obj.lZ = center end
-            if modified_obj.lRx ~= nil then modified_obj.lRx = center end
-            if modified_obj.lRy ~= nil then modified_obj.lRy = center end
-            if modified_obj.lRz ~= nil then modified_obj.lRz = center end
-            if modified_obj.rgdwPOV ~= nil then
+            pcall(function() modified_obj.lX = center end)
+            pcall(function() modified_obj.lY = center end)
+            pcall(function() modified_obj.lZ = center end)
+            pcall(function() modified_obj.lRx = center end)
+            pcall(function() modified_obj.lRy = center end)
+            pcall(function() modified_obj.lRz = center end)
+            pcall(function()
                 for i = 0, 3 do modified_obj.rgdwPOV[i] = 0xFFFFFFFF end
-            end
-            if modified_obj.rgbButtons ~= nil then
+            end)
+            pcall(function()
                 for i = 0, 31 do modified_obj.rgbButtons[i] = 0 end
-            end
+            end)
         end)
     end
     return true
