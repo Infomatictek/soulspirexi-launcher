@@ -33,7 +33,9 @@ public sealed class ManifestUpdateService
     public const string TestingRegistry24HookManifestRelativePath = "channels/testing-registry-24hook/manifest.json";
     public const string TestingSearchLegacyTextManifestRelativePath = "channels/testing-search-legacy-text/manifest.json";
     public const string TestingSearchAlignedTextManifestRelativePath = "channels/testing-search-aligned-text/manifest.json";
+    public const string TestingCoreUiManifestRelativePath = "channels/testing-core-ui/manifest.json";
     public const string TestingRegistry24HookBranch = "feat/runtime-soul-identity-and-spacing";
+    public const string TestingCoreUiBranch = "feat/soulspire-core-native-ui-gamepad";
     public const string InstalledStateFileName = ".soulspire-state.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -55,15 +57,19 @@ public sealed class ManifestUpdateService
         UpdateChannel.TestingRegistry24Hook => TestingRegistry24HookManifestRelativePath,
         UpdateChannel.TestingSearchLegacyText => TestingSearchLegacyTextManifestRelativePath,
         UpdateChannel.TestingSearchAlignedText => TestingSearchAlignedTextManifestRelativePath,
+        UpdateChannel.TestingCoreUi => TestingCoreUiManifestRelativePath,
         _ => StableManifestRelativePath
     };
 
     public static string GetManifestBranch(LauncherManifest fallback, UpdateChannel channel) =>
-        channel is UpdateChannel.TestingRegistry24Hook
-            or UpdateChannel.TestingSearchLegacyText
-            or UpdateChannel.TestingSearchAlignedText
-            ? TestingRegistry24HookBranch
-            : (string.IsNullOrWhiteSpace(fallback.Repo.Branch) ? "main" : fallback.Repo.Branch.Trim());
+        channel switch
+        {
+            UpdateChannel.TestingCoreUi => TestingCoreUiBranch,
+            UpdateChannel.TestingRegistry24Hook
+                or UpdateChannel.TestingSearchLegacyText
+                or UpdateChannel.TestingSearchAlignedText => TestingRegistry24HookBranch,
+            _ => string.IsNullOrWhiteSpace(fallback.Repo.Branch) ? "main" : fallback.Repo.Branch.Trim()
+        };
 
     public static HttpClient CreateDefaultHttpClient()
     {
@@ -253,6 +259,7 @@ public sealed class ManifestUpdateService
 
         var channelLabel = channel switch
         {
+            UpdateChannel.TestingCoreUi => "Testing — SoulspireXI Core UI & Gamepad",
             UpdateChannel.TestingRegistry24Hook => "Testing B — Registry 24-Hook (Current menu2fon)",
             UpdateChannel.TestingSearchLegacyText => "Testing A — Search Legacy native_text (4f0fdb3)",
             UpdateChannel.TestingSearchAlignedText => "Testing C — Search Aligned native_text (Repair)",
@@ -310,7 +317,8 @@ public sealed class ManifestUpdateService
 
             if (candidateId.Equals("registry-24hook", StringComparison.OrdinalIgnoreCase) ||
                 candidateId.Equals("search-legacy-text", StringComparison.OrdinalIgnoreCase) ||
-                candidateId.Equals("search-aligned-text", StringComparison.OrdinalIgnoreCase))
+                candidateId.Equals("search-aligned-text", StringComparison.OrdinalIgnoreCase) ||
+                candidateId.Equals("core-ui-24hook", StringComparison.OrdinalIgnoreCase))
             {
                 error = "Refusing isolated 24-hook candidate on 27-hook Testing channel.";
                 return false;
@@ -318,13 +326,15 @@ public sealed class ManifestUpdateService
         }
         else if (requestedChannel is UpdateChannel.TestingRegistry24Hook
                  or UpdateChannel.TestingSearchLegacyText
-                 or UpdateChannel.TestingSearchAlignedText)
+                 or UpdateChannel.TestingSearchAlignedText
+                 or UpdateChannel.TestingCoreUi)
         {
             var expectedCandidateId = requestedChannel switch
             {
                 UpdateChannel.TestingRegistry24Hook => "registry-24hook",
                 UpdateChannel.TestingSearchLegacyText => "search-legacy-text",
                 UpdateChannel.TestingSearchAlignedText => "search-aligned-text",
+                UpdateChannel.TestingCoreUi => "core-ui-24hook",
                 _ => string.Empty
             };
 

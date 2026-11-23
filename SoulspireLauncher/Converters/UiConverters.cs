@@ -45,6 +45,7 @@ public sealed class ChannelToBrushConverter : IValueConverter
             or UpdateChannel.TestingRegistry24Hook
             or UpdateChannel.TestingSearchLegacyText
             or UpdateChannel.TestingSearchAlignedText
+            or UpdateChannel.TestingCoreUi
             ? TestingBrush : StableBrush;
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
@@ -61,6 +62,7 @@ public sealed class ChannelToBadgeBackgroundConverter : IValueConverter
             or UpdateChannel.TestingRegistry24Hook
             or UpdateChannel.TestingSearchLegacyText
             or UpdateChannel.TestingSearchAlignedText
+            or UpdateChannel.TestingCoreUi
             ? TestingBg : StableBg;
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
@@ -77,6 +79,7 @@ public sealed class ChannelToLabelConverter : IValueConverter
             UpdateChannel.TestingRegistry24Hook => "Testing B — Registry 24-Hook (Current menu2fon)",
             UpdateChannel.TestingSearchLegacyText => "Testing A — Search Legacy native_text (4f0fdb3)",
             UpdateChannel.TestingSearchAlignedText => "Testing C — Search Aligned native_text (Repair)",
+            UpdateChannel.TestingCoreUi => "Testing — SoulspireXI Core UI & Gamepad",
             _ => value?.ToString() ?? string.Empty
         };
 

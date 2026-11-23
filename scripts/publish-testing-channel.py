@@ -63,6 +63,7 @@ def build_testing_manifest(
         "registry-24hook": repo_root / "channels" / "testing-registry-24hook",
         "search-legacy-text": repo_root / "channels" / "testing-search-legacy-text",
         "search-aligned-text": repo_root / "channels" / "testing-search-aligned-text",
+        "core-ui-24hook": repo_root / "channels" / "testing-core-ui",
     }
     if candidate not in candidate_dirs:
         raise ValueError(f"Unknown Testing candidate {candidate!r}; expected one of {tuple(candidate_dirs)}")
@@ -111,7 +112,7 @@ def build_testing_manifest(
         "notes": testing_notes,
     }
 
-    if candidate in ("registry-24hook", "search-legacy-text", "search-aligned-text"):
+    if candidate in ("registry-24hook", "search-legacy-text", "search-aligned-text", "core-ui-24hook"):
         reg_sync_path = repo_root / "registry_sync.json"
         reg_sync = json.loads(reg_sync_path.read_text(encoding="utf-8")) if reg_sync_path.is_file() else {}
         prov = json.loads(provenance_json.read_text(encoding="utf-8-sig")) if (provenance_json and provenance_json.is_file()) else {}
@@ -197,7 +198,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo-branch", default=None, help="Optional branch override for testing manifest rawBaseUrl")
     parser.add_argument(
         "--candidate",
-        choices=("default-27hook", "registry-24hook", "search-legacy-text", "search-aligned-text"),
+        choices=("default-27hook", "registry-24hook", "search-legacy-text", "search-aligned-text", "core-ui-24hook"),
         default="default-27hook",
         help="Explicit Testing candidate track (preserves 27-hook channel and isolates each 24-hook Search/Registry candidate).",
     )

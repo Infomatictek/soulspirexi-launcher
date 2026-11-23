@@ -15,7 +15,8 @@ public enum UpdateChannel
     Testing = 1,
     TestingRegistry24Hook = 2,
     TestingSearchLegacyText = 3,
-    TestingSearchAlignedText = 4
+    TestingSearchAlignedText = 4,
+    TestingCoreUi = 5
 }
 
 public sealed class LauncherSettings

@@ -259,7 +259,8 @@ public sealed class LauncherSelfUpdateService
         var isTesting = channel is UpdateChannel.Testing
             or UpdateChannel.TestingRegistry24Hook
             or UpdateChannel.TestingSearchLegacyText
-            or UpdateChannel.TestingSearchAlignedText;
+            or UpdateChannel.TestingSearchAlignedText
+            or UpdateChannel.TestingCoreUi;
         var channelAllowsRelease = isTesting || !isPrerelease;
         Version? latestVersion = null;
         var isNewer = !isDraft &&
@@ -297,7 +298,8 @@ public sealed class LauncherSelfUpdateService
         if (channel is UpdateChannel.Testing
             or UpdateChannel.TestingRegistry24Hook
             or UpdateChannel.TestingSearchLegacyText
-            or UpdateChannel.TestingSearchAlignedText)
+            or UpdateChannel.TestingSearchAlignedText
+            or UpdateChannel.TestingCoreUi)
         {
             var listUrl = $"https://api.github.com/repos/{owner}/{repo}/releases?per_page=15";
             var json = await _http.GetStringAsync(listUrl, cts.Token).ConfigureAwait(false);

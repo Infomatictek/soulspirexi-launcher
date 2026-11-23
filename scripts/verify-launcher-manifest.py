@@ -222,6 +222,7 @@ def verify_manifest(repo_root: Path, manifest_path: Path | None = None) -> list[
             "registry-24hook": "channels/testing-registry-24hook/payload/",
             "search-legacy-text": "channels/testing-search-legacy-text/payload/",
             "search-aligned-text": "channels/testing-search-aligned-text/payload/",
+            "core-ui-24hook": "channels/testing-core-ui/payload/",
         }
         allowed_testing_prefix = candidate_prefixes.get(candidate_id, "channels/testing/payload/")
         for src, (cat, tgt) in sorted(manifest_sources.items()):
@@ -402,7 +403,7 @@ def verify_manifest(repo_root: Path, manifest_path: Path | None = None) -> list[
             errors.append(
                 f"manifest.json registry.nativeDllSha256 ({reg_meta.get('nativeDllSha256')}) != crystaljobs.dll sha256 ({dll_entry.get('sha256')})"
             )
-        if declared_channel == "testing" and str(manifest.get("candidateId") or "").strip() in ("registry-24hook", "search-legacy-text", "search-aligned-text"):
+        if declared_channel == "testing" and str(manifest.get("candidateId") or "").strip() in ("registry-24hook", "search-legacy-text", "search-aligned-text", "core-ui-24hook"):
             prov_path = (manifest_path or (repo_root / "manifest.json")).parent / "crystaljobs-provenance.json"
             runtime_loader = False
             if prov_path.is_file():
