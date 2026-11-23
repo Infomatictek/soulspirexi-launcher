@@ -239,6 +239,7 @@ def main(argv: list[str] | None = None) -> int:
             reject_sha256=args.reject_sha256,
         )
     except Exception as exc:
+        print(f"::error::soulspire_native.dll verification failed: {exc}")
         print(f"ERROR: soulspire_native.dll verification failed: {exc}", file=sys.stderr)
         return 1
 
