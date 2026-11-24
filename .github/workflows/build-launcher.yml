@@ -201,14 +201,15 @@ jobs:
           SOULSPIRE_NATIVE_KEEP_SELFTEST: "1"
         run: |
           $ErrorActionPreference = 'Continue'
-          & cmd.exe /c "soulspire_native\build.cmd 2>&1" | Tee-Object -FilePath "soulspire_native-build.log"
+          & cmd.exe /c "call soulspire_native\build.cmd" 2>&1 | Tee-Object -FilePath "soulspire_native-build.log"
           $rc = $LASTEXITCODE
           $ErrorActionPreference = 'Stop'
-          if ($rc -ne 0) {
-            foreach ($line in (Get-Content "soulspire_native-build.log" | Select-String -Pattern '(error |ERROR:|Assertion failed|fatal error)' | Select-Object -First 20)) {
+          if ($rc -ne 0 -or -not (Test-Path "soulspire_native/selftest.exe")) {
+            foreach ($line in (Get-Content "soulspire_native-build.log" | Select-String -Pattern '(error |warning |ERROR:|Assertion failed|fatal error)' | Select-Object -First 20)) {
               Write-Host "::error::$($line.Line)"
             }
             Get-Content "soulspire_native-build.log" -Tail 50
+            if ($rc -eq 0) { $rc = 1 }
             exit $rc
           }
 

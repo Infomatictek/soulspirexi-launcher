@@ -209,9 +209,9 @@ struct SoulspireSpriteBankKey {
 struct SoulspireMenuSpriteBank {
     bool                   active = false;
     SoulspireSpriteBankKey key{};
-    alignas(16) uint8_t    sprite[0x30]{};
-    alignas(16) uint8_t    nodes[kCommandsSpriteTileCount][0x18]{};
-    alignas(16) uint8_t    tiles[kCommandsSpriteTileCount][0xE0]{};
+    uint8_t                sprite[0x30]{};
+    uint8_t                nodes[kCommandsSpriteTileCount][0x18]{};
+    uint8_t                tiles[kCommandsSpriteTileCount][0xE0]{};
 };
 
 inline bool sprite_list_tile_at(

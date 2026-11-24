@@ -1065,7 +1065,7 @@ static uint32_t mock_cmd_extra_node_idx = 0;
 
 static void* __cdecl mock_ffxi_new(uint32_t sz) noexcept {
     ++mock_cmd_new_calls;
-    return ::operator new(sz);
+    return ::operator new(sz, std::nothrow);
 }
 static void __cdecl mock_ffxi_delete(void* p) noexcept {
     ++mock_cmd_delete_calls;
