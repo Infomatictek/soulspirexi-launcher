@@ -684,16 +684,23 @@ function D.run_diagnostic(opts)
     }
 
     local written_path = nil
+    local write_error = nil
     if type(opts.output_path) == 'string' and opts.output_path ~= '' then
-        local f = io.open(opts.output_path, 'wb')
+        local f, io_err = io.open(opts.output_path, 'wb')
         if f then
-            f:write(encode_json(report, 0), '\n')
+            local ok_w, w_err = f:write(encode_json(report, 0), '\n')
             f:close()
-            written_path = opts.output_path
+            if ok_w then
+                written_path = opts.output_path
+            else
+                write_error = 'Failed writing ' .. tostring(opts.output_path) .. ': ' .. tostring(w_err)
+            end
+        else
+            write_error = 'Failed opening ' .. tostring(opts.output_path) .. ' for write: ' .. tostring(io_err)
         end
     end
 
-    return true, report, written_path
+    return true, report, written_path, write_error
 end
 
 return D

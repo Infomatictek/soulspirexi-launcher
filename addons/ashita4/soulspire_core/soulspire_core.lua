@@ -36,6 +36,38 @@ local function log(msg)
     print('[soulspire_core] ' .. tostring(msg))
 end
 
+local MODULE_ERR_RATE_SEC = 10
+local module_err_state = {}
+
+local function now_seconds()
+    if ashita and ashita.time and ashita.time.get_tick64 then
+        return ashita.time.get_tick64() / 1000
+    end
+    return os.time()
+end
+
+-- Isolate non-critical module calls so a single module error cannot unload soulspire_core,
+-- while surfacing actionable rate-limited diagnostics to chat.
+local function safe_call(module_key, fn, ...)
+    local ok, res = pcall(fn, ...)
+    if ok then return true, res end
+    local ts = now_seconds()
+    local st = module_err_state[module_key]
+    if not st then
+        st = { last_log = -1e9, suppressed = 0 }
+        module_err_state[module_key] = st
+    end
+    if (ts - st.last_log) >= MODULE_ERR_RATE_SEC then
+        local suffix = st.suppressed > 0 and (' (+' .. tostring(st.suppressed) .. ' suppressed)') or ''
+        log(('Module error [%s]: %s%s'):format(tostring(module_key), tostring(res), suffix))
+        st.last_log = ts
+        st.suppressed = 0
+    else
+        st.suppressed = st.suppressed + 1
+    end
+    return false, res
+end
+
 local function is_chat_open()
     local ok, open = pcall(function()
         return AshitaCore:GetChatManager():IsInputOpen() ~= 0
@@ -58,12 +90,14 @@ end
 ashita.events.register('load', 'soulspire_core_load', function()
     assets = Assets.new(addon.path)
     if type(addon.path) == 'string' and addon.path ~= '' then
-        local data_dir = addon.path:gsub('[/\\]+$', '') .. '\\..\\..\\plugins\\data\\'
+        local sep = addon.path:find('\\', 1, true) and '\\' or '/'
+        local base_dir = addon.path:gsub('[/\\]+$', '')
+        local data_dir = base_dir .. sep .. '..' .. sep .. '..' .. sep .. 'plugins' .. sep .. 'data' .. sep
         weapon_pres.config_path = data_dir .. 'soul-weapon-config.json'
         weapon_pres.calibration_path = data_dir .. 'soul-weapon-calibration.local.json'
         weapon_pres.probe_output_path = data_dir .. 'soul-weapon-render-probe.local.json'
         weapon_pres.equip_diag_output_path = data_dir .. 'soul-weapon-equip-diag.local.json'
-        weapon_pres:load_file()
+        safe_call('weapon_pres.load_file', function() weapon_pres:load_file() end)
     end
     local ok, scaling = pcall(require, 'scaling')
     if ok and scaling and scaling.scaled and scaling.scaled.w > 0 and scaling.scaled.h > 0 then
@@ -172,7 +206,8 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
         elseif action == 'equip' then
             local ok_wc, WC = pcall(require, 'weapon_config')
             if not (ok_wc and WC) and type(addon.path) == 'string' and addon.path ~= '' then
-                local cs_wc = addon.path:gsub('[/\\]+$', '') .. '\\..\\crystalsocket\\weapon_config.lua'
+                local sep = addon.path:find('\\', 1, true) and '\\' or '/'
+                local cs_wc = addon.path:gsub('[/\\]+$', '') .. sep .. '..' .. sep .. 'crystalsocket' .. sep .. 'weapon_config.lua'
                 ok_wc, WC = pcall(dofile, cs_wc)
             end
             local wc_rules, wc_reg_hash = {}, ''
@@ -184,7 +219,7 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
                 wc_reg_hash = WC.status().registry_hash or ''
             end
             local st = weapon_pres:status()
-            local ok, rep, out_path = WeaponEquipDiag.run_diagnostic({
+            local ok, rep, out_path, write_err = WeaponEquipDiag.run_diagnostic({
                 diagnostics_enabled = weapon_pres:is_diagnostics_enabled(),
                 rules_override = wc_rules,
                 config_registry_hash = wc_reg_hash,
@@ -198,11 +233,17 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
                     tostring(n.equipHooksOk), tostring(n.resolvedSoulId or 'none'),
                     n.activeJob, n.activeBranch, tostring(n.soulKnown), n.effectiveLevel,
                     n.weaponRulesCount, n.weaponAllowHits, n.weaponDenyHits))
-                log(('Equip diag candidates: total=%d dual_2h=%d vanilla_sub=%d rejected=%d 0x050_trace=%d slices=%d output=%s'):format(
+                log(('Equip diag candidates: total=%d dual_2h=%d vanilla_sub=%d rejected=%d 0x050_trace=%d slices=%d'):format(
                     rep.summary.candidateCount, rep.summary.allowedDual2h,
                     rep.summary.allowedVanillaSub, rep.summary.rejected,
-                    rep.summary.packets0x050Count or 0, rep.summary.codeSlicesCount or 0,
-                    tostring(out_path or 'memory')))
+                    rep.summary.packets0x050Count or 0, rep.summary.codeSlicesCount or 0))
+                if out_path then
+                    log('Equip diag report written to: ' .. tostring(out_path))
+                elseif write_err then
+                    log('Equip diag report write ERROR: ' .. tostring(write_err))
+                else
+                    log('Equip diag report kept in memory (no output_path configured).')
+                end
             else
                 log('Weapon equip diag refused/failed: ' .. tostring(rep))
             end
@@ -279,39 +320,51 @@ end)
 
 -- Cleanly blur/close on zone transitions and track authoritative OXSI peer Souls.
 ashita.events.register('packet_in', 'soulspire_core_packet_in', function(e)
+    if type(e) ~= 'table' then return end
     if e.id == 0x00A or e.id == 0x00B then
-        focus:blur_all('zone_change')
-        input:reset()
-        weapon_pres:reset_peers()
+        safe_call('focus.blur_all', function() focus:blur_all('zone_change') end)
+        safe_call('input.reset', function() input:reset() end)
+        safe_call('weapon_pres.reset_peers', function() weapon_pres:reset_peers() end)
     elseif e.id == 0x1FC then
-        local now_sec = ashita.time and ashita.time.get_tick64 and (ashita.time.get_tick64() / 1000) or os.time()
-        weapon_pres:observe_oxsi(e.data_modified or e.data, now_sec)
+        local now_sec = now_seconds()
+        safe_call('weapon_pres.observe_oxsi_packet', function()
+            weapon_pres:observe_oxsi_packet(e.data_modified or e.data, now_sec)
+        end)
     elseif e.id == 0x050 and weapon_pres:is_diagnostics_enabled() then
-        local now_sec = ashita.time and ashita.time.get_tick64 and (ashita.time.get_tick64() / 1000) or os.time()
-        local rec = WeaponEquipDiag.observe_equip_packet('in', e.data_modified or e.data, now_sec)
-        if rec then
-            log(('[weapondiag] S2C 0x050 equip_slot=%d inv_idx=%d container=%d'):format(
-                rec.equipSlot, rec.invIndex, rec.container))
-        end
+        local now_sec = now_seconds()
+        safe_call('weapon_equip_diag.packet_in', function()
+            local rec = WeaponEquipDiag.observe_equip_packet('in', e.data_modified or e.data, now_sec)
+            if rec then
+                log(('[weapondiag] S2C 0x050 equip_slot=%d inv_idx=%d container=%d'):format(
+                    rec.equipSlot, rec.invIndex, rec.container))
+            end
+        end)
     end
 end)
 
 ashita.events.register('packet_out', 'soulspire_core_packet_out', function(e)
+    if type(e) ~= 'table' then return end
     if e.id == 0x050 and weapon_pres:is_diagnostics_enabled() then
-        local now_sec = ashita.time and ashita.time.get_tick64 and (ashita.time.get_tick64() / 1000) or os.time()
-        local rec = WeaponEquipDiag.observe_equip_packet('out', e.data_modified or e.data, now_sec)
-        if rec then
-            log(('[weapondiag] C2S 0x050 equip_slot=%d inv_idx=%d container=%d'):format(
-                rec.equipSlot, rec.invIndex, rec.container))
-        end
+        local now_sec = now_seconds()
+        safe_call('weapon_equip_diag.packet_out', function()
+            local rec = WeaponEquipDiag.observe_equip_packet('out', e.data_modified or e.data, now_sec)
+            if rec then
+                log(('[weapondiag] C2S 0x050 equip_slot=%d inv_idx=%d container=%d'):format(
+                    rec.equipSlot, rec.invIndex, rec.container))
+            end
+        end)
     end
 end)
 
 ashita.events.register('d3d_present', 'soulspire_core_present', function()
     if not ui then return end
-    local native = current_native_menu()
-    ui:draw(native, menu ~= nil and menu:is_available())
+    safe_call('ui.draw', function()
+        local native = current_native_menu()
+        ui:draw(native, menu ~= nil and menu:is_available())
+    end)
     if weapon_pres:is_diagnostics_enabled() then
-        weapon_pres:draw_diagnostics_panel(imgui)
+        safe_call('weapon_pres.draw_diagnostics_panel', function()
+            weapon_pres:draw_diagnostics_panel(imgui)
+        end)
     end
 end)
