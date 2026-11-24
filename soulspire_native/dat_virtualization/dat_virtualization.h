@@ -306,7 +306,7 @@ inline bool parse_dat_text_overrides_json(const char* data, size_t len, DatTextO
                     if (!got_job || !got_branch || !got_kind || !got_aid ||
                         job_u < 1u || job_u > 22u || branch_u < 1u || branch_u > 7u ||
                         kind_u < 1u || kind_u > 3u || aid_u > 0xFFFFu ||
-                        !valid_action_id(kind_u, static_cast<int32_t>(aid_u))) {
+                        !valid_action_id(kind_u, static_cast<uint16_t>(aid_u))) {
                         return fail("override entry out of valid job/branch/kind/actionId bounds");
                     }
                     if (out.records.size() >= kMaxDatTextOverrides) {

@@ -114,7 +114,9 @@ inline void load_runtime_resources(HMODULE mod, std::atomic<uint32_t>& action_ro
 
     // 3. Load registry-compiled DAT text overrides (plugins/data/dat-text-overrides.json).
     if (dat_virt != nullptr) {
-        dat_virt->configure(module_enabled(SOULSPIRE_NATIVE_MOD_DAT_VIRTUALIZATION));
+        const bool dv_enabled =
+            (active_search_presentation().enabled_modules_mask & (1u << SOULSPIRE_NATIVE_MOD_DAT_VIRTUALIZATION)) != 0;
+        dat_virt->configure(dv_enabled);
         wchar_t dat_path[MAX_PATH]{};
         size_t dat_len = 0;
         std::unique_ptr<char[]> dat_buf(new (std::nothrow) char[kMaxDatTextFileBytes + 1]);
