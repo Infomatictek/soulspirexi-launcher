@@ -1,14 +1,13 @@
--- Pure-Lua state, Soul gating, 0x0028 action decoding, and auto-facing logic
--- for COR Flintlock (job 17, branch 1) Phase 1 dual-pistol support.
--- Client-only and visual-only; never modifies combat, equipment, or non-Flintlock Souls.
+-- Pure-Lua state, registry-driven Soul gating, 0x0028 action decoding, and auto-facing logic
+-- for ranged-only dual-pistol Souls (configured in registry/weapon_configs.json -> soul-weapon-config.json).
+-- Client-only and visual-only; never modifies combat, equipment, or unconfigured Souls.
+-- Zero hardcoded Soul job/branch numbers in gating logic; fails closed if registry config is missing.
 
+local bit = require('bit')
 local M = {}
 
-M.COR_JOB_ID = 17
-M.FLINTLOCK_BRANCH = 1
-M.FLINTLOCK_SOUL = 'flintlock'
 M.FIREARM_SKILLS = {
-    [26] = true, -- Marksmanship (guns/crossbows; narrowed by gun/cannon check when item metadata available)
+    [26] = true, -- Marksmanship (guns/crossbows; narrowed by firearm check when item metadata available)
 }
 
 local function read_u32_le(data, offset)
@@ -23,6 +22,182 @@ local function read_u16_le(data, offset)
     return b1 + b2 * 256
 end
 
+-- Minimal JSON reader for loading rangedOnly rules from soul-weapon-config.json without external deps.
+local function parse_json(src)
+    if type(src) ~= 'string' or #src == 0 then return nil end
+    local pos, len = 1, #src
+    local function skip_ws()
+        local _, e = src:find('^[ \t\r\n]*', pos)
+        if e then pos = e + 1 end
+    end
+    local parse_value
+    local function parse_string()
+        pos = pos + 1
+        local out = {}
+        while pos <= len do
+            local ch = src:sub(pos, pos)
+            if ch == '"' then pos = pos + 1; return table.concat(out)
+            elseif ch == '\\' then
+                pos = pos + 1
+                local esc = src:sub(pos, pos)
+                local map = { ['"'] = '"', ['\\'] = '\\', ['/'] = '/', b = '\b', f = '\f', n = '\n', r = '\r', t = '\t' }
+                out[#out + 1] = map[esc] or esc
+                pos = pos + 1
+            else
+                out[#out + 1] = ch
+                pos = pos + 1
+            end
+        end
+        return nil
+    end
+    local function parse_number()
+        local s, e = src:find('^%-?%d+%.?%d*[eE]?[%+%-]?%d*', pos)
+        if not s then return nil end
+        pos = e + 1
+        return tonumber(src:sub(s, e))
+    end
+    local function parse_array()
+        pos = pos + 1
+        local arr = {}
+        skip_ws()
+        if src:sub(pos, pos) == ']' then pos = pos + 1; return arr end
+        while pos <= len do
+            local v = parse_value()
+            arr[#arr + 1] = v
+            skip_ws()
+            local c = src:sub(pos, pos)
+            if c == ']' then pos = pos + 1; return arr end
+            if c ~= ',' then return nil end
+            pos = pos + 1
+            skip_ws()
+        end
+        return nil
+    end
+    local function parse_object()
+        pos = pos + 1
+        local obj = {}
+        skip_ws()
+        if src:sub(pos, pos) == '}' then pos = pos + 1; return obj end
+        while pos <= len do
+            skip_ws()
+            if src:sub(pos, pos) ~= '"' then return nil end
+            local k = parse_string()
+            if not k then return nil end
+            skip_ws()
+            if src:sub(pos, pos) ~= ':' then return nil end
+            pos = pos + 1
+            obj[k] = parse_value()
+            skip_ws()
+            local c = src:sub(pos, pos)
+            if c == '}' then pos = pos + 1; return obj end
+            if c ~= ',' then return nil end
+            pos = pos + 1
+        end
+        return nil
+    end
+    parse_value = function()
+        skip_ws()
+        local c = src:sub(pos, pos)
+        if c == '{' then return parse_object()
+        elseif c == '[' then return parse_array()
+        elseif c == '"' then return parse_string()
+        elseif c == 't' and src:sub(pos, pos + 3) == 'true' then pos = pos + 4; return true
+        elseif c == 'f' and src:sub(pos, pos + 4) == 'false' then pos = pos + 5; return false
+        elseif c == 'n' and src:sub(pos, pos + 3) == 'null' then pos = pos + 4; return nil
+        else return parse_number() end
+    end
+    return parse_value()
+end
+
+local ranged_only_by_jb = {}
+local ranged_only_by_key = {}
+local ranged_only_jobs = {}
+local config_loaded = false
+
+local function reset_registry()
+    ranged_only_by_jb = {}
+    ranged_only_by_key = {}
+    ranged_only_jobs = {}
+    config_loaded = false
+end
+
+function M.load_registry_from_string(json_str)
+    reset_registry()
+    local doc = parse_json(json_str)
+    if type(doc) ~= 'table' or doc.schemaVersion ~= 1 or type(doc.rangedOnly) ~= 'table' then
+        return false
+    end
+    for _, g in ipairs(doc.rangedOnly) do
+        if type(g) == 'table' and type(g.jobId) == 'number' and type(g.branch) == 'number' then
+            local rec = {
+                soul_id     = tostring(g.soulId or ''),
+                soul_key    = tostring(g.soulKey or ''):lower(),
+                job         = g.jobId,
+                branch      = g.branch,
+                firearm_only = g.firearmOnly == true,
+                auto_facing  = g.autoFacing == true,
+                overlay_id   = tostring(g.overlayId or ''),
+            }
+            ranged_only_by_jb[rec.job] = ranged_only_by_jb[rec.job] or {}
+            ranged_only_by_jb[rec.job][rec.branch] = rec
+            ranged_only_by_key[rec.job] = ranged_only_by_key[rec.job] or {}
+            if rec.soul_key ~= '' then
+                ranged_only_by_key[rec.job][rec.soul_key] = rec
+            end
+            ranged_only_jobs[rec.job] = true
+        end
+    end
+    config_loaded = true
+    return true
+end
+
+function M.load_registry_default(base_dir)
+    local candidates = {}
+    if type(base_dir) == 'string' and base_dir ~= '' then
+        local clean = base_dir:gsub('[/\\]+$', '')
+        candidates[#candidates + 1] = clean .. '/../../plugins/data/soul-weapon-config.json'
+        candidates[#candidates + 1] = clean .. '/../../../plugins/ashita4/data/soul-weapon-config.json'
+    end
+    local src = debug and debug.getinfo and debug.getinfo(1, 'S') and debug.getinfo(1, 'S').source or ''
+    if src:sub(1, 1) == '@' then
+        local dir = src:sub(2):match('^(.*)[/\\][^/\\]+$')
+        if dir then
+            candidates[#candidates + 1] = dir .. '/../../plugins/data/soul-weapon-config.json'
+            candidates[#candidates + 1] = dir .. '/../../../plugins/ashita4/data/soul-weapon-config.json'
+        end
+    end
+    candidates[#candidates + 1] = 'plugins/data/soul-weapon-config.json'
+    candidates[#candidates + 1] = 'plugins/ashita4/data/soul-weapon-config.json'
+    candidates[#candidates + 1] = '../../../plugins/ashita4/data/soul-weapon-config.json'
+    for _, p in ipairs(candidates) do
+        local f = io.open(p, 'rb')
+        if f then
+            local content = f:read('*a')
+            f:close()
+            if M.load_registry_from_string(content) then
+                return true
+            end
+        end
+    end
+    reset_registry()
+    return false
+end
+
+function M.ranged_only_rule(job, branch)
+    if not config_loaded or type(job) ~= 'number' or type(branch) ~= 'number' then return nil end
+    local by_job = ranged_only_by_jb[job]
+    return by_job and by_job[branch] or nil
+end
+
+function M.ranged_only_rule_by_key(job, soul_key)
+    if not config_loaded or type(job) ~= 'number' or type(soul_key) ~= 'string' then return nil end
+    local by_job = ranged_only_by_key[job]
+    return by_job and by_job[soul_key:lower()] or nil
+end
+
+-- Auto-load authoritative registry config (fails closed if absent).
+M.load_registry_default()
+
 -- Unpack little-endian bitfield from 1-based byte string, 0-based bit offset.
 function M.unpack_bits(data, bit_offset, bit_len)
     if type(data) ~= 'string' or bit_offset < 0 or bit_len <= 0 or bit_len > 32 then
@@ -36,7 +211,7 @@ function M.unpack_bits(data, bit_offset, bit_len)
         local b = data:byte(byte_idx)
         if not b then return nil end
         local bit_idx = pos % 8
-        local bit_val = math.floor(b / (2 ^ bit_idx)) % 2
+        local bit_val = bit.band(bit.rshift(b, bit_idx), 1)
         if bit_val == 1 then
             value = value + mul
         end
@@ -69,33 +244,25 @@ function M.decode_soul_packet(data, expected_job)
     if not soul:match('^[%w_%-]+$') then
         return nil
     end
-    local branch = 0
-    if packet_job == M.COR_JOB_ID then
-        if soul == 'flintlock' then branch = 1
-        elseif soul == 'gambler' then branch = 2
-        elseif soul == 'buccaneer' then branch = 3
-        end
-    end
+    local rule = M.ranged_only_rule_by_key(packet_job, soul)
+    local branch = rule and rule.branch or 0
     return { job = packet_job, branch = branch, soul = soul }
 end
 
--- Resolve active Soul from crystaljobs.dll status struct.
+-- Resolve active ranged-only Soul from soulspire_native.dll status struct via registry rules.
 function M.is_flintlock_from_crystaljobs(status, job, character_id)
     if type(status) ~= 'table' or type(job) ~= 'number' or type(character_id) ~= 'number' then
         return false
     end
-    if character_id <= 0 or job ~= M.COR_JOB_ID then
+    if character_id <= 0 or status.enabled ~= 1 or status.known ~= 1
+        or status.character_id ~= character_id or status.job ~= job then
         return false
     end
-    return status.enabled == 1
-        and status.known == 1
-        and status.character_id == character_id
-        and status.job == M.COR_JOB_ID
-        and status.branch == M.FLINTLOCK_BRANCH
+    local rule = M.ranged_only_rule(job, status.branch)
+    return rule ~= nil and rule.auto_facing == true
 end
 
 -- Parse outgoing 0x01A action packet for ranged attack (category == 0x10).
--- Layout: [1..4]=header, [5..8]=target_id (u32), [9..10]=target_idx (u16), [11..12]=category (u16).
 function M.parse_outgoing_ra_target(data)
     if type(data) ~= 'string' or #data < 12 then
         return nil
@@ -112,13 +279,6 @@ function M.parse_outgoing_ra_target(data)
 end
 
 -- Parse incoming 0x0028 action packet header + first target ID.
--- Bit layout per Ashita/XiPackets 0x0028:
---   byte 6..9 (bits 40..71): actor_id (32 bits)
---   bits 72..81: target_count (10 bits)
---   bits 82..85: category (4 bits)
---   bits 86..117: param (32 bits)
---   bits 118..149: recast (32 bits)
---   bits 150..181: targets[1].id (32 bits)
 function M.parse_action_packet(data)
     if type(data) ~= 'string' or #data < 23 then
         return nil
@@ -155,7 +315,6 @@ function M.compute_facing_yaw(me_x, me_z, target_x, target_z)
 end
 
 -- Classify whether an equipped ranged weapon is a firearm (Gun/Cannon) vs Bow/Crossbow/Thrown.
--- Accepts either explicit range_type string ('Gun'/'Cannon') or item name/flags heuristic.
 function M.is_firearm_item(item_info)
     if type(item_info) ~= 'table' then
         return false
@@ -164,8 +323,6 @@ function M.is_firearm_item(item_info)
         local rt = item_info.range_type:lower()
         return rt == 'gun' or rt == 'cannon'
     end
-    -- Ashita v4 IItem resource: Skill == 26 (Marksmanship) and Ammo/Weapon type not Crossbow/Bolt.
-    -- In FFXI item resources, firearm items use Skill == 26 and do not use crossbow/bolt names.
     if item_info.skill == 26 then
         local name = type(item_info.name) == 'string' and item_info.name:lower() or ''
         if name:find('crossbow', 1, true) or name:find('arbalest', 1, true)
@@ -185,6 +342,7 @@ function M.new()
         job = 0,
         branch = 0,
         soul = nil,
+        active_rule = nil,
         flintlock_active = false,
         requested_target = nil,
         hud_fallback = nil,
@@ -198,6 +356,7 @@ function M.new()
             self.job = 0
             self.branch = 0
             self.soul = nil
+            self.active_rule = nil
             self.flintlock_active = false
             self.hud_fallback = nil
             self.last_advisory_key = nil
@@ -225,18 +384,25 @@ function M.new()
         self.character_id = character_id
         self.job = job
 
+        local matched_rule = nil
         if type(crystal_status) == 'table' and crystal_status.enabled == 1 and crystal_status.known == 1
             and crystal_status.character_id == character_id and crystal_status.job == job then
             self.branch = crystal_status.branch or 0
-            self.flintlock_active = (job == M.COR_JOB_ID and self.branch == M.FLINTLOCK_BRANCH)
-            self.soul = self.flintlock_active and M.FLINTLOCK_SOUL or nil
+            matched_rule = M.ranged_only_rule(job, self.branch)
+            self.active_rule = matched_rule
+            self.flintlock_active = (matched_rule ~= nil and matched_rule.auto_facing == true)
+            self.soul = matched_rule and matched_rule.soul_key or nil
         elseif self.hud_fallback and self.hud_fallback.job == job then
             self.branch = self.hud_fallback.branch or 0
             self.soul = self.hud_fallback.soul
-            self.flintlock_active = (job == M.COR_JOB_ID and self.branch == M.FLINTLOCK_BRANCH)
+            matched_rule = M.ranged_only_rule(job, self.branch)
+                or (self.soul and M.ranged_only_rule_by_key(job, self.soul) or nil)
+            self.active_rule = matched_rule
+            self.flintlock_active = (matched_rule ~= nil and matched_rule.auto_facing == true)
         else
             self.branch = 0
             self.soul = nil
+            self.active_rule = nil
             self.flintlock_active = false
         end
 
@@ -257,7 +423,6 @@ function M.new()
         return target_id
     end
 
-    -- Decide whether to auto-face on a 0x0028 action packet and return target_id or nil.
     function self:resolve_auto_face_target(action, is_firearm)
         if not self.flintlock_active or not self.aim_enabled or not is_firearm then
             return nil
@@ -278,7 +443,6 @@ function M.new()
         end
         self.requested_target = nil
 
-        -- Ignore ranged attack cancel/interrupt (0x7073), matching upstream AkimboAim.lua.
         if action.category == 12 and ((action.param or 0) % 65536 == 0x7073) then
             return nil
         end
@@ -288,7 +452,6 @@ function M.new()
         return target_id
     end
 
-    -- Non-spammy advisory when active Soul and session XIPivot overlay state disagree.
     function self:check_overlay_advisory(overlay_installed, overlay_enabled_at_boot)
         if self.character_id <= 0 or self.job <= 0 then
             return nil
@@ -298,7 +461,7 @@ function M.new()
         if self.flintlock_active and overlay_installed and not overlay_enabled_at_boot then
             key = 'flintlock_overlay_off'
             msg = 'COR Flintlock active: dual-pistol DAT overlay is installed but inactive this session. Run /flintlock overlay on (or enable in Launcher) and restart FFXI.'
-        elseif not self.flintlock_active and overlay_enabled_at_boot and self.job == M.COR_JOB_ID then
+        elseif not self.flintlock_active and overlay_enabled_at_boot and ranged_only_jobs[self.job] then
             key = 'non_flintlock_cor_overlay_on'
             msg = 'Non-Flintlock COR Soul active while dual-pistol DAT overlay is loaded for this session. Run /flintlock overlay off and restart FFXI for vanilla single-gun visuals.'
         end

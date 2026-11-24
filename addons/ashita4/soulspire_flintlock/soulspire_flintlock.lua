@@ -9,6 +9,9 @@ local State = require('flintlock_state')
 local PivotConfig = require('pivot_config')
 
 local state = State.new()
+if type(addon.path) == 'string' and addon.path ~= '' then
+    State.load_registry_default(addon.path)
+end
 
 -- Reuse existing crystaljobs.dll status export via LuaJIT FFI (same ABI as soulspire_soul_actions/soul_bridge.lua).
 local ok_ffi, ffi = pcall(require, 'ffi')

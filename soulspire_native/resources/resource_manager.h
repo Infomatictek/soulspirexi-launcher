@@ -1,8 +1,11 @@
 #pragma once
 #include "../core/config.h"
 #include "../diagnostics/diagnostics.h"
+#include "../equipment/weapon_config_loader.h"
+#include "../equipment/weapon_rules.h"
 #include "../job_identity/job_identity.h"
 #include <cwchar>
+#include <memory>
 
 namespace soulspire::native {
 
@@ -54,7 +57,11 @@ inline bool build_trusted_data_path(HMODULE mod, const wchar_t* filename, wchar_
     return true;
 }
 
-inline void load_runtime_resources(HMODULE mod, std::atomic<uint32_t>& action_row_limit) noexcept {
+inline void load_runtime_resources(
+    HMODULE mod,
+    std::atomic<uint32_t>& action_row_limit,
+    WeaponRuleCatalog* weapon_rules_out = nullptr,
+    WeaponPresentationManager* presentation_out = nullptr) noexcept {
     static char file_buf[kMaxIdentityFileBytes + 1]{};
 
     // 1. Load soulspire_native.json (preferred) with backwards-compatible fallback to crystaljobs-presentation.json.
@@ -107,6 +114,68 @@ inline void load_runtime_resources(HMODULE mod, std::atomic<uint32_t>& action_ro
             "soul-identities.json missing or unreadable; using compiled fallback");
         log_message(LOG_LEVEL_WARN, "data\\soul-identities.json not found; using compiled fallback (%s)",
             kRegistryHash);
+    }
+
+    // 3. Load authoritative registry-generated weapon config (plugins/data/soul-weapon-config.json).
+    // Fail-closed on missing, stale, schema-mismatched, or integrity-failed config.
+    if (weapon_rules_out != nullptr && presentation_out != nullptr) {
+        wchar_t wc_path[MAX_PATH]{};
+        size_t wc_len = 0;
+        std::unique_ptr<char[]> wc_buf(new (std::nothrow) char[kMaxWeaponConfigFileBytes + 1]{});
+        const auto* id_snap = g_active_runtime_identity.load(std::memory_order_acquire);
+        const char* expected_hash = (id_snap != nullptr && id_snap->active) ? id_snap->registry_hash : kRegistryHash;
+
+        if (wc_buf != nullptr &&
+            build_trusted_data_path(mod, L"soul-weapon-config.json", wc_path, MAX_PATH) &&
+            read_bounded_file_w(wc_path, wc_buf.get(), kMaxWeaponConfigFileBytes, wc_len)) {
+            bool loaded_ok = false;
+            try {
+                ParsedWeaponConfig parsed_wc{};
+                if (parse_weapon_config_json(wc_buf.get(), wc_len, expected_hash, parsed_wc)) {
+                    weapon_rules_out->replace_all(
+                        parsed_wc.native_rules.empty() ? nullptr : parsed_wc.native_rules.data(),
+                        static_cast<uint32_t>(parsed_wc.native_rules.size()));
+                    presentation_out->replace_config(
+                        parsed_wc.bindings,
+                        parsed_wc.profiles,
+                        parsed_wc.registry_hash,
+                        parsed_wc.weapon_config_hash);
+                    loaded_ok = true;
+                    log_message(LOG_LEVEL_INFO,
+                        "Loaded runtime soul-weapon-config.json (%u rules, %u profiles, hash=%s)",
+                        static_cast<unsigned>(parsed_wc.native_rules.size()),
+                        static_cast<unsigned>(parsed_wc.profiles.size()),
+                        parsed_wc.weapon_config_hash);
+
+                    // Optional developer-only calibration overrides (strictly disabled by default).
+                    wchar_t cal_path[MAX_PATH]{};
+                    size_t cal_len = 0;
+                    if (build_trusted_data_path(mod, L"soul-weapon-calibration.local.json", cal_path, MAX_PATH) &&
+                        read_bounded_file_w(cal_path, wc_buf.get(), kMaxWeaponConfigFileBytes, cal_len)) {
+                        if (apply_weapon_calibration_json(wc_buf.get(), cal_len, *presentation_out)) {
+                            log_message(LOG_LEVEL_INFO,
+                                "Applied developer weapon calibration overrides from soul-weapon-calibration.local.json");
+                        }
+                    }
+                } else {
+                    log_message(LOG_LEVEL_WARN,
+                        "Invalid soul-weapon-config.json (%s); failing closed to vanilla weapon behavior",
+                        parsed_wc.warning);
+                }
+            } catch (...) {
+                log_message(LOG_LEVEL_WARN,
+                    "Exception loading soul-weapon-config.json; failing closed to vanilla weapon behavior");
+            }
+            if (!loaded_ok) {
+                weapon_rules_out->clear();
+                presentation_out->clear();
+            }
+        } else {
+            weapon_rules_out->clear();
+            presentation_out->clear();
+            log_message(LOG_LEVEL_WARN,
+                "data\\soul-weapon-config.json not found; failing closed to vanilla weapon behavior");
+        }
     }
 }
 #endif

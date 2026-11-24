@@ -11,3 +11,5 @@ tools/backups/
 
 __pycache__/
 *.pyc
+*.local.json
+*.local.json.export.json

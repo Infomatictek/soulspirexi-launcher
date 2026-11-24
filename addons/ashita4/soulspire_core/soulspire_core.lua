@@ -22,10 +22,13 @@ local Input      = require('core.input')
 local Assets       = require('core.assets')
 local UI           = require('core.ui')
 local NativeBridge = require('core.native_bridge')
+local WeaponPres   = require('core.weapon_presentation')
+local WeaponProbe  = require('core.weapon_render_probe')
 
 local registry = Registry.new()
 local focus    = Focus.new(registry)
 local input    = Input.new()
+local weapon_pres = WeaponPres.new()
 local menu, assets, ui
 
 local function log(msg)
@@ -53,6 +56,13 @@ end
 
 ashita.events.register('load', 'soulspire_core_load', function()
     assets = Assets.new(addon.path)
+    if type(addon.path) == 'string' and addon.path ~= '' then
+        local data_dir = addon.path:gsub('[/\\]+$', '') .. '\\..\\..\\plugins\\data\\'
+        weapon_pres.config_path = data_dir .. 'soul-weapon-config.json'
+        weapon_pres.calibration_path = data_dir .. 'soul-weapon-calibration.local.json'
+        weapon_pres.probe_output_path = data_dir .. 'soul-weapon-render-probe.local.json'
+        weapon_pres:load_file()
+    end
     local ok, scaling = pcall(require, 'scaling')
     if ok and scaling and scaling.scaled and scaling.scaled.w > 0 and scaling.scaled.h > 0 then
         local ptr_ok, operand = pcall(function()
@@ -135,8 +145,53 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
             log(('  [%d] form="%s" rect=(%d,%d,%d,%d) current=%s'):format(
                 i, win.name, win.left, win.top, win.right, win.bottom, tostring(win.is_current)))
         end
+    elseif sub == 'weapondiag' then
+        local action = (rest or ''):lower():gsub('^%s+', ''):gsub('%s+$', '')
+        if action == 'on' then
+            weapon_pres:set_diagnostics_enabled(true)
+            weapon_pres:load_calibration_file()
+            log('Developer weapon alignment diagnostics ENABLED (disabled by default; live sync to soulspire_native active).')
+        elseif action == 'off' then
+            weapon_pres:set_diagnostics_enabled(false)
+            if weapon_pres.calibration_path then weapon_pres:save_calibration_and_sync_native() end
+            log('Developer weapon alignment diagnostics DISABLED.')
+        elseif action == 'save' then
+            local ok, path, synced = weapon_pres:save_calibration_and_sync_native()
+            log(ok and ('Saved developer calibration to ' .. tostring(path) .. ' (native_sync=' .. tostring(synced) .. ')')
+                or ('Save failed: ' .. tostring(path)))
+        elseif action == 'export' then
+            local ok, res = weapon_pres:export_file()
+            log(ok and ('Exported calibrated weapon presentation profile to ' .. tostring(res))
+                or ('Export failed: ' .. tostring(res)))
+        elseif action == 'reset' then
+            weapon_pres:reset_transforms()
+            if weapon_pres.calibration_path then weapon_pres:save_calibration_and_sync_native() end
+            log('Reset weapon presentation transforms to authoritative registry baseline.')
+        elseif action == 'probe' then
+            local ok, res, out_path = WeaponProbe.run_live_probe({
+                diagnostics_enabled = weapon_pres:is_diagnostics_enabled(),
+                output_path = weapon_pres.probe_output_path,
+            })
+            if ok and type(res) == 'table' then
+                local total = 0
+                for _, f in ipairs(res.findings or {}) do total = total + (f.match_count or 0) end
+                log(('Weapon render probe COMPLETE: anchors=%d/%d findings=%d output=%s (private local file, never commit)'):format(
+                    res.anchor_matched or 0, res.anchor_total or 0, total, tostring(out_path)))
+            else
+                log('Weapon render probe refused/failed: ' .. tostring(res))
+            end
+        else
+            local st = weapon_pres:status()
+            log(('weapondiag loaded=%s enabled=%s bindings=%d profiles=%d peers=%d hash=%s (usage: /soulspire weapondiag on|off|save|export|reset|probe)'):format(
+                tostring(st.loaded),
+                tostring(st.diagnostics_enabled),
+                st.binding_count,
+                st.profile_count,
+                st.peer_count,
+                tostring(st.weapon_config_hash)))
+        end
     else
-        log('Commands: /soulspire [open [section] | close | status | debug] (alias: /ss)')
+        log('Commands: /soulspire [open [section] | close | status | debug | weapondiag] (alias: /ss)')
     end
 end)
 
@@ -183,11 +238,15 @@ ashita.events.register('dinput_button', 'soulspire_core_dinput_button', function
     end
 end)
 
--- Cleanly blur/close on zone transitions and logout.
+-- Cleanly blur/close on zone transitions and track authoritative OXSI peer Souls.
 ashita.events.register('packet_in', 'soulspire_core_packet_in', function(e)
     if e.id == 0x00A or e.id == 0x00B then
         focus:blur_all('zone_change')
         input:reset()
+        weapon_pres:reset_peers()
+    elseif e.id == 0x1FC then
+        local now_sec = ashita.time and ashita.time.get_tick64 and (ashita.time.get_tick64() / 1000) or os.time()
+        weapon_pres:observe_oxsi(e.data_modified or e.data, now_sec)
     end
 end)
 
@@ -195,4 +254,7 @@ ashita.events.register('d3d_present', 'soulspire_core_present', function()
     if not ui then return end
     local native = current_native_menu()
     ui:draw(native, menu ~= nil and menu:is_available())
+    if weapon_pres:is_diagnostics_enabled() then
+        weapon_pres:draw_diagnostics_panel(imgui)
+    end
 end)

@@ -94,11 +94,16 @@ class TestingChannelPublishTests(unittest.TestCase):
             self.assertEqual("2.1.0-testing.1", testing_data["manifestVersion"])
             self.assertEqual(27, testing_data["serverCompatibility"]["crystalJobsHooks"])
 
-            # Overridden crystalsocket files point into channels/testing/payload/
+            # Canonical registry-driven crystalsocket/weapon_config.lua is preserved (no stale legacy override),
+            # while Testing payload overrides (e.g. soulspire_native.dll) point into channels/testing/payload/.
             by_target = {f["targetPath"]: f for f in testing_data["files"]}
             self.assertEqual(
-                "channels/testing/payload/addons/ashita4/crystalsocket/weapon_config.lua",
+                "addons/ashita4/crystalsocket/weapon_config.lua",
                 by_target["crystalsocket/weapon_config.lua"]["sourcePath"],
+            )
+            self.assertEqual(
+                "channels/testing/payload/plugins/ashita4/soulspire_native.dll",
+                by_target["soulspire_native.dll"]["sourcePath"],
             )
 
             # Both Stable and Testing manifests pass strict read-only verifier
