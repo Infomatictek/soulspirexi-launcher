@@ -132,4 +132,20 @@ assert(ok_unsynced == true)
 assert(rep_unsynced.candidates[1].decision == 'REJECT')
 assert(rep_unsynced.candidates[1].rejection_reason == 'NATIVE_SOUL_NOT_SYNCED')
 
+-- 6. Packet 0x050 observer records outgoing/incoming equip packets cleanly.
+Diag.clear_packet_trace()
+local p_out = string.char(0x50, 0x04, 0x00, 0x00, 12, 1, 0, 0) -- invIndex=12, equipSlot=1 (Sub), container=0
+local rec_out = Diag.observe_equip_packet('out', p_out, 100.5)
+assert(rec_out ~= nil and rec_out.dir == 'out' and rec_out.invIndex == 12 and rec_out.equipSlot == 1 and rec_out.container == 0)
+local ok_tr, rep_tr = Diag.run_diagnostic({
+    diagnostics_enabled = true,
+    rules_override = rules,
+    effective_level = 20,
+    main_weapon = main_ga,
+    candidates = { second_ga },
+    slices_override = {},
+    native_override = { dll_loaded = true, enabled = true, installed_hooks = 31, expected_hooks = 31, installed_mask = ALL_27_HOOKS_MASK, job = 1, branch = 2, known = true, weapon_rules_count = 2 },
+})
+assert(ok_tr == true and rep_tr.summary.packets0x050Count == 1 and rep_tr.packetTrace0x050[1].equipSlot == 1)
+
 print('Soulspire Core weapon_equip_diag tests passed.')

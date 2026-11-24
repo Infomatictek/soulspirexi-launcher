@@ -19,6 +19,70 @@ local ok_ffi, ffi = pcall(require, 'ffi')
 
 local D = {}
 
+local packet_trace = {}
+local MAX_PACKET_TRACE = 32
+
+function D.clear_packet_trace()
+    packet_trace = {}
+end
+
+function D.observe_equip_packet(direction, data, ts)
+    if type(data) ~= 'string' or #data < 8 then return nil end
+    local rec = {
+        dir = tostring(direction),
+        invIndex = data:byte(5) or 0,
+        equipSlot = data:byte(6) or 0,
+        container = data:byte(7) or 0,
+        ts = tonumber(ts) or 0,
+    }
+    packet_trace[#packet_trace + 1] = rec
+    if #packet_trace > MAX_PACKET_TRACE then
+        table.remove(packet_trace, 1)
+    end
+    return rec
+end
+
+function D.get_packet_trace()
+    local copy = {}
+    for i = 1, #packet_trace do
+        copy[i] = packet_trace[i]
+    end
+    return copy
+end
+
+-- Narrowly scoped, read-only .text slice capture for EquipMenu::TryEquipItem (0x133BD0..0x133ED0)
+-- and CanEquipItemInSlot (0x133580..0x133680) to verify exact register/branch layout on retail FFXiMain.dll.
+-- Never dumps heap, stack, credentials, or unrelated memory.
+function D.capture_try_equip_slices()
+    if not (ok_ffi and ffi) then return {} end
+    local ok, slices = pcall(function()
+        local h = ffi.C.GetModuleHandleA('FFXiMain.dll')
+        if h == nil then return {} end
+        local base = tonumber(ffi.cast('uintptr_t', h))
+        if not base or base == 0 then return {} end
+        local specs = {
+            { name = 'TryEquipItem', rva = 0x133BD0, size = 0x300 },
+            { name = 'CanEquipItemInSlot', rva = 0x133580, size = 0x100 },
+        }
+        local out = {}
+        for _, sp in ipairs(specs) do
+            local ptr = ffi.cast('const uint8_t*', base + sp.rva)
+            local hex = {}
+            for i = 0, sp.size - 1 do
+                hex[#hex + 1] = ('%02x'):format(tonumber(ptr[i]))
+            end
+            out[#out + 1] = {
+                name = sp.name,
+                rva = ('0x%X'):format(sp.rva),
+                size = sp.size,
+                bytesHex = table.concat(hex),
+            }
+        end
+        return out
+    end)
+    return (ok and type(slices) == 'table') and slices or {}
+end
+
 D.MODE_NAMES = {
     [0] = 'vanilla',
     [1] = 'dual_1h',
@@ -572,6 +636,8 @@ function D.run_diagnostic(opts)
         end
     end
 
+    local trace = opts.packet_trace_override or D.get_packet_trace()
+    local slices = opts.slices_override or D.capture_try_equip_slices()
     local resolved_soul_id = soul_rules[1] and soul_rules[1].soul_id or nil
     local report = {
         schemaVersion = 1,
@@ -604,11 +670,15 @@ function D.run_diagnostic(opts)
                 and native.compiled_registry_hash == opts.config_registry_hash,
         },
         mainWeapon = main_weapon,
+        packetTrace0x050 = trace,
+        tryEquipCodeSlices = slices,
         summary = {
             candidateCount = #evaluations,
             allowedDual2h = allowed_dual_2h,
             allowedVanillaSub = allowed_vanilla_sub,
             rejected = rejected,
+            packets0x050Count = #trace,
+            codeSlicesCount = #slices,
         },
         candidates = evaluations,
     }
