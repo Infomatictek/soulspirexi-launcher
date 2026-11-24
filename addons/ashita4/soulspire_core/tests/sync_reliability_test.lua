@@ -51,19 +51,24 @@ assert_true(ds:is_cache_ready(), 'Static cache must load cleanly')
 assert_true(not ds:is_talents_warm(), 'Large talents.json deferred at startup')
 
 local warmupFrames = 0
-local maxWarmupSliceMs = 0
+local maxWarmupFrameMs = 0
+local totalWarmupMs = 0
 while not ds:is_talents_warm() do
     local s0 = os.clock()
     ds:step_warmup(4.0)
     local dt = (os.clock() - s0) * 1000
-    if warmupFrames > 0 and warmupFrames < 10 and dt > maxWarmupSliceMs then
-        maxWarmupSliceMs = dt
+    if dt > maxWarmupFrameMs then
+        maxWarmupFrameMs = dt
     end
+    totalWarmupMs = totalWarmupMs + dt
     warmupFrames = warmupFrames + 1
-    assert_true(warmupFrames < 200, 'Cooperative warmup must converge cleanly')
+    assert_true(warmupFrames < 300, 'Cooperative warmup must converge cleanly')
 end
 assert_true(ds:is_talents_warm(), 'talents.json cooperatively verified and indexed')
+assert_true(warmupFrames >= 8, 'Warmup must span multiple budgeted frames (read + SHA-256 + incremental parse)')
+assert_true(maxWarmupFrameMs < 35.0, string.format('Every warmup frame (read + hash + parse) must stay within budget, got %.2fms', maxWarmupFrameMs))
 assert_eq(#ds:get_all_weapon_skills(), 219, '219 weapon skills cached')
+assert_true(ds:get_ws_tree(42, 'spellblade') ~= nil, 'Incrementally parsed Savage Blade tree resolves cleanly')
 
 -- =========================================================================
 -- Scenario 3, 4, 5: Instant Cached Preview, Tab Switch Dedup, Repeated Sync
@@ -266,7 +271,7 @@ assert_true(recState.synced and recState.syncState == 'synced' and recState.last
 
 local stats = ds:get_sync_stats()
 print(string.format(
-    'SYNC_RELIABILITY_OK eager=%.1fms warmupFrames=%d avgLat=%.1fms p95=%.1fms ok=%d fail=%d staleDropped=%d deduped=%d',
-    eagerMs, warmupFrames, stats.avgLatencyMs, stats.p95LatencyMs,
+    'SYNC_RELIABILITY_OK eager=%.1fms warmupFrames=%d maxWarmupFrame=%.2fms totalWarmup=%.1fms avgLat=%.1fms p95=%.1fms ok=%d fail=%d staleDropped=%d deduped=%d',
+    eagerMs, warmupFrames, maxWarmupFrameMs, totalWarmupMs, stats.avgLatencyMs, stats.p95LatencyMs,
     stats.completedCount, stats.failureCount, stats.staleDropped, stats.dedupedRequests
 ))

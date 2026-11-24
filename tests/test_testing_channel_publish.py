@@ -310,19 +310,20 @@ class TestingChannelPublishTests(unittest.TestCase):
         self.assertEqual(stable["repo"]["branch"], "main")
         self.assertEqual(core["channel"], "testing")
         self.assertEqual(core["candidateId"], "core-ui-24hook")
-        self.assertEqual(core["repo"]["branch"], "feat/soulforge-visual-target-ui")
+        self.assertEqual(core["repo"]["branch"], "feat/client-data-cache-overhaul")
         self.assertEqual(
             core["repo"]["rawBaseUrl"],
-            "https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/feat/soulforge-visual-target-ui",
+            "https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/feat/client-data-cache-overhaul",
         )
 
-        # Verify all required Core, Cache, Soulforge, bespoke art, and native DLL files are included
+        # Verify all required Core, Cache, CharacterState, Soulforge, bespoke art, and native DLL files are included
         targets = {f["targetPath"]: f for f in core["files"]}
         for required_target in (
             "soulspire_core/soulspire_core.lua",
             "soulspire_core/core/foundations.lua",
             "soulspire_core/core/registry.lua",
             "soulspire_core/core/data_service.lua",
+            "soulspire_core/core/character_state.lua",
             "soulspire_core/core/json.lua",
             "soulspire_core/core/sha256.lua",
             "soulspire_core/core/ipc.lua",

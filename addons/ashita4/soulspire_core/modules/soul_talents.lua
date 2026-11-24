@@ -313,11 +313,15 @@ function SoulTalents:draw(imgui, dl, F, L, x, y, w, h, ctx)
         shadow     = false,
     })
 
+    local actLvl = math.max(1, tonumber(st.jobLevel) or 1)
+    local effLvl = math.max(1, tonumber(st.effectiveLevel) or actLvl)
+    local isSynced = (st.isLevelSynced == true) or (effLvl < actLvl)
+    local lvlLabel = isSynced and string.format('Lv.%d (Sync %d)', effLvl, actLvl) or string.format('Lv.%d', actLvl)
     F.drawShadowText(imgui, dl, x + 20 * s, y + 12 * s,
         F.fitText(imgui, soulName, math.floor(w * 0.28), 1.24 * s), F.u32.white, 1.24 * s, 'l')
     F.drawShadowText(imgui, dl, x + 20 * s, y + 42 * s,
-        F.fitText(imgui, string.format('%s Lv.%d  |  %s', st.jobKey or '---', st.jobLevel or 1, soulRole), math.floor(w * 0.30), 0.90 * s),
-        F.u32.crystal_violet_bright, 0.90 * s, 'l')
+        F.fitText(imgui, string.format('%s %s  |  %s', st.jobKey or '---', lvlLabel, soulRole), math.floor(w * 0.30), 0.90 * s),
+        isSynced and F.u32.aether_cyan or F.u32.crystal_violet_bright, 0.90 * s, 'l')
 
     local midX = x + w * 0.5
     F.drawShadowText(imgui, dl, midX, y + 12 * s, 'SOUL TALENTS', F.u32.soul_gold_bright, (L.mode == 'focused' and 1.12 or 1.46) * s, 'c')

@@ -66,6 +66,13 @@ class TestClientCacheAndSync(unittest.TestCase):
             "SYNC_RELIABILITY_OK",
         )
 
+    def test_character_state_reactive_luajit_suite(self) -> None:
+        _run_lua_suite(
+            LAUNCHER_ROOT / "addons" / "ashita4" / "soulspire_core",
+            "tests/character_state_test.lua",
+            "CHARACTER_STATE_TEST_OK",
+        )
+
     def test_existing_soulspire_core_suite_passes(self) -> None:
         _run_lua_suite(
             LAUNCHER_ROOT / "addons" / "ashita4" / "soulspire_core",

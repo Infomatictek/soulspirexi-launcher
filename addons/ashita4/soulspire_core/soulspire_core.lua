@@ -20,9 +20,10 @@ addon.link    = 'https://github.com/Infomatictek/soulspirexi-launcher'
 require('common')
 local ffi           = require('ffi')
 local imgui         = require('imgui')
-local Registry      = require('core.registry')
-local DataService   = require('core.data_service')
-local CoreIPC       = require('core.ipc')
+local Registry       = require('core.registry')
+local DataService    = require('core.data_service')
+local CharacterState = require('core.character_state')
+local CoreIPC        = require('core.ipc')
 local MenuBridge    = require('core.menu_bridge')
 local NativeBridge  = require('core.native_bridge')
 local Focus         = require('core.focus')
@@ -37,6 +38,7 @@ local registry = Registry.new()
 local focus    = Focus.new(registry)
 local input    = Input.new()
 local data_service = nil
+local character_state = nil
 local oxtl_ipc_token, oxhud_ipc_token = nil, nil
 local menu, assets, ui
 local sf_state, sf_actions, sf_ui, sf_art
@@ -46,8 +48,6 @@ local last_session_active = false
 local watch_menus = false
 local last_watched_form = nil
 local last_native_probe_at = 0
-local sf_last_auto_check = 0
-local sf_last_context_sig = nil
 
 local function log(msg)
     print('[soulspire_core] ' .. tostring(msg))
@@ -203,41 +203,6 @@ local function is_imgui_text_active()
     return ok and want == true
 end
 
-local function read_sf_context_signature()
-    local ok, sig = pcall(function()
-        local mem    = AshitaCore:GetMemoryManager()
-        local player = mem and mem:GetPlayer()
-        if not player then return nil end
-        local j = player:GetMainJob() or 0
-        if j <= 0 then return nil end
-        local getLvl = player.GetMainJobLevel or player.GetMainLevel
-        local l = getLvl and getLvl(player) or 1
-        local mainEq, rngEq = '0:0', '0:0'
-        local inv = mem.GetInventory and mem:GetInventory()
-        if inv and inv.GetEquippedItem then
-            local function eqSig(slot)
-                local eq = inv:GetEquippedItem(slot)
-                if eq and (eq.Index or 0) > 0 then
-                    local idx = eq.Index
-                    local bag = math.floor(idx / 256)
-                    local slotIdx = idx % 256
-                    local itemId = 0
-                    if inv.GetContainerItem then
-                        local it = inv:GetContainerItem(bag, slotIdx)
-                        if it and it.Id then itemId = it.Id end
-                    end
-                    return string.format('%d:%d', idx, itemId)
-                end
-                return '0:0'
-            end
-            mainEq = eqSig(0)
-            rngEq  = eqSig(2)
-        end
-        return string.format('%d|%d|%s|%s', j, l, mainEq, rngEq)
-    end)
-    return ok and sig or nil
-end
-
 local function is_player_in_session()
     local ok, active = pcall(function()
         local mem    = AshitaCore:GetMemoryManager()
@@ -300,6 +265,12 @@ local function init_modules()
             tostring(info.contentVersion), info.schemaVersion, tostring(info.registryHash), info.loadMs))
     end
 
+    -- 0b. Centralized Reactive Character State Service (shared across all Core modules)
+    character_state = CharacterState.new({
+        data_service  = data_service,
+        soul_registry = Registry.souls,
+    })
+
     -- Register process-local packet coexistence tokens so standalone addons never prematurely
     -- block 0x1FD OXTL or 0x017 [OXHUD]| packets before Core receives them.
     oxtl_ipc_token  = CoreIPC.register_listener('OXTL', 'soulspire_core')
@@ -312,12 +283,13 @@ local function init_modules()
     local cs_state = (cs_state_mod and cs_state_mod.new) and cs_state_mod.new() or nil
     if cs_proto and cs_state then
         character_mod = CharacterMod.new({
-            protocol      = cs_proto,
-            crystal_state = cs_state,
-            soul_registry = Registry.souls,
-            data_service  = data_service,
-            assets        = assets,
-            dll_status_fn = read_crystaljobs_status,
+            protocol        = cs_proto,
+            crystal_state   = cs_state,
+            character_state = character_state,
+            soul_registry   = Registry.souls,
+            data_service    = data_service,
+            assets          = assets,
+            dll_status_fn   = read_crystaljobs_status,
         })
         registry:attach_controller('character', character_mod, true)
     else
@@ -343,6 +315,11 @@ local function init_modules()
             wsRegistry   = ws_reg,
             dataService  = data_service,
             savePrefs    = save_settings,
+            onMeta       = function(st)
+                if character_state then
+                    character_state:observe_oxtl_meta(st)
+                end
+            end,
         })
         weapon_mastery_mod = WeaponMastery.new(sf_state, sf_actions, sf_ui)
         registry:attach_controller('weapon_mastery', weapon_mastery_mod, true)
@@ -361,6 +338,23 @@ local function init_modules()
         registry:set_available('weapon_mastery', false, 'Soulforge sibling modules unavailable.')
         registry:set_available('soul_talents', false, 'Soulforge sibling modules unavailable.')
     end
+
+    -- Subscribe all Core modules to reactive CharacterState transitions (0ms UI updates + forced sync)
+    character_state:subscribe(function(ev)
+        if sf_actions and sf_actions.applyCharacterState then
+            sf_actions.applyCharacterState(ev.cur, ev)
+        end
+        if ev.affects_crystals and ev.source ~= 'crys_state' and character_mod then
+            character_mod:refresh_player_context()
+            if character_mod.crystal_state then
+                character_mod.crystal_state.needs_refresh = true
+            end
+            local active_mod = focus:active_module()
+            if focus:is_hub_open() and active_mod and active_mod.id == 'character' then
+                character_mod:sync(false)
+            end
+        end
+    end)
 end
 
 ashita.events.register('load', 'soulspire_core_load', function()
@@ -393,6 +387,12 @@ ashita.events.register('load', 'soulspire_core_load', function()
         on_scale_change = function() save_settings() end,
         get_last_device = function() return input and input.last_device or 'gamepad' end,
         get_identity    = function()
+            if character_state then
+                local id = character_state:get_header_identity()
+                if id and id.job_key and id.job_key ~= '---' then
+                    return id
+                end
+            end
             if character_mod then
                 return character_mod:get_header_identity()
             end
@@ -581,11 +581,17 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
         local c = diag_ds.cache
         local m = diag_ds.metrics
         local ss = diag_ds.syncStats or {}
-        log(('syncdiag proto=v%d v2Confirmed=%s cache=%s/%s talentsWarm=%s wait=%s avg=%.1fms p95=%.1fms max=%.1fms ok=%d fail=%d retries=%d timeouts=%d stale=%d dedup=%d oxtl_in=%d(%dB) oxtl_out=%d'):format(
+        local ws_st = diag_ds.warmupStats or {}
+        local cs_snap = character_state and character_state:get_snapshot() or nil
+        log(('syncdiag proto=v%d v2Confirmed=%s cache=%s/%s talentsWarm=%s(frames=%d max=%.2fms) char=%s/%s(%s) wait=%s avg=%.1fms p95=%.1fms max=%.1fms ok=%d fail=%d retries=%d timeouts=%d stale=%d dedup=%d oxtl_in=%d(%dB) oxtl_out=%d'):format(
             sf_state and (sf_state.protocolVersion or 1) or 1,
             tostring(sf_state and sf_state.v2Confirmed == true),
             tostring(c.status), tostring(c.compatState),
             tostring(data_service:is_talents_warm()),
+            tonumber(ws_st.frames) or 0, tonumber(ws_st.maxFrameMs) or 0,
+            tostring(cs_snap and cs_snap.main_job_key or '---'),
+            tostring(cs_snap and cs_snap.level_label or 'Lv.0'),
+            tostring(cs_snap and cs_snap.soul_name or 'Base'),
             tostring(sf_state and sf_state.waitingOn or 'idle'),
             tonumber(ss.avgLatencyMs) or 0, tonumber(ss.p95LatencyMs) or 0, tonumber(ss.maxLatencyMs) or 0,
             tonumber(ss.completedCount) or 0, tonumber(ss.failureCount) or 0,
@@ -699,6 +705,7 @@ end)
 
 -- Packet synchronization & safe zone/logout lifecycle handling.
 ashita.events.register('packet_in', 'soulspire_core_packet_in', function(e)
+    local buf = e.data_modified or e.data
     if e.id == 0x00A or e.id == 0x00B then
         focus:blur_all('zone_change')
         input:reset()
@@ -707,11 +714,17 @@ ashita.events.register('packet_in', 'soulspire_core_packet_in', function(e)
         elseif sf_state then
             sf_state.needsRefresh = true
         end
-        sf_last_context_sig = nil
+        if character_state then
+            character_state:observe_packet_in(e.id, buf, e.size, os.clock())
+        end
         return
     end
 
-    local buf = e.data_modified or e.data
+    if character_state and (e.id == 0x061 or e.id == 0x01B or e.id == 0x0DF or e.id == 0x0DD or e.id == 0x063) then
+        character_state:observe_packet_in(e.id, buf, e.size, os.clock())
+        return
+    end
+
     if sf_actions and sf_actions.handlePacketIn(e.id, buf, e.size) then
         if CoreIPC.should_block(oxtl_ipc_token) then
             e.blocked = true
@@ -729,9 +742,10 @@ ashita.events.register('packet_in', 'soulspire_core_packet_in', function(e)
     if e.id == 0x1FC and character_mod and cs_soul_identity and cs_soul_identity.decode and type(buf) == 'string' then
         character_mod:refresh_player_context()
         local info = character_mod.player_info
-        local decoded = cs_soul_identity.decode(buf, info and info.main_job or 0)
+        local job_id = info and info.main_job or (character_state and character_state.main_job) or 0
+        local decoded = cs_soul_identity.decode(buf, job_id)
         if decoded then
-            character_mod:observe_hud_identity(decoded.branch, info and info.main_job or 0)
+            character_mod:observe_hud_identity(decoded.branch, job_id)
         end
         return
     end
@@ -754,21 +768,36 @@ ashita.events.register('packet_out', 'soulspire_core_packet_out', function(e)
         if sf_actions and sf_actions.invalidate then
             sf_actions.invalidate('logout')
         end
+        if character_state then
+            character_state:invalidate('logout', os.clock())
+        end
     end
 end)
 
 ashita.events.register('d3d_present', 'soulspire_core_present', function()
     if not ui then return end
 
+    local now = os.clock()
     local in_session = is_player_in_session()
     if last_session_active and not in_session then
         focus:blur_all('disconnect')
         input:reset()
+        if sf_actions and sf_actions.invalidate then
+            sf_actions.invalidate('disconnect')
+        end
+        if character_state then
+            character_state:invalidate('disconnect', now)
+        end
     end
     last_session_active = in_session
 
+    -- Continuously synchronize centralized CharacterState (actual level, Level Sync, job,
+    -- subjob, equipped weapon, zone, reconnect) EVEN while Core is closed or on another tab!
+    if character_state then
+        character_state:poll_memory(now)
+    end
+
     -- Re-probe soulspire_native.dll if it finished Direct3D initialization after addon load.
-    local now = os.clock()
     if menu and not menu.native_hook_supported and (now - last_native_probe_at) >= 0.5 then
         last_native_probe_at = now
         menu:refresh_native_status()
@@ -784,8 +813,8 @@ ashita.events.register('d3d_present', 'soulspire_core_present', function()
         input:arm_open_guard(0.20)
     end
 
-    -- Cooperative background warmup for talents.json (<=4ms/frame) so opening Weapon Mastery
-    -- displays cached trees instantaneously with zero main-thread stutter.
+    -- Cooperative background warmup for talents.json (<=4ms/frame across read, SHA-256, and JSON parse)
+    -- so opening Weapon Mastery displays cached trees instantaneously with zero main-thread stutter.
     if data_service and data_service.step_warmup and data_service:is_cache_usable() and not data_service:is_talents_warm() then
         data_service:step_warmup(4.0)
     end
@@ -807,20 +836,8 @@ ashita.events.register('d3d_present', 'soulspire_core_present', function()
             if (not sf_state.synced and sf_state.syncPending == nil and sf_state.lastSyncError == nil)
                 and (now - (sf_state.syncRequestedAt or 0)) >= 4.0 then
                 sf_actions.sync()
-            end
-            if (now - sf_last_auto_check) >= 1.0 then
-                sf_last_auto_check = now
-                local ctx_sig = read_sf_context_signature()
-                if ctx_sig ~= nil then
-                    if sf_last_context_sig ~= nil and ctx_sig ~= sf_last_context_sig then
-                        if not sf_state.synced then
-                            sf_actions.sync()
-                        else
-                            sf_actions.refreshState()
-                        end
-                    end
-                    sf_last_context_sig = ctx_sig
-                end
+            elseif sf_state.needsRefresh and sf_state.syncPending == nil then
+                sf_actions.refreshState(true)
             end
         end
     end

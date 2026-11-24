@@ -35,10 +35,11 @@ function Character.new(opts)
     end
 
     return setmetatable({
-        protocol      = opts.protocol,
-        crystal_state = cs_state,
-        soul_registry = opts.soul_registry,
-        data_service  = opts.data_service,
+        protocol        = opts.protocol,
+        crystal_state   = cs_state,
+        character_state = opts.character_state,
+        soul_registry   = opts.soul_registry,
+        data_service    = opts.data_service,
         assets        = opts.assets,
         send_packet   = opts.send_packet,
         clock         = opts.clock or os.clock,
@@ -121,7 +122,23 @@ end
 
 function Character:refresh_player_context()
     local info = nil
-    if type(self.player_ctx_fn) == 'function' then
+    if self.character_state and type(self.player_ctx_fn) ~= 'function' then
+        local snap = self.character_state:get_snapshot()
+        if snap and snap.in_session and (snap.main_job or 0) > 0 then
+            info = {
+                name            = snap.player_name or 'Adventurer',
+                server_id       = snap.server_id or 0,
+                zone            = snap.zone or 0,
+                main_job        = snap.main_job or 0,
+                main_lvl        = snap.actual_lvl or 0,
+                actual_lvl      = snap.actual_lvl or 0,
+                effective_lvl   = snap.effective_lvl or snap.actual_lvl or 0,
+                is_level_synced = snap.is_level_synced == true,
+                sub_job         = snap.sub_job or 0,
+                sub_lvl         = snap.sub_lvl or 0,
+            }
+        end
+    elseif type(self.player_ctx_fn) == 'function' then
         local ok, res = pcall(self.player_ctx_fn)
         if ok and type(res) == 'table' then info = res end
     elseif AshitaCore and AshitaCore.GetMemoryManager then
@@ -134,14 +151,21 @@ function Character:refresh_player_context()
             local tidx = party:GetMemberTargetIndex(0) or 0
             local name = party:GetMemberName(0)
             if sid < 1 or tidx == 0 or not name or name == '' then return nil end
+            local main_job = player:GetMainJob() or 0
+            local eff_lvl  = (player.GetMainJobLevel and player:GetMainJobLevel()) or 0
+            local act_lvl  = (player.GetJobLevel and main_job > 0 and player:GetJobLevel(main_job)) or eff_lvl
+            if act_lvl <= 0 then act_lvl = eff_lvl end
             return {
-                name      = name,
-                server_id = sid,
-                zone      = party:GetMemberZone(0) or 0,
-                main_job  = player:GetMainJob() or 0,
-                main_lvl  = (player.GetMainJobLevel and player:GetMainJobLevel()) or 0,
-                sub_job   = (player.GetSubJob and player:GetSubJob()) or 0,
-                sub_lvl   = (player.GetSubJobLevel and player:GetSubJobLevel()) or 0,
+                name            = name,
+                server_id       = sid,
+                zone            = party:GetMemberZone(0) or 0,
+                main_job        = main_job,
+                main_lvl        = act_lvl,
+                actual_lvl      = act_lvl,
+                effective_lvl   = eff_lvl > 0 and eff_lvl or act_lvl,
+                is_level_synced = (act_lvl > 0 and eff_lvl > 0 and eff_lvl < act_lvl),
+                sub_job         = (player.GetSubJob and player:GetSubJob()) or 0,
+                sub_lvl         = (player.GetSubJobLevel and player:GetSubJobLevel()) or 0,
             }
         end)
         if ok then info = res end
@@ -151,7 +175,7 @@ function Character:refresh_player_context()
         self.player_info = info
         if self.crystal_state then
             local key = tostring(info.server_id or 0) .. ':' .. tostring(info.name or '')
-            self.crystal_state:set_context(key, info.main_job, info.zone, info.main_lvl)
+            self.crystal_state:set_context(key, info.main_job, info.zone, info.actual_lvl or info.main_lvl)
         end
     else
         if self.crystal_state then
@@ -164,6 +188,9 @@ function Character:observe_hud_identity(branch, job_id)
     if type(branch) == 'number' and type(job_id) == 'number' then
         self.hud_branch = branch
         self.hud_job = job_id
+        if self.character_state then
+            self.character_state:observe_hud_identity(branch, job_id, self.clock())
+        end
     end
 end
 
@@ -192,6 +219,11 @@ function Character:handle_packet_in(id, data, now, size)
                     self.sync_retries = 0
                     self.retry_after = nil
                     self.last_sync_err = nil
+                    if self.character_state then
+                        local entry = decoded.entries and decoded.entries[decoded.job + 1]
+                        local active_branch = entry and entry.active or 0
+                        self.character_state:observe_crys_state(decoded.job, active_branch, decoded.level, ts)
+                    end
                 elseif decoded.result == 3 and self.sync_retries < MAX_SYNC_RETRIES then
                     -- Server Busy (e.g. concurrent sync): schedule clean bounded retry
                     self.sync_retries = self.sync_retries + 1
@@ -224,6 +256,10 @@ function Character:handle_packet_in(id, data, now, size)
         self.retry_after = nil
         self.last_sync_err = nil
         self:_ensure_cached_catalog_in_state(decoded.job)
+        if self.character_state then
+            local active_branch = self.crystal_state.accepted and self.crystal_state.accepted.active or 0
+            self.character_state:observe_crys_state(decoded.job, active_branch, decoded.level, ts)
+        end
     end
     return false
 end
@@ -361,25 +397,41 @@ function Character:get_entries()
 end
 
 function Character:get_header_identity()
+    if self.character_state then
+        local cs = self.character_state:get_header_identity()
+        if cs and cs.job_key and cs.job_key ~= '---' then
+            return cs
+        end
+    end
     local entries, snap, activeBranch, jobKey = self:get_entries()
     local activeName = 'Base'
     local activeAbbr = jobKey
+    local activeRole = 'Base Job'
     for _, e in ipairs(entries) do
         if e.branch == activeBranch then
             activeName = e.name
             activeAbbr = e.abbr or jobKey
+            activeRole = e.role or 'Base Job'
             break
         end
     end
+    local actLvl = snap.current_lvl or self.player_info.actual_lvl or self.player_info.main_lvl or 0
+    local effLvl = self.player_info.effective_lvl or actLvl
+    local isSynced = (self.player_info.is_level_synced == true) or (actLvl > 0 and effLvl > 0 and effLvl < actLvl)
     return {
-        player_name = self.player_info.name or 'Adventurer',
-        job_key     = jobKey,
-        job_level   = snap.current_lvl or self.player_info.main_lvl or 0,
-        sub_job_key = JOB_NAMES[self.player_info.sub_job or 0],
-        sub_level   = self.player_info.sub_lvl or 0,
-        soul_name   = activeName,
-        soul_abbr   = activeAbbr,
-        branch      = activeBranch,
+        player_name     = self.player_info.name or 'Adventurer',
+        job_key         = jobKey,
+        job_level       = actLvl,
+        actual_level    = actLvl,
+        effective_level = effLvl,
+        is_level_synced = isSynced,
+        level_label     = isSynced and string.format('Lv.%d (Sync %d)', effLvl, actLvl) or string.format('Lv.%d', actLvl),
+        sub_job_key     = JOB_NAMES[self.player_info.sub_job or 0],
+        sub_level       = self.player_info.sub_lvl or 0,
+        soul_name       = activeName,
+        soul_abbr       = activeAbbr,
+        soul_role       = activeRole,
+        branch          = activeBranch,
     }
 end
 
@@ -602,12 +654,17 @@ function Character:draw(imgui, dl, F, L, x, y, w, h, ctx)
     local subStr = (self.player_info.sub_job and self.player_info.sub_job > 0)
         and (' / ' .. (JOB_NAMES[self.player_info.sub_job] or '---') .. ' Lv.' .. tostring(self.player_info.sub_lvl or 0))
         or ''
-    local jobLine = string.format('%s Lv.%d%s', jobKey, snap.current_lvl or self.player_info.main_lvl or 0, subStr)
+    local actLvl = self.player_info.actual_lvl or snap.current_lvl or self.player_info.main_lvl or 0
+    local effLvl = self.player_info.effective_lvl or actLvl
+    local isSynced = (self.player_info.is_level_synced == true) or (actLvl > 0 and effLvl > 0 and effLvl < actLvl)
+    local lvlPart = isSynced and string.format('Lv.%d (Sync %d)', effLvl, actLvl) or string.format('Lv.%d', actLvl)
+    local jobLine = string.format('%s %s%s', jobKey, lvlPart, subStr)
 
     F.drawShadowText(imgui, dl, x + 20 * s, y + 12 * s,
         F.fitText(imgui, self.player_info.name or 'Adventurer', math.floor(w * 0.28), 1.24 * s),
         F.u32.white, 1.24 * s, 'l')
-    F.drawShadowText(imgui, dl, x + 20 * s, y + 42 * s, jobLine, F.u32.soul_gold_bright, 0.94 * s, 'l')
+    F.drawShadowText(imgui, dl, x + 20 * s, y + 42 * s, jobLine,
+        isSynced and F.u32.aether_cyan or F.u32.soul_gold_bright, 0.94 * s, 'l')
 
     local midX = x + w * 0.5
     F.drawShadowText(imgui, dl, midX, y + 12 * s, 'SOUL SANCTUM', F.u32.soul_gold_bright, (L.mode == 'focused' and 1.12 or 1.46) * s, 'c')

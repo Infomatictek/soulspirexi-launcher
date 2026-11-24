@@ -494,11 +494,18 @@ local function drawSoulforgeBanner(state, action, L, x, y, w, h, nav, standalone
     end
 
     local idX = medX + medR + (L.mode == 'focused' and 12 * s or 26 * s)
-    local jobLabel = string.format('%s  Lv.%d', state.jobKey or '---', state.jobLevel or 1)
+    local actualLvl = math.max(1, tonumber(state.jobLevel) or (nav and nav.identity and tonumber(nav.identity.actual_level)) or 1)
+    local effLvl = math.max(1, tonumber(state.effectiveLevel) or (nav and nav.identity and tonumber(nav.identity.effective_level)) or actualLvl)
+    local isSynced = (state.isLevelSynced == true) or (nav and nav.identity and nav.identity.is_level_synced == true) or (effLvl < actualLvl)
+    local jobKey = (state.jobKey and state.jobKey ~= '---') and state.jobKey or ((nav and nav.identity and nav.identity.job_key) or '---')
+    local jobLabel = isSynced
+        and string.format('%s  Lv.%d (Sync %d)', jobKey, effLvl, actualLvl)
+        or string.format('%s  Lv.%d', jobKey, actualLvl)
     F.drawShadowText(imgui, dl, idX, y + (L.mode == 'focused' and 10 or 12) * s,
-        jobLabel, F.u32.white, (L.mode == 'focused' and 1.02 or 1.24) * s, 'l')
+        F.fitText(imgui, jobLabel, math.floor(w * 0.27), (L.mode == 'focused' and 1.02 or 1.24) * s),
+        isSynced and F.u32.aether_cyan or F.u32.white, (L.mode == 'focused' and 1.02 or 1.24) * s, 'l')
 
-    local specDisplay = tostring(state.specName or 'Base')
+    local specDisplay = tostring(state.specName or (nav and nav.identity and nav.identity.soul_name) or 'Base')
     local soulRowY = y + (L.mode == 'focused' and 34 or 42) * s
     if dl and dl.AddCircleFilled then
         dl:AddCircleFilled({ idX + 7 * s, soulRowY + 8 * s }, 6 * s, F.u32.crystal_violet_bright, 12)
@@ -509,9 +516,19 @@ local function drawSoulforgeBanner(state, action, L, x, y, w, h, nav, standalone
         F.u32.crystal_violet_bright, 0.94 * s, 'l')
 
     if L.mode ~= 'focused' and h >= 82 * s then
-        local roleHint = (nav and nav.identity and nav.identity.sub_job_key and nav.identity.sub_job_key ~= '')
-            and string.format('Subjob: %s Lv.%d  |  Authoritative Progression', nav.identity.sub_job_key, nav.identity.sub_level or 0)
-            or 'Weapon Skill Mastery & Progression'
+        local subKey = state.subJobKey or (nav and nav.identity and nav.identity.sub_job_key)
+        local subLvl = tonumber(state.subLevel) or (nav and nav.identity and tonumber(nav.identity.sub_level)) or 0
+        local roleStr = state.soulRole or (nav and nav.identity and nav.identity.soul_role)
+        local roleHint
+        if subKey and subKey ~= '' and roleStr and roleStr ~= '' then
+            roleHint = string.format('%s  |  Sub: %s Lv.%d', roleStr, subKey, subLvl)
+        elseif subKey and subKey ~= '' then
+            roleHint = string.format('Subjob: %s Lv.%d  |  Authoritative Progression', subKey, subLvl)
+        elseif roleStr and roleStr ~= '' then
+            roleHint = string.format('%s  |  Authoritative Progression', roleStr)
+        else
+            roleHint = 'Weapon Skill Mastery & Progression'
+        end
         F.drawShadowText(imgui, dl, idX, y + 66 * s,
             F.fitText(imgui, roleHint, math.floor(w * 0.26), 0.78 * s),
             F.u32.text_secondary, 0.78 * s, 'l')

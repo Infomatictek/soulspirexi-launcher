@@ -236,7 +236,21 @@ function M.new(opts)
     local sendFn       = opts.sendPacket
     local clockFn      = opts.clock or os.clock
     local onJobChange  = opts.onJobChange
+    local onMeta       = opts.onMeta
     local onSavePrefs  = opts.savePrefs
+
+    local function resolveSpecRole(raw)
+        if type(raw) ~= 'string' or raw == '' or string.lower(raw) == 'base' then return 'Base Job' end
+        if dataService and dataService.get_soul_by_key then
+            local s = dataService:get_soul_by_key(raw)
+            if s and (s.roleLabel or s.roleCategory) then return tostring(s.roleLabel or s.roleCategory) end
+        end
+        if soulRegistry and soulRegistry.resolve then
+            local s = soulRegistry.resolve(raw)
+            if s and (s.roleLabel or s.roleCategory) then return tostring(s.roleLabel or s.roleCategory) end
+        end
+        return 'Soul'
+    end
 
     local function resolveSpecDisplayName(raw)
         if type(raw) ~= 'string' or raw == '' or raw == 'Base' then return 'Base' end
@@ -288,7 +302,12 @@ function M.new(opts)
         specName            = 'Base',
         rawSpecKey          = 'Base',
         specKey             = 'base',
+        soulRole            = 'Base Job',
         jobLevel            = 1,
+        effectiveLevel      = 1,
+        isLevelSynced       = false,
+        subJobKey           = nil,
+        subLevel            = 0,
         avail               = 0,
         spent               = 0,
         earned              = 1,
@@ -1044,6 +1063,8 @@ function M.new(opts)
         elseif kind == 'META' then
             local prevJob    = state.jobKey
             local prevSpec   = state.specName
+            local prevLvl    = state.jobLevel
+            local prevEffLvl = state.effectiveLevel
             local prevMain   = state.mainSkill
             local prevRanged = state.rangedSkill
             state.jobKey      = parts[2] or '---'
@@ -1062,12 +1083,32 @@ function M.new(opts)
                 state.specKey = (s and s.internalKey and string.lower(s.internalKey))
                     or string.lower(tostring(parts[9] or 'base'))
             end
+            state.soulRole = resolveSpecRole(state.specKey ~= 'base' and state.specKey or parts[9])
+
+            -- Optional backwards-compatible trailing META fields: effectiveLvl|subJobKey|subLvl
+            local effPart = tonumber(parts[11])
+            if effPart and effPart > 0 then
+                state.effectiveLevel = effPart
+            elseif not state.isLevelSynced or state.effectiveLevel > state.jobLevel then
+                state.effectiveLevel = state.jobLevel
+            end
+            state.isLevelSynced = (state.jobLevel > 0 and state.effectiveLevel > 0 and state.effectiveLevel < state.jobLevel)
+            if parts[12] ~= nil then
+                state.subJobKey = (parts[12] ~= '' and parts[12] ~= '---') and parts[12] or nil
+            end
+            if parts[13] ~= nil then
+                state.subLevel = tonumber(parts[13]) or 0
+            end
+
+            if type(onMeta) == 'function' then
+                pcall(onMeta, state)
+            end
 
             if state.pendingOp and state.pendingOp.kind == 'reset_all' then
                 state.pendingOp = nil
                 state.wsDetailsById = {}
                 if state.selectedWsId ~= nil then
-                    requestWS(state.selectedWsId)
+                    requestWS(state.selectedWsId, false, true)
                 end
             end
 
@@ -1091,10 +1132,17 @@ function M.new(opts)
                 end
                 if state.open[1] and state.syncPending == nil then
                     if isCompactEnabled() then
-                        requestStateRefresh()
+                        requestStateRefresh(true)
                     else
-                        requestFullSync()
+                        requestFullSync(false, true)
                     end
+                end
+            elseif wasInitialized and (prevLvl ~= state.jobLevel or prevEffLvl ~= state.effectiveLevel) then
+                -- Level or Level Sync changed: refresh active WS node eligibility live without closing UI
+                if state.open[1] and state.selectedWsId ~= nil then
+                    requestWS(state.selectedWsId, false, true)
+                else
+                    state.wsDetailsById = {}
                 end
             elseif (prevMain ~= state.mainSkill or prevRanged ~= state.rangedSkill) and state.selectedWsId == nil then
                 autoSelectEligibleWS()
@@ -1481,13 +1529,70 @@ function M.new(opts)
         return false
     end
 
+    -- Apply reactive CharacterState snapshot immediately (0ms UI lag) and force authoritative
+    -- server refresh whenever level, Level Sync, job, Soul, weapon, zone, or session changes.
+    local function applyCharacterState(snap, ev)
+        if type(snap) ~= 'table' then return false end
+        if snap.main_job_key and snap.main_job_key ~= '' and snap.main_job_key ~= '---' then
+            state.jobKey = snap.main_job_key
+        end
+        if tonumber(snap.actual_lvl) and tonumber(snap.actual_lvl) > 0 then
+            state.jobLevel = tonumber(snap.actual_lvl)
+        end
+        if tonumber(snap.effective_lvl) and tonumber(snap.effective_lvl) > 0 then
+            state.effectiveLevel = tonumber(snap.effective_lvl)
+        else
+            state.effectiveLevel = state.jobLevel
+        end
+        state.isLevelSynced = (snap.is_level_synced == true)
+            or (state.jobLevel > 0 and state.effectiveLevel > 0 and state.effectiveLevel < state.jobLevel)
+        state.subJobKey = snap.sub_job_key
+        state.subLevel  = tonumber(snap.sub_lvl) or 0
+
+        if snap.soul_key and snap.soul_key ~= '' then
+            state.specKey    = string.lower(tostring(snap.soul_key))
+            state.rawSpecKey = snap.soul_name or snap.soul_key
+            state.specName   = snap.soul_name or resolveSpecDisplayName(snap.soul_key)
+            state.soulRole   = snap.soul_role or resolveSpecRole(snap.soul_key)
+        end
+
+        if type(ev) ~= 'table' or ev.source == 'oxtl_meta' then
+            return true
+        end
+
+        if ev.clear_ws_cache then
+            state.wsDetailsById = {}
+            state.wsDetail      = nil
+            state.wsRequest     = nil
+            state.wsSyncState   = 'idle'
+            state.needsRefresh  = true
+        end
+
+        if ev.affects_talents then
+            if state.open[1] or ev.force_active_refresh == true then
+                if not state.synced then
+                    requestFullSync(false, true)
+                else
+                    requestStateRefresh(true)
+                    if state.selectedWsId ~= nil and not ev.clear_ws_cache then
+                        requestWS(state.selectedWsId, false, true)
+                    end
+                end
+            else
+                state.needsRefresh = true
+            end
+        end
+        return true
+    end
+
     local actions = {
-        send               = sendTalentPacket,
-        requestWS          = requestWS,
-        sync               = requestFullSync,
-        refreshState       = requestStateRefresh,
-        invalidate         = invalidateForLifecycle,
-        tick               = tick,
+        send                = sendTalentPacket,
+        requestWS           = requestWS,
+        sync                = requestFullSync,
+        refreshState        = requestStateRefresh,
+        invalidate          = invalidateForLifecycle,
+        applyCharacterState = applyCharacterState,
+        tick                = tick,
         seedFromCache      = seedCatalogFromCache,
         filtered           = getFilteredCatalog,
         skills             = M.SKILL_LIST,

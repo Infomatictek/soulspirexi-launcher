@@ -98,6 +98,13 @@ function DataService.new(opts)
         diag_events      = {},
         sync_log         = {}, -- timestamped per-request sync telemetry (max 32 entries)
         warmup_state     = nil, -- cooperative background warmup for large talents.json
+        warmup_stats     = {
+            frames      = 0,
+            maxFrameMs  = 0,
+            totalMs     = 0,
+            treesParsed = 0,
+            phase       = 'idle',
+        },
         metrics          = {
             packets_in_oxtl    = 0,
             packets_out_oxtl   = 0,
@@ -675,8 +682,9 @@ function DataService:_ensure_talents_loaded()
     return pkg ~= nil
 end
 
--- Cooperative background warmup for talents.json (6.8MB) so SHA-256 verification runs in
--- small chunks across idle d3d_present frames (never blocking the render/packet thread).
+-- Cooperative background warmup for talents.json (6.8MB) so file read, SHA-256 verification,
+-- AND JSON parsing ALL run in small time-budgeted slices across d3d_present frames
+-- (eliminating single-frame parse stalls on 32-bit Windows clients).
 function DataService:step_warmup(budget_ms)
     if not self:is_cache_usable() or self.talent_trees ~= nil then
         return true
@@ -688,10 +696,22 @@ function DataService:step_warmup(budget_ms)
     local budget = math.max(1.0, tonumber(budget_ms) or 4.0) / 1000.0
     local start_t = self.clock()
 
+    local function record_frame(phase_name)
+        local dt_ms = math.max(0, (self.clock() - start_t) * 1000)
+        self.warmup_stats.frames = (self.warmup_stats.frames or 0) + 1
+        self.warmup_stats.totalMs = (self.warmup_stats.totalMs or 0) + dt_ms
+        if dt_ms > (self.warmup_stats.maxFrameMs or 0) then
+            self.warmup_stats.maxFrameMs = dt_ms
+        end
+        self.warmup_stats.phase = phase_name or self.warmup_stats.phase
+        return dt_ms
+    end
+
     local ws = self.warmup_state
     if not ws then
         if info.file:find('..', 1, true) or info.file:find('/', 1, true) or info.file:find('\\', 1, true) then
             self:_fail_cache('corrupt', 'Unsafe package filename in manifest: ' .. tostring(info.file))
+            record_frame('error')
             return true
         end
         local full_path = self.cache_dir .. '/' .. info.file
@@ -699,13 +719,16 @@ function DataService:step_warmup(budget_ms)
         if not raw then
             self.package_status.talents = { verified = false, error = 'missing: ' .. tostring(read_err) }
             self:_fail_cache('missing', string.format('Missing cache package %s (%s). Run SoulspireLauncher to update.', info.file, tostring(read_err)))
+            record_frame('error')
             return true
         end
         if type(info.size) == 'number' and #raw ~= info.size then
             self.package_status.talents = { verified = false, size = #raw, error = 'size mismatch' }
             self:_fail_cache('corrupt', string.format('Cache integrity failed for %s (size %d != %d). Run SoulspireLauncher to repair.', info.file, #raw, info.size))
+            record_frame('error')
             return true
         end
+        local dt_ms = record_frame('read')
         self.warmup_state = {
             pkg_name   = 'talents',
             file       = info.file,
@@ -715,20 +738,20 @@ function DataService:step_warmup(budget_ms)
             pos        = 1,
             hasher     = sha256.new(),
             phase      = 'hash',
-            elapsed_ms = (self.clock() - start_t) * 1000,
+            elapsed_ms = dt_ms,
             done       = false,
         }
         return false
     end
 
     if ws.phase == 'hash' then
-        local chunk = 524288 -- 512 KB per slice (~4ms in LuaJIT)
+        local chunk = 262144 -- 256 KB per slice (~1.5-2.0ms in LuaJIT)
         while ws.pos <= ws.total do
             local e = math.min(ws.total, ws.pos + chunk - 1)
             ws.hasher:update(ws.raw, ws.pos, e)
             ws.pos = e + 1
             if (self.clock() - start_t) >= budget and ws.pos <= ws.total then
-                ws.elapsed_ms = ws.elapsed_ms + (self.clock() - start_t) * 1000
+                ws.elapsed_ms = ws.elapsed_ms + record_frame('hash')
                 return false
             end
         end
@@ -737,30 +760,190 @@ function DataService:step_warmup(budget_ms)
             self.warmup_state = nil
             self.package_status.talents = { verified = false, size = ws.total, sha256 = actual_sha, error = 'sha256 mismatch' }
             self:_fail_cache('corrupt', string.format('Cache SHA-256 mismatch for %s. Run SoulspireLauncher to repair.', ws.file))
+            record_frame('error')
             return true
         end
         ws.sha256 = actual_sha
-        ws.phase  = 'parse'
-        ws.elapsed_ms = ws.elapsed_ms + (self.clock() - start_t) * 1000
-        if (self.clock() - start_t) >= budget then
+        ws.hasher = nil
+        -- Prepare incremental streaming JSON parser state (strip optional UTF-8 BOM)
+        local p = 1
+        if string.sub(ws.raw, 1, 3) == '\239\187\191' then
+            p = 4
+        end
+        ws.json_pos = p
+        ws.parsed   = {}
+        ws.phase    = 'parse_header'
+        ws.elapsed_ms = ws.elapsed_ms + record_frame('hash')
+        return false
+    end
+
+    local function fail_parse(err_msg)
+        ws.raw = nil
+        self.warmup_state = nil
+        self.package_status.talents = { verified = false, size = ws.total, sha256 = ws.sha256, error = 'json parse error' }
+        self:_fail_cache('corrupt', string.format('Malformed JSON in %s: %s', ws.file, tostring(err_msg)))
+        record_frame('error')
+        return true
+    end
+
+    if ws.phase == 'parse_header' then
+        local raw = ws.raw
+        local pos = json.skip_ws(raw, ws.json_pos)
+        if string.byte(raw, pos) ~= 123 then -- '{'
+            return fail_parse('expected root object')
+        end
+        pos = json.skip_ws(raw, pos + 1)
+        if string.byte(raw, pos) == 125 then -- '{}'
+            ws.json_pos = pos + 1
+            ws.phase = 'finalize'
+        else
+            while true do
+                if string.byte(raw, pos) ~= 34 then
+                    return fail_parse('expected root string key at byte ' .. tostring(pos))
+                end
+                local key, npos, kerr = json.decode_string_at(raw, pos)
+                if kerr then return fail_parse(kerr) end
+                pos = json.skip_ws(raw, npos)
+                if string.byte(raw, pos) ~= 58 then -- ':'
+                    return fail_parse('expected ":" after root key at byte ' .. tostring(pos))
+                end
+                pos = json.skip_ws(raw, pos + 1)
+                if key == 'trees' and string.byte(raw, pos) == 123 then
+                    -- Enter incremental per-tree parsing phase!
+                    ws.parsed.trees = {}
+                    ws.trees_pos = json.skip_ws(raw, pos + 1)
+                    ws.phase = 'parse_trees'
+                    break
+                else
+                    local val, vpos, verr = json.decode_value_at(raw, pos)
+                    if verr then return fail_parse(verr) end
+                    ws.parsed[key] = val
+                    pos = json.skip_ws(raw, vpos)
+                    local sep = string.byte(raw, pos)
+                    if sep == 44 then -- ','
+                        pos = json.skip_ws(raw, pos + 1)
+                    elseif sep == 125 then -- '}'
+                        ws.json_pos = pos + 1
+                        ws.phase = 'finalize'
+                        break
+                    else
+                        return fail_parse('expected "," or "}" in root object at byte ' .. tostring(pos))
+                    end
+                end
+            end
+        end
+        ws.elapsed_ms = ws.elapsed_ms + record_frame('parse_header')
+        if (self.clock() - start_t) >= budget and ws.phase ~= 'finalize' then
             return false
         end
     end
 
-    if ws.phase == 'parse' then
-        local p0 = self.clock()
-        local parsed, dec_err = json.decode(ws.raw)
-        ws.raw = nil -- release raw 6.8MB buffer immediately
-        if not parsed or type(parsed) ~= 'table' then
-            self.warmup_state = nil
-            self.package_status.talents = { verified = false, size = ws.total, sha256 = ws.sha256, error = 'json parse error' }
-            self:_fail_cache('corrupt', string.format('Malformed JSON in %s: %s', ws.file, tostring(dec_err)))
-            return true
+    if ws.phase == 'parse_trees' then
+        local raw = ws.raw
+        local pos = ws.trees_pos
+        local trees = ws.parsed.trees
+        while true do
+            pos = json.skip_ws(raw, pos)
+            local ch = string.byte(raw, pos)
+            if ch == 125 then -- '}' end of trees object
+                pos = json.skip_ws(raw, pos + 1)
+                local sep = string.byte(raw, pos)
+                if sep == 44 then -- ',' more root keys follow
+                    ws.json_pos = json.skip_ws(raw, pos + 1)
+                    ws.phase = 'parse_tail'
+                elseif sep == 125 then -- '}' end of root object
+                    ws.json_pos = pos + 1
+                    ws.phase = 'finalize'
+                else
+                    return fail_parse('expected "," or "}" after trees at byte ' .. tostring(pos))
+                end
+                break
+            end
+            if ch ~= 34 then
+                return fail_parse('expected string wsId key in trees at byte ' .. tostring(pos))
+            end
+            local wsKey, npos, kerr = json.decode_string_at(raw, pos)
+            if kerr then return fail_parse(kerr) end
+            pos = json.skip_ws(raw, npos)
+            if string.byte(raw, pos) ~= 58 then
+                return fail_parse('expected ":" after wsId key at byte ' .. tostring(pos))
+            end
+            pos = json.skip_ws(raw, pos + 1)
+            local treeVal, vpos, verr = json.decode_value_at(raw, pos)
+            if verr then return fail_parse(verr) end
+            trees[wsKey] = treeVal
+            self.warmup_stats.treesParsed = (self.warmup_stats.treesParsed or 0) + 1
+
+            pos = json.skip_ws(raw, vpos)
+            local sep = string.byte(raw, pos)
+            if sep == 44 then -- ','
+                pos = json.skip_ws(raw, pos + 1)
+            elseif sep ~= 125 then
+                return fail_parse('expected "," or "}" in trees at byte ' .. tostring(pos))
+            end
+
+            if (self.clock() - start_t) >= budget and string.byte(raw, pos) ~= 125 then
+                ws.trees_pos = pos
+                ws.elapsed_ms = ws.elapsed_ms + record_frame('parse_trees')
+                return false
+            end
         end
+        if ws.phase ~= 'finalize' and (self.clock() - start_t) >= budget then
+            ws.elapsed_ms = ws.elapsed_ms + record_frame('parse_trees')
+            return false
+        end
+    end
+
+    if ws.phase == 'parse_tail' then
+        local raw = ws.raw
+        local pos = ws.json_pos
+        while true do
+            pos = json.skip_ws(raw, pos)
+            if string.byte(raw, pos) == 125 then
+                ws.json_pos = pos + 1
+                ws.phase = 'finalize'
+                break
+            end
+            if string.byte(raw, pos) ~= 34 then
+                return fail_parse('expected trailing root string key at byte ' .. tostring(pos))
+            end
+            local key, npos, kerr = json.decode_string_at(raw, pos)
+            if kerr then return fail_parse(kerr) end
+            pos = json.skip_ws(raw, npos)
+            if string.byte(raw, pos) ~= 58 then
+                return fail_parse('expected ":" after trailing root key at byte ' .. tostring(pos))
+            end
+            pos = json.skip_ws(raw, pos + 1)
+            local val, vpos, verr = json.decode_value_at(raw, pos)
+            if verr then return fail_parse(verr) end
+            ws.parsed[key] = val
+            pos = json.skip_ws(raw, vpos)
+            local sep = string.byte(raw, pos)
+            if sep == 44 then
+                pos = json.skip_ws(raw, pos + 1)
+            elseif sep == 125 then
+                ws.json_pos = pos + 1
+                ws.phase = 'finalize'
+                break
+            else
+                return fail_parse('expected "," or "}" in root tail at byte ' .. tostring(pos))
+            end
+        end
+    end
+
+    if ws.phase == 'finalize' then
+        local raw = ws.raw
+        local trailing = json.skip_ws(raw, ws.json_pos)
+        if trailing <= #raw then
+            return fail_parse('trailing data after JSON root at byte ' .. tostring(trailing))
+        end
+        local parsed = ws.parsed
+        ws.raw = nil -- release raw 6.8MB buffer immediately
         if tonumber(parsed.schemaVersion) ~= tonumber(self.manifest.schemaVersion) then
             self.warmup_state = nil
             self.package_status.talents = { verified = false, error = 'schema mismatch' }
             self:_fail_cache('incompatible', string.format('Schema mismatch in %s.', ws.file))
+            record_frame('error')
             return true
         end
         local ok_idx, idx_err = self:_index_talents(parsed)
@@ -768,9 +951,11 @@ function DataService:step_warmup(budget_ms)
             self.warmup_state = nil
             self.package_status.talents = { verified = false, error = idx_err }
             self:_fail_cache('corrupt', string.format('Invalid cache structure in %s: %s', ws.file, tostring(idx_err)))
+            record_frame('error')
             return true
         end
-        local total_ms = ws.elapsed_ms + (self.clock() - p0) * 1000
+        local dt_ms = record_frame('ready')
+        local total_ms = ws.elapsed_ms + dt_ms
         self.load_ms_total = self.load_ms_total + total_ms
         self.packages.talents = parsed
         self.package_status.talents = {
@@ -781,7 +966,8 @@ function DataService:step_warmup(budget_ms)
         }
         ws.done = true
         self.warmup_state = nil
-        self:record_event('cache', 'talents_warmed', string.format('size=%dB total=%.1fms', ws.total, total_ms))
+        self:record_event('cache', 'talents_warmed', string.format('size=%dB total=%.1fms frames=%d maxFrame=%.2fms',
+            ws.total, total_ms, self.warmup_stats.frames or 0, self.warmup_stats.maxFrameMs or 0))
         return true
     end
     return true
@@ -987,6 +1173,7 @@ function DataService:get_diagnostics()
         packages     = loaded_pkgs,
         metrics      = self.metrics,
         syncStats    = self:get_sync_stats(),
+        warmupStats  = self.warmup_stats,
         syncLog      = self.sync_log,
         recentEvents = self.diag_events,
     }

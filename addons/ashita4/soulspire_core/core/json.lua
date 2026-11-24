@@ -215,6 +215,26 @@ parse_value = function(str, pos, depth)
     end
 end
 
+function M.skip_ws(str, pos)
+    return skip_ws(str, pos)
+end
+
+function M.decode_string_at(str, pos)
+    local ok, val, next_pos = pcall(parse_string, str, pos)
+    if not ok then
+        return nil, pos, tostring(val)
+    end
+    return val, next_pos, nil
+end
+
+function M.decode_value_at(str, pos)
+    local ok, val, next_pos = pcall(parse_value, str, pos, 0)
+    if not ok then
+        return nil, pos, tostring(val)
+    end
+    return val, next_pos, nil
+end
+
 function M.decode(str)
     if type(str) ~= 'string' then
         return nil, 'JSON input must be a string'
