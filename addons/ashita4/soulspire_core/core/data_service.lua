@@ -96,6 +96,8 @@ function DataService.new(opts)
 
         listeners        = {},
         diag_events      = {},
+        sync_diag_log    = {},
+        warmup           = nil, -- cooperative incremental talents.json loader state
         metrics          = {
             packets_in_oxtl    = 0,
             packets_out_oxtl   = 0,
@@ -106,6 +108,8 @@ function DataService.new(opts)
             sync_retries       = 0,
             timeouts           = 0,
             invalidations      = 0,
+            stale_dropped      = 0,
+            deduped_requests   = 0,
             cache_hits_catalog = 0,
             cache_hits_ws      = 0,
             cache_hits_souls   = 0,
@@ -151,6 +155,188 @@ function DataService:record_metric(key, delta)
     if self.metrics[key] ~= nil then
         self.metrics[key] = self.metrics[key] + (tonumber(delta) or 1)
     end
+end
+
+function DataService:record_sync_diag(entry)
+    if type(entry) ~= 'table' then return end
+    local rec = {
+        completedAt     = tonumber(entry.completedAt) or self.clock(),
+        reqId           = tonumber(entry.reqId) or 0,
+        domain          = tostring(entry.domain or 'oxtl'),
+        op              = tostring(entry.op or 'sync'),
+        wsId            = tonumber(entry.wsId) or 0,
+        outcome         = tostring(entry.outcome or 'ok'),
+        latencyMs       = tonumber(entry.latencyMs) or 0,
+        packetsIn       = tonumber(entry.packetsIn) or 0,
+        bytesIn         = tonumber(entry.bytesIn) or 0,
+        retries         = tonumber(entry.retries) or 0,
+        cacheHit        = entry.cacheHit == true,
+        protocolVersion = tonumber(entry.protocolVersion) or 2,
+        timeoutReason   = entry.timeoutReason and tostring(entry.timeoutReason) or nil,
+    }
+    local list = self.sync_diag_log
+    if #list >= DataService.MAX_DIAG_EVENTS then
+        table.remove(list, 1)
+    end
+    list[#list + 1] = rec
+end
+
+function DataService:get_sync_diag_log()
+    return self.sync_diag_log
+end
+
+function DataService:is_talents_warm()
+    return self.talent_trees ~= nil
+end
+
+function DataService:get_warmup_state()
+    if self.talent_trees ~= nil then
+        return { stage = 'ready', progress = 1.0, done = true, error = nil }
+    end
+    local w = self.warmup
+    if not w then
+        return { stage = 'idle', progress = 0.0, done = false, error = nil }
+    end
+    return {
+        stage    = w.stage,
+        progress = w.progress or 0.0,
+        done     = (w.stage == 'ready' or w.stage == 'error'),
+        error    = w.error,
+        msSpent  = w.ms_spent or 0,
+    }
+end
+
+-- Cooperatively read, SHA-256 verify, and parse talents.json within budget_ms per frame
+-- so Ashita v4's d3d_present never stalls while preparing the 6.8MB static talent cache.
+function DataService:step_warmup(budget_ms)
+    if self.talent_trees ~= nil then
+        return true
+    end
+    if not self:is_cache_usable() or not self.manifest or type(self.manifest.packages) ~= 'table' then
+        return false
+    end
+    local info = self.manifest.packages.talents
+    if type(info) ~= 'table' or type(info.file) ~= 'string' then
+        return false
+    end
+
+    local budget_sec = math.max(0.001, (tonumber(budget_ms) or 4.0) / 1000.0)
+    local t0 = self.clock()
+
+    local w = self.warmup
+    if not w then
+        if info.file:find('..', 1, true) or info.file:find('/', 1, true) or info.file:find('\\', 1, true) then
+            self:_fail_cache('corrupt', 'Unsafe package filename in manifest: ' .. tostring(info.file))
+            self.warmup = { stage = 'error', progress = 0, error = self.error_message, ms_spent = 0 }
+            return false
+        end
+        local full_path = self.cache_dir .. '/' .. info.file
+        local raw, read_err = read_file_bytes(full_path)
+        if not raw then
+            self.package_status.talents = { verified = false, error = 'missing: ' .. tostring(read_err) }
+            self:_fail_cache('missing', string.format('Missing cache package %s (%s). Run SoulspireLauncher to update.', info.file, tostring(read_err)))
+            self.warmup = { stage = 'error', progress = 0, error = self.error_message, ms_spent = (self.clock() - t0) * 1000 }
+            return false
+        end
+        if type(info.size) == 'number' and #raw ~= info.size then
+            self.package_status.talents = { verified = false, size = #raw, error = 'size mismatch' }
+            self:_fail_cache('corrupt', string.format('Cache integrity failed for %s (size %d != %d). Run SoulspireLauncher to repair.', info.file, #raw, info.size))
+            self.warmup = { stage = 'error', progress = 0, error = self.error_message, ms_spent = (self.clock() - t0) * 1000 }
+            return false
+        end
+        w = {
+            stage    = 'hashing',
+            raw      = raw,
+            size     = #raw,
+            offset   = 1,
+            hasher   = sha256.new(),
+            progress = 0.05,
+            ms_spent = (self.clock() - t0) * 1000,
+            error    = nil,
+        }
+        self.warmup = w
+        if (self.clock() - t0) >= budget_sec then
+            return false
+        end
+    end
+
+    if w.stage == 'error' then
+        return false
+    end
+
+    if w.stage == 'hashing' then
+        local CHUNK = 65536
+        while w.offset <= w.size do
+            local stop = math.min(w.size, w.offset + CHUNK - 1)
+            w.hasher:update(string.sub(w.raw, w.offset, stop))
+            w.offset = stop + 1
+            w.progress = 0.05 + 0.70 * math.min(1.0, (w.offset - 1) / math.max(1, w.size))
+            if (self.clock() - t0) >= budget_sec then
+                w.ms_spent = w.ms_spent + (self.clock() - t0) * 1000
+                return false
+            end
+        end
+        local actual_sha = w.hasher:digest()
+        if type(info.sha256) ~= 'string' or actual_sha ~= string.lower(info.sha256) then
+            self.package_status.talents = { verified = false, size = w.size, sha256 = actual_sha, error = 'sha256 mismatch' }
+            self:_fail_cache('corrupt', string.format('Cache SHA-256 mismatch for %s. Run SoulspireLauncher to repair.', info.file))
+            w.stage = 'error'
+            w.raw = nil
+            w.error = self.error_message
+            return false
+        end
+        w.sha256 = actual_sha
+        w.stage = 'parsing'
+        w.progress = 0.80
+        w.ms_spent = w.ms_spent + (self.clock() - t0) * 1000
+        return false
+    end
+
+    if w.stage == 'parsing' then
+        local parsed, dec_err = json.decode(w.raw)
+        local raw_size = w.size
+        local sha_val = w.sha256
+        w.raw = nil
+        if not parsed or type(parsed) ~= 'table' then
+            self.package_status.talents = { verified = false, size = raw_size, sha256 = sha_val, error = 'json parse error' }
+            self:_fail_cache('corrupt', string.format('Malformed JSON in %s: %s', info.file, tostring(dec_err)))
+            w.stage = 'error'
+            w.error = self.error_message
+            return false
+        end
+        if tonumber(parsed.schemaVersion) ~= tonumber(self.manifest.schemaVersion) then
+            self.package_status.talents = { verified = false, error = 'schema mismatch' }
+            self:_fail_cache('incompatible', string.format('Schema mismatch in %s.', info.file))
+            w.stage = 'error'
+            w.error = self.error_message
+            return false
+        end
+        local ok_idx, idx_err = self:_index_talents(parsed)
+        if not ok_idx then
+            self.package_status.talents = { verified = false, error = idx_err }
+            self:_fail_cache('corrupt', string.format('Invalid cache structure in %s: %s', info.file, tostring(idx_err)))
+            w.stage = 'error'
+            w.error = self.error_message
+            return false
+        end
+        local step_ms = (self.clock() - t0) * 1000
+        w.ms_spent = w.ms_spent + step_ms
+        self.load_ms_total = self.load_ms_total + w.ms_spent
+        self.packages.talents = parsed
+        self.package_status.talents = {
+            verified = true,
+            size     = raw_size,
+            sha256   = sha_val,
+            loadMs   = w.ms_spent,
+        }
+        w.stage = 'ready'
+        w.progress = 1.0
+        self:record_event('cache', 'talents_warm', string.format('size=%dB ms=%.1f', raw_size, w.ms_spent))
+        self:emit('talents_warm', { size = raw_size, loadMs = w.ms_spent })
+        return true
+    end
+
+    return self.talent_trees ~= nil
 end
 
 function DataService:_fail_cache(status_kind, reason)

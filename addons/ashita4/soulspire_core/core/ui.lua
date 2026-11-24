@@ -108,6 +108,7 @@ function UI.new(imgui, registry, focus, assets, opts)
         ui_scale        = F.clamp(tonumber(opts.ui_scale) or 1.0, 0.75, 1.50),
         on_scale_change = opts.on_scale_change,
         get_identity    = opts.get_identity,
+        character_state = opts.character_state,
         scale_panel_open = false,
         last_viewport_w = 0,
         last_viewport_h = 0,
@@ -511,9 +512,10 @@ function UI:draw_hub(native, bridge_mode)
         if active and active.available and active.controller and type(active.controller.draw) == 'function' then
             local okDraw, errDraw = xpcall(function()
                 active.controller:draw(imgui, dl, F, L, innerX, bodyY, L.innerW, bodyH, {
-                    focus    = self.focus,
-                    mode     = bridge_mode,
-                    identity = ident,
+                    focus           = self.focus,
+                    mode            = bridge_mode,
+                    identity        = ident,
+                    character_state = self.character_state,
                 })
             end, debug.traceback)
             if not okDraw then

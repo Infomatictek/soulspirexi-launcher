@@ -17,12 +17,13 @@ end
 
 function SoulTalents.new(sf_state, sf_actions, sf_ui, opts)
     opts = opts or {}
-    return setmetatable({
+    local self = setmetatable({
         state            = sf_state,
         actions          = sf_actions,
         ui               = sf_ui,
         soul_registry    = opts.soul_registry,
         data_service     = opts.data_service,
+        character_state  = opts.character_state,
         on_jump_to_ws    = opts.on_jump_to_ws, -- fn(wsId, nodeKey)
         region           = 'slots', -- 'slots' | 'nodes' | 'confirm_reset'
         slot_index       = 1,
@@ -31,7 +32,45 @@ function SoulTalents.new(sf_state, sf_actions, sf_ui, opts)
         hud_soul_key     = '',
         hud_kv           = {},
         hud_synced_at    = 0,
+        _sub_ids         = {},
     }, SoulTalents)
+
+    if self.character_state then
+        self.character_state:onSessionReset(function()
+            self.hud_soul_key = ''
+            self.hud_kv = {}
+            self.hud_synced_at = 0
+            self.slot_index = 1
+            self.node_index = 1
+            self.region = 'slots'
+        end)
+        self._sub_ids[#self._sub_ids + 1] = self.character_state:subscribe(
+            function(snap)
+                local hud = snap.confirmed and snap.confirmed.hud or {}
+                return { soulKey = hud.soulKey, syncedAt = hud.syncedAt }
+            end,
+            function(_val, _prev, snap)
+                local hud = snap.confirmed and snap.confirmed.hud
+                if hud then
+                    self.hud_soul_key = hud.soulKey or ''
+                    self.hud_kv = hud.kv or {}
+                    self.hud_synced_at = hud.syncedAt or 0
+                end
+            end,
+            { owner = 'soul_talents' }
+        )
+    end
+
+    return self
+end
+
+function SoulTalents:destroy()
+    if self.character_state and self.character_state.unsubscribe then
+        for _, id in ipairs(self._sub_ids or {}) do
+            self.character_state:unsubscribe(id)
+        end
+    end
+    self._sub_ids = {}
 end
 
 function SoulTalents:has_modal()
@@ -65,6 +104,9 @@ function SoulTalents:observe_hud_line(payload, now)
     end
     self.hud_kv = kv
     self.hud_synced_at = now or os.clock()
+    if self.character_state then
+        self.character_state:observeHudTelemetry(soul, kv, self.hud_synced_at)
+    end
     return true
 end
 
@@ -105,10 +147,15 @@ function SoulTalents:get_invested_nodes()
 end
 
 function SoulTalents:on_open()
-    if not self.state.synced or #(self.state.catalog or {}) == 0 then
-        self.actions.sync()
+    if self.character_state then
+        -- Route through shared CharacterState SyncCoordinator: zero network traffic when fresh!
+        self.character_state:requestRefresh('progression', 'high', { reason = 'soul_talents_open' })
     else
-        self.actions.refreshState()
+        if not self.state.synced or #(self.state.catalog or {}) == 0 then
+            self.actions.sync()
+        else
+            self.actions.refreshState()
+        end
     end
 end
 

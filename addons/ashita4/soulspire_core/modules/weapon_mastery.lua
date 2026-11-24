@@ -11,20 +11,54 @@ local function clamp(v, lo, hi)
     return v
 end
 
-function WeaponMastery.new(sf_state, sf_actions, sf_ui)
-    return setmetatable({
-        state         = sf_state,
-        actions       = sf_actions,
-        ui            = sf_ui,
-        region        = 'arsenal', -- 'arsenal' | 'skillchains' | 'tree' | 'inspector' | 'confirm'
-        arsenal_focus = 'list',    -- 'filter' | 'list'
-        arsenal_index = 1,
-        sc_slot       = 1,
-        node_key      = nil,
-        inspector_btn = 1,
-        confirm_btn   = 1,
-        prev_region   = 'tree',
+function WeaponMastery.new(sf_state, sf_actions, sf_ui, opts)
+    opts = opts or {}
+    local self = setmetatable({
+        state           = sf_state,
+        actions         = sf_actions,
+        ui              = sf_ui,
+        character_state = opts.character_state,
+        region          = 'arsenal', -- 'arsenal' | 'skillchains' | 'tree' | 'inspector' | 'confirm'
+        arsenal_focus   = 'list',    -- 'filter' | 'list'
+        arsenal_index   = 1,
+        sc_slot         = 1,
+        node_key        = nil,
+        inspector_btn   = 1,
+        confirm_btn     = 1,
+        prev_region     = 'tree',
+        _sub_ids        = {},
     }, WeaponMastery)
+
+    if self.character_state then
+        self._sub_ids[#self._sub_ids + 1] = self.character_state:subscribe(
+            function(snap)
+                local eff = snap.effective or {}
+                return {
+                    mainJobKey  = eff.mainJobKey,
+                    mainLevel   = eff.mainLevel,
+                    soulName    = eff.soulName,
+                    soulKey     = eff.soulKey,
+                    mainSkill   = eff.mainSkill,
+                    rangedSkill = eff.rangedSkill,
+                }
+            end,
+            function(_val)
+                self:_ensure_valid_focus()
+            end,
+            { owner = 'weapon_mastery' }
+        )
+    end
+
+    return self
+end
+
+function WeaponMastery:destroy()
+    if self.character_state and self.character_state.unsubscribe then
+        for _, id in ipairs(self._sub_ids or {}) do
+            self.character_state:unsubscribe(id)
+        end
+    end
+    self._sub_ids = {}
 end
 
 function WeaponMastery:has_modal()
@@ -137,12 +171,20 @@ function WeaponMastery:focus_ws_and_node(ws_id, node_key)
 end
 
 function WeaponMastery:on_open()
-    if not self.state.synced or #(self.state.catalog or {}) == 0 then
-        self.actions.sync()
-    else
-        self.actions.refreshState()
+    if self.character_state then
+        -- Route through shared CharacterState SyncCoordinator: zero network traffic when fresh!
+        self.character_state:requestRefresh('progression', 'high', { reason = 'weapon_mastery_open' })
         if self.state.selectedWsId ~= nil then
             self.actions.requestWS(self.state.selectedWsId)
+        end
+    else
+        if not self.state.synced or #(self.state.catalog or {}) == 0 then
+            self.actions.sync()
+        else
+            self.actions.refreshState({ force = true })
+            if self.state.selectedWsId ~= nil then
+                self.actions.requestWS(self.state.selectedWsId)
+            end
         end
     end
     self:_ensure_valid_focus()

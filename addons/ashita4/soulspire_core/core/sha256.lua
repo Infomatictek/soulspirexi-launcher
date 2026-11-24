@@ -1,6 +1,7 @@
 -- SoulspireXI Core: Pure-LuaJIT SHA-256 Digest (FIPS 180-4)
--- Used strictly ONCE per session at cache load time to verify local JSON cache
--- integrity against manifest.json. Never called per-frame.
+-- Supports both one-shot digest(msg) and incremental streaming (new()/update()/digest())
+-- so large verified cache packages (e.g., 6.8MB talents.json) can be verified cooperatively
+-- across frames without stalling Ashita v4's d3d_present render loop.
 
 local M = {}
 
@@ -78,46 +79,15 @@ local function hex32(x)
     return format('%08x', x % 4294967296)
 end
 
-function M.digest(msg)
-    if type(msg) ~= 'string' then
-        return nil, 'SHA-256 input must be a string'
-    end
+local function process_blocks(state, buf, start_offset, end_offset)
+    local h0, h1, h2, h3 = state.h0, state.h1, state.h2, state.h3
+    local h4, h5, h6, h7 = state.h4, state.h5, state.h6, state.h7
+    local w = state.w
 
-    local len = #msg
-    local bit_len_hi = floor(len / 0x20000000)
-    local bit_len_lo = (len * 8) % 4294967296
-
-    -- Pad message: 0x80, zero bytes to 56 mod 64, then 64-bit big-endian bit length
-    local rem = (len + 1) % 64
-    local pad_zeros = (rem <= 56) and (56 - rem) or (120 - rem)
-    local padded = msg .. '\128' .. string.rep('\0', pad_zeros)
-        .. char(
-            floor(bit_len_hi / 0x1000000) % 256,
-            floor(bit_len_hi / 0x10000) % 256,
-            floor(bit_len_hi / 0x100) % 256,
-            bit_len_hi % 256,
-            floor(bit_len_lo / 0x1000000) % 256,
-            floor(bit_len_lo / 0x10000) % 256,
-            floor(bit_len_lo / 0x100) % 256,
-            bit_len_lo % 256
-        )
-
-    local h0 = 0x6a09e667
-    local h1 = 0xbb67ae85
-    local h2 = 0x3c6ef372
-    local h3 = 0xa54ff53a
-    local h4 = 0x510e527f
-    local h5 = 0x9b05688c
-    local h6 = 0x1f83d9ab
-    local h7 = 0x5be0cd19
-
-    local w = {}
-    local total = #padded
-
-    for offset = 1, total, 64 do
+    for offset = start_offset, end_offset, 64 do
         for i = 0, 15 do
             local j = offset + i * 4
-            local b1, b2, b3, b4 = byte(padded, j, j + 3)
+            local b1, b2, b3, b4 = byte(buf, j, j + 3)
             w[i + 1] = bor(lshift(b1, 24), lshift(b2, 16), lshift(b3, 8), b4)
         end
         for i = 17, 64 do
@@ -157,8 +127,80 @@ function M.digest(msg)
         h7 = band(h7 + h, 0xFFFFFFFF)
     end
 
-    return hex32(h0) .. hex32(h1) .. hex32(h2) .. hex32(h3)
-        .. hex32(h4) .. hex32(h5) .. hex32(h6) .. hex32(h7)
+    state.h0, state.h1, state.h2, state.h3 = h0, h1, h2, h3
+    state.h4, state.h5, state.h6, state.h7 = h4, h5, h6, h7
+end
+
+local Hasher = {}
+Hasher.__index = Hasher
+
+function M.new()
+    return setmetatable({
+        h0 = 0x6a09e667,
+        h1 = 0xbb67ae85,
+        h2 = 0x3c6ef372,
+        h3 = 0xa54ff53a,
+        h4 = 0x510e527f,
+        h5 = 0x9b05688c,
+        h6 = 0x1f83d9ab,
+        h7 = 0x5be0cd19,
+        w = {},
+        tail = '',
+        total_len = 0,
+        finalized = false,
+        result = nil,
+    }, Hasher)
+end
+
+function Hasher:update(chunk)
+    if self.finalized then return self end
+    if type(chunk) ~= 'string' or #chunk == 0 then return self end
+    self.total_len = self.total_len + #chunk
+    local data = (#self.tail > 0) and (self.tail .. chunk) or chunk
+    local n = #data
+    local full = floor(n / 64) * 64
+    if full > 0 then
+        process_blocks(self, data, 1, full - 63)
+    end
+    self.tail = (full < n) and string.sub(data, full + 1) or ''
+    return self
+end
+
+function Hasher:digest()
+    if self.finalized then return self.result end
+    local len = self.total_len
+    local bit_len_hi = floor(len / 0x20000000)
+    local bit_len_lo = (len * 8) % 4294967296
+
+    local rem = (#self.tail + 1) % 64
+    local pad_zeros = (rem <= 56) and (56 - rem) or (120 - rem)
+    local padded = self.tail .. '\128' .. string.rep('\0', pad_zeros)
+        .. char(
+            floor(bit_len_hi / 0x1000000) % 256,
+            floor(bit_len_hi / 0x10000) % 256,
+            floor(bit_len_hi / 0x100) % 256,
+            bit_len_hi % 256,
+            floor(bit_len_lo / 0x1000000) % 256,
+            floor(bit_len_lo / 0x10000) % 256,
+            floor(bit_len_lo / 0x100) % 256,
+            bit_len_lo % 256
+        )
+
+    process_blocks(self, padded, 1, #padded - 63)
+    self.tail = ''
+    self.finalized = true
+    self.result = hex32(self.h0) .. hex32(self.h1) .. hex32(self.h2) .. hex32(self.h3)
+        .. hex32(self.h4) .. hex32(self.h5) .. hex32(self.h6) .. hex32(self.h7)
+    return self.result
+end
+
+function M.digest(msg)
+    if type(msg) ~= 'string' then
+        return nil, 'SHA-256 input must be a string'
+    end
+    local h = M.new()
+    h:update(msg)
+    return h:digest()
 end
 
 return M

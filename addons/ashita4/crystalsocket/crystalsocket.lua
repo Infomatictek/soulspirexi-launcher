@@ -16,6 +16,21 @@ local WeaponConfig = require('weapon_config')
 local native_weapon_rules = WeaponConfig.native_rules()
 local appearance = require('soul_appearance').new()
 
+local csCoreIpc, crysIpcToken = nil, nil
+do
+    if type(addon) == 'table' and type(addon.path) == 'string' and addon.path ~= '' then
+        local root = addon.path:gsub('[/\\]+$', ''):gsub('[/\\][^/\\]+$', '')
+        local prev = package.path
+        package.path = root .. '/soulspire_core/?.lua;' .. root .. '/soulspire_core/?/init.lua;' .. prev
+        local okIpc, ipcMod = pcall(require, 'core.ipc')
+        package.path = prev
+        if okIpc and type(ipcMod) == 'table' and ipcMod.register_listener then
+            csCoreIpc = ipcMod
+            crysIpcToken = ipcMod.register_listener('CRYS', 'crystalsocket')
+        end
+    end
+end
+
 local character_id = 0
 local ui, menu
 local textures, asset_status = {}, {}
@@ -365,7 +380,10 @@ ashita.events.register('packet_in', 'crystalsocket_packet_in', function(e)
             return
         end
         -- Reserved replies must never reach the stock packet dispatcher, including malformed replies.
-        e.blocked = true
+        -- Coordinate via CoreIPC so soulspire_core can passively mirror standalone Soul swaps before blocking.
+        if not csCoreIpc or csCoreIpc.should_block(crysIpcToken) then
+            e.blocked = true
+        end
         context()
         transport.incoming = transport.incoming + 1
         local buffer = e.data_modified or e.data
@@ -477,6 +495,10 @@ ashita.events.register('d3d_present', 'crystalsocket_present', function()
 end)
 
 ashita.events.register('unload', 'crystalsocket_unload', function()
+    if csCoreIpc and crysIpcToken then
+        csCoreIpc.unregister_listener(crysIpcToken)
+        crysIpcToken = nil
+    end
     appearance:restore(inject_grap_list)
     state:set_context(nil, nil, nil, nil)
     character_id = 0

@@ -20,24 +20,26 @@ addon.link    = 'https://github.com/Infomatictek/soulspirexi-launcher'
 require('common')
 local ffi           = require('ffi')
 local imgui         = require('imgui')
-local Registry      = require('core.registry')
-local DataService   = require('core.data_service')
-local CoreIPC       = require('core.ipc')
-local MenuBridge    = require('core.menu_bridge')
-local NativeBridge  = require('core.native_bridge')
-local Focus         = require('core.focus')
-local Input         = require('core.input')
-local Assets        = require('core.assets')
-local UI            = require('core.ui')
-local WeaponMastery = require('modules.weapon_mastery')
-local SoulTalents   = require('modules.soul_talents')
-local CharacterMod  = require('modules.character')
+local Registry       = require('core.registry')
+local DataService    = require('core.data_service')
+local CharacterState = require('core.character_state')
+local CoreIPC        = require('core.ipc')
+local MenuBridge     = require('core.menu_bridge')
+local NativeBridge   = require('core.native_bridge')
+local Focus          = require('core.focus')
+local Input          = require('core.input')
+local Assets         = require('core.assets')
+local UI             = require('core.ui')
+local WeaponMastery  = require('modules.weapon_mastery')
+local SoulTalents    = require('modules.soul_talents')
+local CharacterMod   = require('modules.character')
 
 local registry = Registry.new()
 local focus    = Focus.new(registry)
 local input    = Input.new()
-local data_service = nil
-local oxtl_ipc_token, oxhud_ipc_token = nil, nil
+local data_service    = nil
+local character_state = nil
+local oxtl_ipc_token, oxhud_ipc_token, crys_ipc_token = nil, nil, nil
 local menu, assets, ui
 local sf_state, sf_actions, sf_ui, sf_art
 local weapon_mastery_mod, soul_talents_mod, character_mod, cs_soul_identity
@@ -46,8 +48,6 @@ local last_session_active = false
 local watch_menus = false
 local last_watched_form = nil
 local last_native_probe_at = 0
-local sf_last_auto_check = 0
-local sf_last_context_sig = nil
 
 local function log(msg)
     print('[soulspire_core] ' .. tostring(msg))
@@ -301,9 +301,22 @@ local function init_modules()
     end
 
     -- Register process-local packet coexistence tokens so standalone addons never prematurely
-    -- block 0x1FD OXTL or 0x017 [OXHUD]| packets before Core receives them.
+    -- block 0x1FD OXTL, 0x1FF CRYS, or 0x017 [OXHUD]| packets before Core receives them.
     oxtl_ipc_token  = CoreIPC.register_listener('OXTL', 'soulspire_core')
+    crys_ipc_token  = CoreIPC.register_listener('CRYS', 'soulspire_core')
     oxhud_ipc_token = CoreIPC.register_listener('OXHUD', 'soulspire_core')
+
+    -- 0b. Universal Character State Service (canonical client-side character-state provider)
+    character_state = CharacterState.new({
+        dataService  = data_service,
+        soulRegistry = Registry.souls,
+        ipc          = CoreIPC,
+    })
+    _G.SoulspireCore = _G.SoulspireCore or {}
+    _G.SoulspireCore.CharacterState = character_state
+    _G.SoulspireCore.DataService    = data_service
+    _G.SoulspireCore.IPC            = CoreIPC
+    _G.SoulspireCore.Selectors      = CharacterState.Selectors
 
     -- 1. Character / Soul Identity (reuses crystalsocket protocol & state + cached 66-Soul metadata)
     local cs_proto = load_sibling_lua('crystalsocket', 'protocol.lua')
@@ -312,19 +325,20 @@ local function init_modules()
     local cs_state = (cs_state_mod and cs_state_mod.new) and cs_state_mod.new() or nil
     if cs_proto and cs_state then
         character_mod = CharacterMod.new({
-            protocol      = cs_proto,
-            crystal_state = cs_state,
-            soul_registry = Registry.souls,
-            data_service  = data_service,
-            assets        = assets,
-            dll_status_fn = read_crystaljobs_status,
+            protocol        = cs_proto,
+            crystal_state   = cs_state,
+            soul_registry   = Registry.souls,
+            data_service    = data_service,
+            character_state = character_state,
+            assets          = assets,
+            dll_status_fn   = read_crystaljobs_status,
         })
         registry:attach_controller('character', character_mod, true)
     else
         registry:set_available('character', false, 'CrystalSocket sibling modules unavailable.')
     end
 
-    -- 2. Weapon Mastery (The Soulforge) & 3. Soul Talents (shared soulforge_state + DataService)
+    -- 2. Weapon Mastery (The Soulforge) & 3. Soul Talents (shared soulforge_state + DataService + CharacterState)
     local sf_state_mod = load_sibling_lua('soulspire_talents', 'soulforge_state.lua')
     local ws_reg       = load_sibling_lua('soulspire_talents', 'ws_registry_generated.lua')
     sf_art             = load_sibling_lua('soulspire_talents', 'art.lua')
@@ -339,18 +353,22 @@ local function init_modules()
 
     if sf_state_mod and sf_ui then
         sf_state, sf_actions = sf_state_mod.new({
-            soulRegistry = Registry.souls,
-            wsRegistry   = ws_reg,
-            dataService  = data_service,
-            savePrefs    = save_settings,
+            soulRegistry   = Registry.souls,
+            wsRegistry     = ws_reg,
+            dataService    = data_service,
+            characterState = character_state,
+            savePrefs      = save_settings,
         })
-        weapon_mastery_mod = WeaponMastery.new(sf_state, sf_actions, sf_ui)
+        weapon_mastery_mod = WeaponMastery.new(sf_state, sf_actions, sf_ui, {
+            character_state = character_state,
+        })
         registry:attach_controller('weapon_mastery', weapon_mastery_mod, true)
 
         soul_talents_mod = SoulTalents.new(sf_state, sf_actions, sf_ui, {
-            soul_registry = Registry.souls,
-            data_service  = data_service,
-            on_jump_to_ws = function(ws_id, node_key)
+            soul_registry   = Registry.souls,
+            data_service    = data_service,
+            character_state = character_state,
+            on_jump_to_ws   = function(ws_id, node_key)
                 focus:select_module('weapon_mastery')
                 weapon_mastery_mod:focus_ws_and_node(ws_id, node_key)
             end,
@@ -389,8 +407,12 @@ ashita.events.register('load', 'soulspire_core_load', function()
 
     ui = UI.new(imgui, registry, focus, assets, {
         ui_scale        = saved_scale,
+        character_state = character_state,
         on_scale_change = function() save_settings() end,
         get_identity    = function()
+            if character_state then
+                return CharacterState.Selectors.selectHeaderIdentity(character_state:getSnapshot())
+            end
             if character_mod then
                 return character_mod:get_header_identity()
             end
@@ -399,19 +421,33 @@ ashita.events.register('load', 'soulspire_core_load', function()
     })
 
     last_session_active = is_player_in_session()
+    if character_state then
+        character_state:tick(os.clock())
+    end
     if not menu or not menu.native_hook_supported then
         log('Waiting for soulspire_native.dll native Commands menu hook; /soulspire remains available.')
     end
 end)
 
 ashita.events.register('unload', 'soulspire_core_unload', function()
+    if character_mod and character_mod.destroy then character_mod:destroy() end
+    if weapon_mastery_mod and weapon_mastery_mod.destroy then weapon_mastery_mod:destroy() end
+    if soul_talents_mod and soul_talents_mod.destroy then soul_talents_mod:destroy() end
+    if sf_actions and sf_actions.destroy then sf_actions.destroy() end
     if oxtl_ipc_token then
         CoreIPC.unregister_listener(oxtl_ipc_token)
         oxtl_ipc_token = nil
     end
+    if crys_ipc_token then
+        CoreIPC.unregister_listener(crys_ipc_token)
+        crys_ipc_token = nil
+    end
     if oxhud_ipc_token then
         CoreIPC.unregister_listener(oxhud_ipc_token)
         oxhud_ipc_token = nil
+    end
+    if _G.SoulspireCore and _G.SoulspireCore.CharacterState == character_state then
+        _G.SoulspireCore.CharacterState = nil
     end
     save_settings()
     focus:blur_all('unload')
@@ -566,6 +602,44 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
         for _, ev in ipairs(diag_ds.recentEvents or {}) do
             log(('  [%.2fs] %s/%s: %s'):format(ev.at or 0, ev.domain, ev.kind, ev.detail))
         end
+    elseif sub == 'diag' or sub == 'charstate' or sub == 'syncdiag' then
+        if not character_state then
+            log('CharacterState not initialized.')
+            return
+        end
+        local d = character_state:getDiagnostics(os.clock())
+        log(('charstate sessionGen=%d zoneGen=%d active=%s zoning=%s obs=%s Lv.%s confSoulLv=%s confProgLv=%s effLv=%s(%s) mismatch=%s'):format(
+            d.sessionGeneration, d.zoneGeneration, tostring(d.sessionActive), tostring(d.zoning),
+            tostring(d.observedJob or '---'), tostring(d.observedLevel or 0),
+            tostring(d.confirmedSoulLevel or 0), tostring(d.confirmedProgressionLvl or 0),
+            tostring(d.effectiveLevel or 'nil'), tostring(d.effectiveLevelSource), tostring(d.levelMismatch)
+        ))
+        log(('charstate soul=%s(b=%d,src=%s) equip=%s(main=%d,sub=%d,rng=%d) subs=%d retries=%d dedup=%d stale=%d loops=%d'):format(
+            tostring(d.soul.name or 'Base'), d.soul.branch or 0, tostring(d.soul.source),
+            tostring(d.equipment.equippedSummary or 'None'),
+            d.equipment.mainHand or 0, d.equipment.subHand or 0, d.equipment.ranged or 0,
+            d.subscriptionCount or 0, d.retryCounts or 0, d.dedupedRequests or 0,
+            d.droppedStaleResponses or 0, d.notificationLoopsBlocked or 0
+        ))
+        for domName, f in pairs(d.domains or {}) do
+            log(('  domain[%s] state=%s fresh=%s conf=%s load=%s rev=%d lat=%sms bytes=%d err=%s'):format(
+                domName, tostring(f.state), tostring(f.fresh), tostring(f.confirmed), tostring(f.loading),
+                f.revision or 0, f.lastLatencyMs and string.format('%.1f', f.lastLatencyMs) or '-',
+                f.lastResponseBytes or 0, tostring(f.error or 'none')
+            ))
+        end
+        if data_service and data_service.get_sync_diag_log then
+            local logList = data_service:get_sync_diag_log()
+            local firstIdx = math.max(1, #logList - 7)
+            for i = firstIdx, #logList do
+                local r = logList[i]
+                log(('  sync[%.2fs] req=%d dom=%s op=%s out=%s lat=%.1fms bytes=%d ret=%d cache=%s proto=v%d'):format(
+                    r.completedAt or 0, r.reqId or 0, tostring(r.domain), tostring(r.op),
+                    tostring(r.outcome), r.latencyMs or 0, r.bytesIn or 0, r.retries or 0,
+                    tostring(r.cacheHit), r.protocolVersion or 2
+                ))
+            end
+        end
     elseif sub == 'debug' then
         if not menu or not menu:is_available() then
             log('MenuBridge unavailable.')
@@ -663,19 +737,29 @@ end)
 
 -- Packet synchronization & safe zone/logout lifecycle handling.
 ashita.events.register('packet_in', 'soulspire_core_packet_in', function(e)
+    local buf = e.data_modified or e.data
+    local now = os.clock()
+
     if e.id == 0x00A or e.id == 0x00B then
         focus:blur_all('zone_change')
         input:reset()
+        if character_state then
+            character_state:onPacketIn(e.id, buf, e.size, now)
+        end
         if sf_actions and sf_actions.invalidate then
-            sf_actions.invalidate('zone_change')
+            sf_actions.invalidate(e.id == 0x00A and 'zone_in' or 'zone_change')
         elseif sf_state then
             sf_state.needsRefresh = true
         end
-        sf_last_context_sig = nil
         return
     end
 
-    local buf = e.data_modified or e.data
+    -- Event-driven FFXI runtime character state packets (Char Stats, Job Info, Equip, Inv Finish, Status)
+    if character_state and (e.id == 0x061 or e.id == 0x01B or e.id == 0x050 or e.id == 0x01D or e.id == 0x037) then
+        character_state:onPacketIn(e.id, buf, e.size, now)
+        return
+    end
+
     if sf_actions and sf_actions.handlePacketIn(e.id, buf, e.size) then
         if CoreIPC.should_block(oxtl_ipc_token) then
             e.blocked = true
@@ -684,8 +768,10 @@ ashita.events.register('packet_in', 'soulspire_core_packet_in', function(e)
     end
 
     if character_mod and e.id == 0x1FF and type(buf) == 'string' then
-        if character_mod:handle_packet_in(e.id, buf, nil, e.size) then
-            e.blocked = true
+        if character_mod:handle_packet_in(e.id, buf, now, e.size) then
+            if CoreIPC.should_block(crys_ipc_token) then
+                e.blocked = true
+            end
         end
         return
     end
@@ -703,7 +789,7 @@ ashita.events.register('packet_in', 'soulspire_core_packet_in', function(e)
     if e.id == 0x017 and soul_talents_mod and type(buf) == 'string' and #buf >= 25 then
         local msg = string.sub(buf, 24):match('^([^%z]*)')
         if msg and string.sub(msg, 1, 8) == '[OXHUD]|' then
-            soul_talents_mod:observe_hud_line(string.sub(msg, 9))
+            soul_talents_mod:observe_hud_line(string.sub(msg, 9), now)
             if CoreIPC.should_block(oxhud_ipc_token) then
                 e.blocked = true
             end
@@ -715,7 +801,9 @@ ashita.events.register('packet_out', 'soulspire_core_packet_out', function(e)
     if e.id == 0x00D then
         focus:blur_all('logout')
         input:reset()
-        if sf_actions and sf_actions.invalidate then
+        if character_state then
+            character_state:onPacketOut(e.id, e.data, e.size, os.clock())
+        elseif sf_actions and sf_actions.invalidate then
             sf_actions.invalidate('logout')
         end
     end
@@ -738,6 +826,12 @@ ashita.events.register('d3d_present', 'soulspire_core_present', function()
         menu:refresh_native_status()
     end
 
+    -- Cooperative background warmup for talents.json (<=4ms/frame) so opening Weapon Mastery
+    -- displays cached trees immediately without stalling Ashita's render loop or timeout clocks.
+    if data_service and data_service.step_warmup and data_service:is_cache_usable() and not data_service:is_talents_warm() then
+        data_service:step_warmup(4.0)
+    end
+
     -- Dispatch native FFXI Commands menu "Soulspire" (Btn 16) confirm requests into Core.
     local open_requests = menu and menu:consume_native_open_request() or NativeBridge.consume_core_open_request()
     if open_requests > 0 then
@@ -748,6 +842,18 @@ ashita.events.register('d3d_present', 'soulspire_core_present', function()
         input:arm_open_guard(0.20)
     end
 
+    -- Update visible domain priorities and drive unified CharacterState SyncCoordinator
+    local active_mod = focus:active_module()
+    local sf_active = focus:is_hub_open() and active_mod ~= nil
+        and (active_mod.id == 'weapon_mastery' or active_mod.id == 'soul_talents')
+    if character_state then
+        character_state:setVisibleDomains({
+            soul        = focus:is_hub_open() and active_mod ~= nil and active_mod.id == 'character',
+            progression = sf_active,
+        })
+        character_state:tick(now)
+    end
+
     -- Keep shared Soulforge & Character state lifecycles in sync with bounded retry/timeout ticking
     if character_mod and character_mod.tick then
         character_mod:tick(now)
@@ -756,31 +862,7 @@ ashita.events.register('d3d_present', 'soulspire_core_present', function()
         if sf_actions.tick then
             sf_actions.tick(now)
         end
-        local active_mod = focus:active_module()
-        local sf_active = focus:is_hub_open() and active_mod ~= nil
-            and (active_mod.id == 'weapon_mastery' or active_mod.id == 'soul_talents')
         sf_state.open[1] = sf_active
-
-        if in_session and sf_active then
-            if (not sf_state.synced and sf_state.syncPending == nil and sf_state.lastSyncError == nil)
-                and (now - (sf_state.syncRequestedAt or 0)) >= 4.0 then
-                sf_actions.sync()
-            end
-            if (now - sf_last_auto_check) >= 1.0 then
-                sf_last_auto_check = now
-                local ctx_sig = read_sf_context_signature()
-                if ctx_sig ~= nil then
-                    if sf_last_context_sig ~= nil and ctx_sig ~= sf_last_context_sig then
-                        if not sf_state.synced then
-                            sf_actions.sync()
-                        else
-                            sf_actions.refreshState()
-                        end
-                    end
-                    sf_last_context_sig = ctx_sig
-                end
-            end
-        end
     end
 
     -- Pump hold-to-repeat for D-Pad / Left Stick / Arrow keys while Core Hub is open

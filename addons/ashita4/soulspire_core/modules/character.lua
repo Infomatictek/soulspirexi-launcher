@@ -34,24 +34,26 @@ function Character.new(opts)
         cs_state.next_request = CORE_REQ_BASE
     end
 
-    return setmetatable({
-        protocol      = opts.protocol,
-        crystal_state = cs_state,
-        soul_registry = opts.soul_registry,
-        data_service  = opts.data_service,
-        assets        = opts.assets,
-        send_packet   = opts.send_packet,
-        clock         = opts.clock or os.clock,
-        dll_status_fn = opts.dll_status_fn,
-        player_ctx_fn = opts.player_ctx_fn,
-        region        = 'crystals', -- 'crystals' | 'confirm_socket'
-        selected_idx  = 1,
-        confirm_btn   = 1,
-        confirm_entry = nil,
-        sync_retries  = 0,
-        retry_after   = nil,
-        last_sync_err = nil,
-        player_info   = {
+    local self = setmetatable({
+        protocol        = opts.protocol,
+        crystal_state   = cs_state,
+        soul_registry   = opts.soul_registry,
+        data_service    = opts.data_service,
+        character_state = opts.character_state,
+        assets          = opts.assets,
+        send_packet     = opts.send_packet,
+        clock           = opts.clock or os.clock,
+        dll_status_fn   = opts.dll_status_fn,
+        player_ctx_fn   = opts.player_ctx_fn,
+        region          = 'crystals', -- 'crystals' | 'confirm_socket'
+        selected_idx    = 1,
+        confirm_btn     = 1,
+        confirm_entry   = nil,
+        sync_retries    = 0,
+        retry_after     = nil,
+        last_sync_err   = nil,
+        _sub_ids        = {},
+        player_info     = {
             name       = 'Adventurer',
             main_job   = 0,
             main_lvl   = 0,
@@ -60,9 +62,71 @@ function Character.new(opts)
             zone       = 0,
             server_id  = 0,
         },
-        hud_branch    = nil,
-        hud_job       = nil,
+        hud_branch      = nil,
+        hud_job         = nil,
     }, Character)
+
+    if self.character_state then
+        self.character_state:registerDomainTransport('soul', function(_req)
+            return self:sync(false)
+        end)
+        self.character_state:onSessionReset(function(reason)
+            if self.crystal_state and self.crystal_state.reset then
+                self.crystal_state:reset(tostring(reason or 'session_reset'), false)
+                self.crystal_state:set_context(nil, nil, nil, nil)
+            end
+            self.hud_branch = nil
+            self.hud_job = nil
+            self.sync_retries = 0
+            self.retry_after = nil
+            self.last_sync_err = nil
+            self.confirm_entry = nil
+            self.region = 'crystals'
+        end)
+        self._sub_ids[#self._sub_ids + 1] = self.character_state:subscribe(
+            function(snap)
+                local eff = snap.effective or {}
+                return {
+                    characterId = eff.characterId,
+                    name        = eff.name,
+                    mainJob     = eff.mainJob,
+                    mainLevel   = eff.mainLevel,
+                    subJob      = eff.subJob,
+                    subLevel    = eff.subLevel,
+                    zone        = eff.zone,
+                }
+            end,
+            function(val)
+                if val and (val.characterId or 0) > 0 then
+                    self.player_info = {
+                        server_id = val.characterId or 0,
+                        name      = val.name or 'Adventurer',
+                        main_job  = val.mainJob or 0,
+                        main_lvl  = val.mainLevel or 0,
+                        sub_job   = val.subJob or 0,
+                        sub_lvl   = val.subLevel or 0,
+                        zone      = val.zone or 0,
+                    }
+                    if self.crystal_state then
+                        local key = tostring(val.characterId or 0) .. ':' .. tostring(val.name or '')
+                        self.crystal_state:set_context(key, val.mainJob, val.zone, val.mainLevel)
+                    end
+                end
+            end,
+            { owner = 'character', immediate = true }
+        )
+    end
+
+    return self
+end
+
+function Character:destroy()
+    if self.character_state and self.character_state.unsubscribe then
+        for _, id in ipairs(self._sub_ids or {}) do
+            self.character_state:unsubscribe(id)
+        end
+    end
+    self._sub_ids = {}
 end
 
 function Character:_cache_ready()
@@ -120,6 +184,42 @@ function Character:has_modal()
 end
 
 function Character:refresh_player_context()
+    if self.character_state then
+        local snap = self.character_state:getSnapshot()
+        local eff = snap.effective or {}
+        if (eff.characterId or 0) > 0 then
+            self.player_info = {
+                name      = eff.name or 'Adventurer',
+                server_id = eff.characterId or 0,
+                zone      = eff.zone or 0,
+                main_job  = eff.mainJob or 0,
+                main_lvl  = eff.mainLevel or 0,
+                sub_job   = eff.subJob or 0,
+                sub_lvl   = eff.subLevel or 0,
+            }
+            if self.crystal_state then
+                local key = tostring(eff.characterId or 0) .. ':' .. tostring(eff.name or '')
+                self.crystal_state:set_context(key, eff.mainJob, eff.zone, eff.mainLevel)
+            end
+            return
+        elseif type(self.player_ctx_fn) == 'function' then
+            local ok, res = pcall(self.player_ctx_fn)
+            if ok and type(res) == 'table' then
+                self.character_state:observeRuntime({
+                    inSession   = true,
+                    characterId = res.server_id or res.characterId or 0,
+                    name        = res.name,
+                    zone        = res.zone,
+                    mainJob     = res.main_job or res.mainJob,
+                    mainLevel   = res.main_lvl or res.mainLevel,
+                    subJob      = res.sub_job or res.subJob,
+                    subLevel    = res.sub_lvl or res.subLevel,
+                }, self.clock())
+                return
+            end
+        end
+    end
+
     local info = nil
     if type(self.player_ctx_fn) == 'function' then
         local ok, res = pcall(self.player_ctx_fn)
@@ -164,6 +264,9 @@ function Character:observe_hud_identity(branch, job_id)
     if type(branch) == 'number' and type(job_id) == 'number' then
         self.hud_branch = branch
         self.hud_job = job_id
+        if self.character_state then
+            self.character_state:observeHudBranch(branch, job_id, self.clock())
+        end
     end
 end
 
@@ -184,6 +287,29 @@ function Character:handle_packet_in(id, data, now, size)
     end
 
     local ts = now or self.clock()
+    local function publish_soul_state(dec, pkt_bytes)
+        if not self.character_state or not dec or dec.kind ~= 'state' then return end
+        local entry = dec.entries and dec.entries[(dec.job or 0) + 1] or nil
+        if dec.result == 0 and entry then
+            self.character_state:applySoulConfirmation({
+                jobId         = dec.job,
+                level         = dec.level,
+                activeBranch  = entry.active or 0,
+                ownedMask     = entry.owned_mask or 0,
+                result        = dec.result,
+                responseBytes = pkt_bytes,
+                cacheHit      = self:_cache_ready(),
+            }, { now = ts })
+        elseif dec.result == 3 then
+            self.character_state:reportDomainError('soul', 'Server busy; retrying Soul sync...', { now = ts, retryable = true })
+            self.character_state:rejectTransaction('soul_socket', 'Server busy; cannot socket Soul right now.', ts)
+        elseif dec.result ~= 0 then
+            local msg = self.crystal_state.message or 'Soul crystal action rejected by server.'
+            self.character_state:reportDomainError('soul', msg, { now = ts, retryable = false })
+            self.character_state:rejectTransaction('soul_socket', msg, ts)
+        end
+    end
+
     if decoded.request_id >= CORE_REQ_BASE and decoded.request_id < 0x8000 then
         local ok, recv_ok, why = pcall(self.crystal_state.receive, self.crystal_state, pkt, ts)
         if ok and recv_ok then
@@ -204,6 +330,7 @@ function Character:handle_packet_in(id, data, now, size)
                 else
                     self.last_sync_err = self.crystal_state.message
                 end
+                publish_soul_state(decoded, #pkt)
             end
         elseif self.data_service then
             self.data_service:record_event('crys', 'receive_err', tostring(why or recv_ok))
@@ -212,7 +339,7 @@ function Character:handle_packet_in(id, data, now, size)
     end
 
     -- Passive sync if standalone crystalsocket received an authoritative state reply
-    if decoded.kind == 'state' and decoded.result == 0 and self.crystal_state.current_job == decoded.job then
+    if decoded.kind == 'state' and decoded.result == 0 and (self.crystal_state.current_job == decoded.job or self.crystal_state.current_job == nil) then
         self.crystal_state.all_entries = decoded.entries
         self.crystal_state.accepted = decoded.entries[decoded.job + 1]
         if decoded.level and decoded.level > 0 then
@@ -224,6 +351,7 @@ function Character:handle_packet_in(id, data, now, size)
         self.retry_after = nil
         self.last_sync_err = nil
         self:_ensure_cached_catalog_in_state(decoded.job)
+        publish_soul_state(decoded, #pkt)
     end
     return false
 end
@@ -361,6 +489,25 @@ function Character:get_entries()
 end
 
 function Character:get_header_identity()
+    if self.character_state then
+        local snap = self.character_state:getSnapshot()
+        if snap and snap.effective and (snap.effective.characterId or 0) > 0 then
+            local eff = snap.effective
+            return {
+                player_name     = eff.name or 'Adventurer',
+                job_key         = eff.mainJobKey or '---',
+                job_level       = eff.mainLevel or 0,
+                level_source    = eff.mainLevelSource or 'unknown',
+                confirmed_level = eff.confirmedLevel,
+                level_mismatch  = eff.levelMismatch == true,
+                sub_job_key     = eff.subJobKey,
+                sub_level       = eff.subLevel or 0,
+                soul_name       = eff.soulName or 'Base',
+                soul_abbr       = eff.soulAbbr or eff.mainJobKey or '---',
+                branch          = eff.soulBranch or 0,
+            }
+        end
+    end
     local entries, snap, activeBranch, jobKey = self:get_entries()
     local activeName = 'Base'
     local activeAbbr = jobKey
@@ -374,7 +521,7 @@ function Character:get_header_identity()
     return {
         player_name = self.player_info.name or 'Adventurer',
         job_key     = jobKey,
-        job_level   = snap.current_lvl or self.player_info.main_lvl or 0,
+        job_level   = (self.player_info.main_lvl and self.player_info.main_lvl > 0) and self.player_info.main_lvl or (snap.current_lvl or 0),
         sub_job_key = JOB_NAMES[self.player_info.sub_job or 0],
         sub_level   = self.player_info.sub_lvl or 0,
         soul_name   = activeName,
@@ -422,13 +569,25 @@ end
 function Character:select_branch(branch)
     if not self.crystal_state or not self.protocol then return false, 'Unavailable' end
     self:_ensure_cached_catalog_in_state()
-    return self.crystal_state:request(self.protocol.OP_SELECT, branch, self.clock(), function(pkt)
+    if self.character_state then
+        self.character_state:beginTransaction('soul_socket', 'soul', { branch = branch }, self.clock())
+    end
+    local ok, err = self.crystal_state:request(self.protocol.OP_SELECT, branch, self.clock(), function(pkt)
         return self:_send_crystal_packet(pkt)
     end)
+    if not ok and self.character_state then
+        self.character_state:rejectTransaction('soul_socket', tostring(err or 'Unable to send Soul socket request.'), self.clock())
+    end
+    return ok, err
 end
 
 function Character:on_open()
     self:refresh_player_context()
+    if self.character_state then
+        -- Coordinated refresh: sends zero packets when Soul domain is already fresh!
+        self.character_state:requestRefresh('soul', 'high', { reason = 'character_open' })
+        return
+    end
     if self.crystal_state then
         if self:_cache_ready() and self:_ensure_cached_catalog_in_state() then
             -- Lightweight OP_QUERY for authoritative ownership & active Soul state

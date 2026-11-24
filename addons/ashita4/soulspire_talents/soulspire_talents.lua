@@ -43,11 +43,20 @@ end
 local coreIpc = loadCoreSibling('core.ipc')
 local DataService = loadCoreSibling('core.data_service')
 local dataService = nil
-if DataService and DataService.new and type(addon) == 'table' and type(addon.path) == 'string' then
-    local root = addon.path:gsub('[/\\]+$', ''):gsub('[/\\][^/\\]+$', '')
-    dataService = DataService.new({ cache_dir = root .. '/soulspire_core/cache', auto_load = true })
+local function ensureDataService()
+    if dataService ~= nil then return dataService end
+    if DataService and DataService.new and type(addon) == 'table' and type(addon.path) == 'string' then
+        local root = addon.path:gsub('[/\\]+$', ''):gsub('[/\\][^/\\]+$', '')
+        dataService = DataService.new({ cache_dir = root .. '/soulspire_core/cache', auto_load = true })
+    end
+    return dataService
 end
 local oxtlIpcToken = coreIpc and coreIpc.register_listener('OXTL', 'soulspire_talents') or nil
+-- Stay passive when soulspire_core owns OXTL and standalone /talents window is closed
+-- to eliminate duplicate 6.8MB cache loads and competing sync requests.
+if not (coreIpc and coreIpc.has_listener and coreIpc.has_listener('OXTL', 'soulspire_core')) then
+    ensureDataService()
+end
 
 local function clamp(v, lo, hi)
     if v < lo then return lo end
@@ -225,6 +234,20 @@ ashita.events.register('packet_in', 'ox_talents_packet_in', function(e)
         end
         return
     end
+    -- When soulspire_core owns OXTL and standalone /talents window is closed, stay passive:
+    -- do NOT parse 0x1FD packets or compete with soulspire_core's CharacterState sync!
+    local coreActive = coreIpc and coreIpc.has_listener and coreIpc.has_listener('OXTL', 'soulspire_core')
+    if coreActive and not (state and state.open and state.open[1]) then
+        if e.id == soulforgeState.PACKET_S2C_ID then
+            local buf = e.data_modified or e.data
+            if type(buf) == 'string' and #buf >= 8 and buf:sub(5, 8) == 'OXTL' then
+                if coreIpc.should_block(oxtlIpcToken) then
+                    e.blocked = true
+                end
+            end
+        end
+        return
+    end
     local buf = e.data_modified or e.data
     if actions.handlePacketIn(e.id, buf, e.size) then
         if not coreIpc or coreIpc.should_block(oxtlIpcToken) then
@@ -235,6 +258,10 @@ end)
 
 ashita.events.register('d3d_present', 'ox_talents_present', function()
     local now = os.clock()
+    local coreActive = coreIpc and coreIpc.has_listener and coreIpc.has_listener('OXTL', 'soulspire_core')
+    if coreActive and not (state and state.open and state.open[1]) then
+        return
+    end
     if actions and actions.tick then
         actions.tick(now)
     end

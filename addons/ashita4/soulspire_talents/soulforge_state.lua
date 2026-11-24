@@ -33,7 +33,10 @@ M.OP_WS_STATE   = 10
 M.MAX_SYNC_RETRIES      = 2
 M.MAX_WS_RETRIES        = 2
 M.LEGACY_FALLBACK_SEC   = 1.8
-M.REQUEST_TIMEOUT_SEC   = 5.0
+M.REQUEST_TIMEOUT_SEC   = 3.5
+M.SYNC_FRESHNESS_SEC    = 20.0
+M.WS_FRESHNESS_SEC      = 30.0
+M.BACKOFF_SCHEDULE      = { 1.0, 2.0, 3.5 }
 
 M.SKILL_LIST = {
     { id = -1, name = 'Equipped' },
@@ -227,13 +230,15 @@ end
 
 function M.new(opts)
     opts = opts or {}
-    local soulRegistry = opts.soulRegistry
-    local wsRegistry   = opts.wsRegistry
-    local dataService  = opts.dataService
-    local sendFn       = opts.sendPacket
-    local clockFn      = opts.clock or os.clock
-    local onJobChange  = opts.onJobChange
-    local onSavePrefs  = opts.savePrefs
+    local soulRegistry   = opts.soulRegistry
+    local wsRegistry     = opts.wsRegistry
+    local dataService    = opts.dataService
+    local characterState = opts.characterState
+    local sendFn         = opts.sendPacket
+    local clockFn        = opts.clock or os.clock
+    local onJobChange    = opts.onJobChange
+    local onSavePrefs    = opts.savePrefs
+    local csSubIds       = {}
 
     local function resolveSpecDisplayName(raw)
         if type(raw) ~= 'string' or raw == '' or raw == 'Base' then return 'Base' end
@@ -273,6 +278,7 @@ function M.new(opts)
         needsRefresh        = false,
         protocolVersion     = 1,
         serverSupportsV2    = nil, -- nil (unknown) | true | false
+        v2ConsecutiveFails  = 0,
         catalogSource       = 'none', -- 'cache' | 'server' | 'none'
         cacheNotice         = nil,
         jobKey              = '---',
@@ -280,11 +286,16 @@ function M.new(opts)
         rawSpecKey          = 'Base',
         specKey             = 'base',
         jobLevel            = 1,
+        confirmedJobLevel   = nil, -- server-confirmed META level (distinct from immediate runtime display)
+        levelSource         = 'unknown', -- 'unknown' | 'observed' | 'confirmed'
+        levelMismatch       = false,
         avail               = 0,
         spent               = 0,
         earned              = 1,
         mainSkill           = 0,
         rangedSkill         = 0,
+        wsDetailSyncedAt    = {}, -- wsId -> timestamp of last confirmed server WSS/WS
+        lastPacketBytes     = 0,
         catalog             = {},
         catalogById         = {},
         tempCatalog         = nil,
@@ -403,22 +414,93 @@ function M.new(opts)
         if (clockFn() - (state.pendingOp.sentAt or 0)) < M.REQUEST_TIMEOUT_SEC then
             return true
         end
+        local expiredKind = state.pendingOp.kind
         state.pendingOp = nil
         if dataService then
             dataService:record_metric('timeouts', 1)
             dataService:record_event('oxtl', 'op_timeout', 'Pending talent mutation timed out')
         end
+        if characterState and expiredKind then
+            characterState:rejectTransaction('talent_' .. tostring(expiredKind), 'Server request timed out.', clockFn())
+        end
         setStatus('Server request timed out — click SYNC to refresh.')
         return false
     end
 
-    local function requestWS(wsId, forceLegacy)
-        if wsId == nil then return end
+    local function buildCachedPreviewDetail(wsId)
+        if not dataService or not dataService:is_cache_usable() then return nil end
+        if dataService.is_talents_warm and not dataService:is_talents_warm() then return nil end
+        local wsMeta = dataService:get_weapon_skill(wsId)
+        local tree   = dataService:get_ws_tree(wsId, state.specKey)
+        if not wsMeta or not tree then return nil end
+        local nodes = {}
+        local byKey = {}
+        for i, staticNode in ipairs(tree.nodes or {}) do
+            local node = {
+                idx         = tonumber(staticNode.idx) or i,
+                slot        = tonumber(staticNode.slot) or i,
+                key         = staticNode.key,
+                tier        = tonumber(staticNode.tier) or 1,
+                col         = tonumber(staticNode.col) or 1,
+                rank        = 0,
+                maxRank     = tonumber(staticNode.maxRank) or 1,
+                canLearn    = false, -- strictly server-authoritative; never optimistically unlocked
+                reqWsPoints = tonumber(staticNode.reqWsPoints) or 0,
+                reqKey      = staticNode.reqKey,
+                reqRank     = tonumber(staticNode.reqRank) or 0,
+                name        = staticNode.name or staticNode.key,
+                desc        = dataService.get_node_desc(staticNode, 0),
+                nextDesc    = dataService.get_node_desc(staticNode, 1),
+                reqLevel    = dataService.get_node_next_req_level(staticNode, 0),
+                scTier      = tonumber(staticNode.scTier) or 0,
+                scId        = 0,
+                scName      = '',
+                cost        = tonumber(staticNode.cost) or 1,
+            }
+            nodes[i] = node
+            byKey[node.key] = node
+        end
+        return {
+            id        = wsId,
+            name      = wsMeta.name,
+            skillName = wsMeta.skillName or '',
+            wsType    = wsMeta.wsType or 'physical',
+            spent     = state.spentByWs[wsId] or 0,
+            orig      = 'Syncing live ranks from server...',
+            nodes     = nodes,
+            byKey     = byKey,
+            source    = 'cache_preview',
+            preview   = true,
+        }
+    end
+
+    local function requestWS(wsId, forceLegacy, reqOpts)
+        if wsId == nil then return false end
+        reqOpts = reqOpts or {}
+        local force = (reqOpts.force == true) or (forceLegacy == true)
         local now = clockFn()
         state.selectedWsId = wsId
         state.wsError = nil
         if state.wsDetailsById[wsId] and (not state.wsDetail or state.wsDetail.id ~= wsId) then
             state.wsDetail = state.wsDetailsById[wsId]
+        elseif not state.wsDetailsById[wsId] then
+            local preview = buildCachedPreviewDetail(wsId)
+            if preview then
+                state.wsDetail = preview
+            end
+        end
+
+        -- Skip redundant WS network request when already fresh and not forced
+        local syncedAt = state.wsDetailSyncedAt[wsId]
+        if not force and syncedAt and state.wsDetailsById[wsId] and not state.wsDetailsById[wsId].preview
+            and not state.needsRefresh and (now - syncedAt) < M.WS_FRESHNESS_SEC then
+            return false
+        end
+
+        -- Deduplicate identical in-flight WS request
+        if not force and state.wsRequest and state.wsRequest.wsId == wsId then
+            if dataService then dataService:record_metric('deduped_requests', 1) end
+            return false
         end
 
         state.wsReqSeq = (state.wsReqSeq % 250) + 1
@@ -426,11 +508,12 @@ function M.new(opts)
         local useCompact = (not forceLegacy) and isCompactEnabled()
         local mode = useCompact and 'compact' or 'legacy'
         state.wsRequest = {
-            wsId    = wsId,
-            seq     = seq,
-            sentAt  = now,
-            retries = 0,
-            mode    = mode,
+            wsId        = wsId,
+            seq         = seq,
+            sentAt      = now,
+            nextRetryAt = nil,
+            retries     = 0,
+            mode        = mode,
         }
 
         if useCompact then
@@ -439,10 +522,26 @@ function M.new(opts)
         else
             sendTalentPacket(M.OP_WS, wsId, 0, 0)
         end
+        return true
     end
 
-    local function requestFullSync(forceLegacyCatalog)
+    local function requestFullSync(forceLegacyCatalog, reqOpts)
+        reqOpts = reqOpts or {}
+        local force = (reqOpts.force == true) or (forceLegacyCatalog == true)
         local now = clockFn()
+
+        -- Deduplicate if an identical sync is already in flight
+        if not force and state.syncPending ~= nil then
+            if dataService then dataService:record_metric('deduped_requests', 1) end
+            return false
+        end
+
+        -- Avoid unnecessary network traffic when already synced & fresh
+        if not force and state.synced and not state.needsRefresh
+            and (now - (state.lastSyncCompletedAt or 0)) < M.SYNC_FRESHNESS_SEC then
+            return false
+        end
+
         state.syncRequestedAt = now
         state.lastSyncError = nil
         if not state.synced then
@@ -461,22 +560,24 @@ function M.new(opts)
                     kind          = 'cache_sync',
                     gen           = gen,
                     sentAt        = now,
+                    nextRetryAt   = nil,
                     retries       = 0,
                     fallbackTried = false,
                 }
                 sendTalentPacket(M.OP_CACHE_SYNC, info.schemaVersion or 1, 0, gen)
-                return
+                return true
             else
                 -- Known legacy server + verified local cache: only request META + SPENT (skip 36-packet CAT flood!)
                 state.syncPending = {
                     kind          = 'legacy_state',
                     gen           = gen,
                     sentAt        = now,
+                    nextRetryAt   = nil,
                     retries       = 0,
                     fallbackTried = true,
                 }
                 sendTalentPacket(M.OP_STATE, 0, 0, 0)
-                return
+                return true
             end
         end
 
@@ -485,39 +586,99 @@ function M.new(opts)
             kind          = 'legacy_full',
             gen           = gen,
             sentAt        = now,
+            nextRetryAt   = nil,
             retries       = 0,
             fallbackTried = true,
         }
         sendTalentPacket(M.OP_SYNC, 0, 0, 0)
+        return true
     end
 
-    local function requestStateRefresh()
+    local function requestStateRefresh(reqOpts)
+        reqOpts = reqOpts or {}
+        local force = (reqOpts.force == true)
         local now = clockFn()
+
+        if not force and state.syncPending ~= nil then
+            if dataService then dataService:record_metric('deduped_requests', 1) end
+            return false
+        end
+        if not force and state.synced and not state.needsRefresh
+            and (now - (state.lastSyncCompletedAt or 0)) < M.SYNC_FRESHNESS_SEC then
+            return false
+        end
+
         state.needsRefresh = false
         state.syncRequestedAt = now
         state.lastSyncError = nil
-        state.syncPending = {
-            kind          = 'state_refresh',
-            gen           = state.syncGen,
-            sentAt        = now,
-            retries       = 0,
-            fallbackTried = true,
-        }
-        sendTalentPacket(M.OP_STATE, 0, 0, 0)
+        state.syncGen = (state.syncGen % 250) + 1
+        local gen = state.syncGen
+        if dataService and dataService:is_cache_usable() and state.serverSupportsV2 ~= false then
+            local info = dataService:get_cache_info()
+            state.syncPending = {
+                kind          = 'cache_sync',
+                gen           = gen,
+                sentAt        = now,
+                nextRetryAt   = nil,
+                retries       = 0,
+                fallbackTried = false,
+            }
+            sendTalentPacket(M.OP_CACHE_SYNC, info.schemaVersion or 1, 0, gen)
+        else
+            state.syncPending = {
+                kind          = 'state_refresh',
+                gen           = gen,
+                sentAt        = now,
+                nextRetryAt   = nil,
+                retries       = 0,
+                fallbackTried = true,
+            }
+            sendTalentPacket(M.OP_STATE, 0, 0, 0)
+        end
+        return true
     end
 
     local function invalidateForLifecycle(reason)
-        state.needsRefresh = true
-        state.syncPending  = nil
-        state.wsRequest    = nil
-        state.tempWs       = nil
-        state.tempWss      = nil
-        state.tempCatalog  = nil
-        state.tempSpent    = nil
-        state.tempUnlocked = nil
-        state.pendingOp    = nil
-        state.wsDetailsById = {}
-        state.wsDetail     = nil
+        state.needsRefresh     = true
+        state.syncPending      = nil
+        state.wsRequest        = nil
+        state.tempWs           = nil
+        state.tempWss          = nil
+        state.tempCatalog      = nil
+        state.tempSpent        = nil
+        state.tempUnlocked     = nil
+        state.pendingOp        = nil
+        state.wsDetailsById    = {}
+        state.wsDetailSyncedAt = {}
+        state.wsDetail         = nil
+        -- Allow v2 re-probe cleanly on reconnect/zone/session change
+        if reason == 'logout' or reason == 'character_switched' or reason == 'session_ended' then
+            state.synced             = false
+            state.syncState          = 'idle'
+            state.lastSyncCompletedAt = 0
+            state.lastSyncError      = nil
+            state.serverSupportsV2   = nil
+            state.v2ConsecutiveFails = 0
+            state.spentByWs          = {}
+            state.unlockedByWs       = {}
+            state.selectedWsId       = nil
+            state.jobKey             = '---'
+            state.specName           = 'Base'
+            state.rawSpecKey         = 'Base'
+            state.specKey            = 'base'
+            state.jobLevel           = 1
+            state.confirmedJobLevel  = nil
+            state.levelSource        = 'unknown'
+            state.levelMismatch      = false
+            state.avail              = 0
+            state.spent              = 0
+            state.earned             = 1
+            state.mainSkill          = 0
+            state.rangedSkill        = 0
+            seedCatalogFromCache()
+        elseif reason == 'zone_change' or reason == 'zone_in' then
+            state.v2ConsecutiveFails = 0
+        end
         if dataService then
             dataService:invalidate_dynamic_state(reason)
         end
@@ -525,6 +686,7 @@ function M.new(opts)
 
     local function investNode(wsId, node)
         if not wsId or not node or isPendingActive() then return false end
+        local now = clockFn()
         state.inspectedNodeKey = node.key
         state.rejectedNodeKey = nil
         state.rejectedMsg = nil
@@ -533,8 +695,11 @@ function M.new(opts)
             wsId    = wsId,
             nodeKey = node.key,
             nodeIdx = node.idx or 0,
-            sentAt  = clockFn(),
+            sentAt  = now,
         }
+        if characterState then
+            characterState:beginTransaction('talent_invest', 'progression', { wsId = wsId, nodeKey = node.key }, now)
+        end
         setStatus('Forging ' .. tostring(node.name or node.key) .. '...')
         local compactFlag = isCompactEnabled() and 1 or 0
         sendTalentPacket(M.OP_INVEST, wsId, node.idx or 0, compactFlag)
@@ -543,6 +708,7 @@ function M.new(opts)
 
     local function refundNode(wsId, node)
         if not wsId or not node or isPendingActive() then return false end
+        local now = clockFn()
         state.inspectedNodeKey = node.key
         state.rejectedNodeKey = nil
         state.rejectedMsg = nil
@@ -551,8 +717,11 @@ function M.new(opts)
             wsId    = wsId,
             nodeKey = node.key,
             nodeIdx = node.idx or 0,
-            sentAt  = clockFn(),
+            sentAt  = now,
         }
+        if characterState then
+            characterState:beginTransaction('talent_refund', 'progression', { wsId = wsId, nodeKey = node.key }, now)
+        end
         setStatus('Refunding ' .. tostring(node.name or node.key) .. '...')
         local compactFlag = isCompactEnabled() and 1 or 0
         sendTalentPacket(M.OP_REFUND, wsId, node.idx or 0, compactFlag)
@@ -561,12 +730,16 @@ function M.new(opts)
 
     local function cycleSkillchain(wsId, tier, dir)
         if not wsId or not tier or isPendingActive() then return false end
+        local now = clockFn()
         state.pendingOp = {
             kind   = 'sc',
             wsId   = wsId,
             tier   = tier,
-            sentAt = clockFn(),
+            sentAt = now,
         }
+        if characterState then
+            characterState:beginTransaction('talent_sc', 'progression', { wsId = wsId, tier = tier }, now)
+        end
         local d = (dir == 2) and 2 or 1
         local arg2 = isCompactEnabled() and (128 + d) or d
         sendTalentPacket(M.OP_CYCLE_SC, wsId, tier, arg2)
@@ -575,7 +748,11 @@ function M.new(opts)
 
     local function resetWS(wsId)
         if not wsId or isPendingActive() then return false end
-        state.pendingOp = { kind = 'reset_ws', wsId = wsId, sentAt = clockFn() }
+        local now = clockFn()
+        state.pendingOp = { kind = 'reset_ws', wsId = wsId, sentAt = now }
+        if characterState then
+            characterState:beginTransaction('talent_reset_ws', 'progression', { wsId = wsId }, now)
+        end
         setStatus('Resetting weapon skill talents...')
         local compactFlag = isCompactEnabled() and 1 or 0
         sendTalentPacket(M.OP_RESET_WS, wsId, 0, compactFlag)
@@ -584,7 +761,11 @@ function M.new(opts)
 
     local function resetAll()
         if isPendingActive() then return false end
-        state.pendingOp = { kind = 'reset_all', wsId = 0, sentAt = clockFn() }
+        local now = clockFn()
+        state.pendingOp = { kind = 'reset_all', wsId = 0, sentAt = now }
+        if characterState then
+            characterState:beginTransaction('talent_reset_all', 'progression', { wsId = 0 }, now)
+        end
         setStatus('Resetting all weapon skill talents for ' .. tostring(state.specName) .. '...')
         local compactFlag = isCompactEnabled() and 1 or 0
         sendTalentPacket(M.OP_RESET_ALL, state.selectedWsId or 0, 0, compactFlag)
@@ -733,37 +914,65 @@ function M.new(opts)
         }, nil
     end
 
+    local function publishProgressionToCharacterState(opName, now)
+        if not characterState then return end
+        characterState:applyProgressionConfirmation({
+            jobKey          = state.jobKey,
+            jobLevel        = state.confirmedJobLevel or state.jobLevel,
+            specKey         = state.specKey,
+            specName        = state.specName,
+            avail           = state.avail,
+            spent           = state.spent,
+            earned          = state.earned,
+            wsSpent         = state.spentByWs,
+            wsUnlocked      = state.unlockedByWs,
+            mainSkill       = state.mainSkill,
+            rangedSkill     = state.rangedSkill,
+            protocolVersion = state.protocolVersion,
+            responseBytes   = state.lastPacketBytes,
+            op              = opName or 'oxtl_sync',
+            cacheHit        = (dataService ~= nil and dataService:is_cache_usable()),
+        }, { now = now or clockFn() })
+    end
+
+    local function syncDisplayFromCharacterState(snap)
+        if not snap or not snap.effective then return end
+        local eff = snap.effective
+        if type(eff.mainJobKey) == 'string' and eff.mainJobKey ~= '' then
+            state.jobKey = eff.mainJobKey
+        end
+        if eff.mainLevel and eff.mainLevel > 0 then
+            state.jobLevel = eff.mainLevel
+            state.levelSource = (eff.mainLevelSource == 'observed') and 'observed' or 'confirmed'
+        elseif state.confirmedJobLevel and state.confirmedJobLevel > 0 then
+            state.jobLevel = state.confirmedJobLevel
+            state.levelSource = 'confirmed'
+        end
+        state.levelMismatch = eff.levelMismatch == true
+        if type(eff.soulName) == 'string' and eff.soulName ~= '' then
+            state.specName = eff.soulName
+        end
+        if type(eff.soulKey) == 'string' and eff.soulKey ~= '' then
+            state.specKey = string.lower(eff.soulKey)
+        end
+        if (eff.mainSkill or 0) > 0 and state.mainSkill == 0 then
+            state.mainSkill = eff.mainSkill
+        end
+        if (eff.rangedSkill or 0) > 0 and state.rangedSkill == 0 then
+            state.rangedSkill = eff.rangedSkill
+        end
+    end
+
     local function tick(now)
         local t = now or clockFn()
 
-        -- 1. Bounded sync timeout & legacy server auto-fallback
+        -- 1. Bounded sync timeout, exponential backoff & non-permanent v2 fallback
         local sp = state.syncPending
         if sp then
-            local elapsed = t - (sp.sentAt or 0)
-            if sp.kind == 'cache_sync' and not sp.fallbackTried and elapsed >= M.LEGACY_FALLBACK_SEC then
-                -- Legacy server did not recognize OP_CACHE_SYNC (9): switch cleanly to OP_STATE (2) or OP_SYNC (1)
-                sp.fallbackTried = true
-                sp.sentAt = t
-                state.serverSupportsV2 = false
-                if dataService then
-                    dataService:mark_legacy_server()
-                    dataService:record_event('oxtl', 'legacy_fallback', 'OP_CACHE_SYNC timed out; falling back to OP_STATE/OP_SYNC')
-                end
-                if dataService and dataService:is_cache_usable() and #(state.catalog or {}) > 0 then
-                    sp.kind = 'legacy_state'
-                    sendTalentPacket(M.OP_STATE, 0, 0, 0)
-                else
-                    sp.kind = 'legacy_full'
-                    sendTalentPacket(M.OP_SYNC, 0, 0, 0)
-                end
-            elseif elapsed >= M.REQUEST_TIMEOUT_SEC then
-                if (sp.retries or 0) < M.MAX_SYNC_RETRIES then
-                    sp.retries = (sp.retries or 0) + 1
+            if sp.nextRetryAt ~= nil then
+                if t >= sp.nextRetryAt then
+                    sp.nextRetryAt = nil
                     sp.sentAt = t
-                    if dataService then
-                        dataService:record_metric('sync_retries', 1)
-                        dataService:record_event('oxtl', 'sync_retry', 'retry #' .. tostring(sp.retries) .. ' kind=' .. tostring(sp.kind))
-                    end
                     if sp.kind == 'cache_sync' and dataService and dataService:is_cache_usable() then
                         local info = dataService:get_cache_info()
                         sendTalentPacket(M.OP_CACHE_SYNC, info.schemaVersion or 1, 0, sp.gen or 0)
@@ -772,59 +981,136 @@ function M.new(opts)
                     else
                         sendTalentPacket(M.OP_SYNC, 0, 0, 0)
                     end
-                else
-                    state.syncPending = nil
-                    state.syncState = 'error'
-                    state.lastSyncError = 'Server did not reply to Weapon Mastery sync. Click SYNC NOW or press [X] to retry.'
-                    if dataService then
-                        dataService:record_metric('timeouts', 1)
-                        dataService:record_event('oxtl', 'sync_timeout', state.lastSyncError)
+                end
+            else
+                local elapsed = t - (sp.sentAt or 0)
+                if sp.kind == 'cache_sync' and not sp.fallbackTried and elapsed >= M.LEGACY_FALLBACK_SEC then
+                    -- Non-permanent fallback for this request: only mark server legacy after 2 consecutive v2 misses
+                    sp.fallbackTried = true
+                    sp.sentAt = t
+                    state.v2ConsecutiveFails = (state.v2ConsecutiveFails or 0) + 1
+                    if state.v2ConsecutiveFails >= 2 then
+                        state.serverSupportsV2 = false
+                        if dataService then dataService:mark_legacy_server() end
                     end
-                    setStatus(state.lastSyncError)
+                    if dataService then
+                        dataService:record_event('oxtl', 'legacy_fallback', 'OP_CACHE_SYNC delayed; trying OP_STATE/OP_SYNC')
+                    end
+                    if dataService and dataService:is_cache_usable() and #(state.catalog or {}) > 0 then
+                        sp.kind = 'legacy_state'
+                        sendTalentPacket(M.OP_STATE, 0, 0, 0)
+                    else
+                        sp.kind = 'legacy_full'
+                        sendTalentPacket(M.OP_SYNC, 0, 0, 0)
+                    end
+                elseif elapsed >= M.REQUEST_TIMEOUT_SEC then
+                    if (sp.retries or 0) < M.MAX_SYNC_RETRIES then
+                        sp.retries = (sp.retries or 0) + 1
+                        local backoff = M.BACKOFF_SCHEDULE[sp.retries] or 2.4
+                        if dataService then
+                            dataService:record_metric('sync_retries', 1)
+                            dataService:record_event('oxtl', 'sync_retry', 'retry #' .. tostring(sp.retries) .. ' kind=' .. tostring(sp.kind))
+                        end
+                        -- If the caller already waited past timeout + backoff (e.g. coarse tick), dispatch now;
+                        -- otherwise schedule bounded exponential backoff before re-sending.
+                        if elapsed >= (M.REQUEST_TIMEOUT_SEC + backoff) or backoff <= 0 then
+                            sp.nextRetryAt = nil
+                            sp.sentAt = t
+                            if sp.kind == 'cache_sync' and dataService and dataService:is_cache_usable() then
+                                local info = dataService:get_cache_info()
+                                sendTalentPacket(M.OP_CACHE_SYNC, info.schemaVersion or 1, 0, sp.gen or 0)
+                            elseif sp.kind == 'legacy_state' or sp.kind == 'state_refresh' then
+                                sendTalentPacket(M.OP_STATE, 0, 0, 0)
+                            else
+                                sendTalentPacket(M.OP_SYNC, 0, 0, 0)
+                            end
+                        else
+                            sp.nextRetryAt = t + backoff
+                            sp.sentAt = t
+                        end
+                    else
+                        state.syncPending = nil
+                        state.syncState = 'error'
+                        state.lastSyncError = 'Server did not reply to Weapon Mastery sync. Click SYNC NOW or press [X] to retry.'
+                        if dataService then
+                            dataService:record_metric('timeouts', 1)
+                            dataService:record_event('oxtl', 'sync_timeout', state.lastSyncError)
+                        end
+                        if characterState then
+                            characterState:reportDomainError('progression', state.lastSyncError, { now = t, retryable = false })
+                        end
+                        setStatus(state.lastSyncError)
+                    end
                 end
             end
         end
 
-        -- 2. Bounded per-WS request timeout & legacy fallback (prevents infinite "LOADING WS #16...")
+        -- 2. Bounded per-WS request timeout, backoff & non-permanent legacy fallback
         local wr = state.wsRequest
         if wr then
-            local elapsed = t - (wr.sentAt or 0)
-            if wr.mode == 'compact' and elapsed >= M.LEGACY_FALLBACK_SEC then
-                wr.mode = 'legacy'
-                wr.sentAt = t
-                state.serverSupportsV2 = false
-                if dataService then
-                    dataService:mark_legacy_server()
-                    dataService:record_event('oxtl', 'ws_legacy_fallback', 'wsId=' .. tostring(wr.wsId))
-                end
-                sendTalentPacket(M.OP_WS, wr.wsId, 0, 0)
-            elseif elapsed >= M.REQUEST_TIMEOUT_SEC then
-                if (wr.retries or 0) < M.MAX_WS_RETRIES then
-                    wr.retries = (wr.retries or 0) + 1
+            if wr.nextRetryAt ~= nil then
+                if t >= wr.nextRetryAt then
+                    wr.nextRetryAt = nil
                     wr.sentAt = t
-                    if dataService then
-                        dataService:record_metric('sync_retries', 1)
-                        dataService:record_event('oxtl', 'ws_retry', string.format('wsId=%d retry=%d', wr.wsId, wr.retries))
-                    end
                     if wr.mode == 'compact' and isCompactEnabled() then
                         local info = dataService:get_cache_info()
                         sendTalentPacket(M.OP_WS_STATE, wr.wsId, info.schemaVersion or 1, wr.seq or 0)
                     else
                         sendTalentPacket(M.OP_WS, wr.wsId, 0, 0)
                     end
-                else
-                    local wsEntry = state.catalogById and state.catalogById[wr.wsId]
-                    local wsName = wsEntry and wsEntry.name or ('Weapon Skill #' .. tostring(wr.wsId))
-                    state.wsRequest = nil
-                    state.wsError = 'No server talent tree response for ' .. wsName .. '. Click RETRY or SYNC.'
-                    if dataService then
-                        dataService:record_metric('timeouts', 1)
-                        dataService:record_event('oxtl', 'ws_timeout', state.wsError)
+                end
+            else
+                local elapsed = t - (wr.sentAt or 0)
+                if wr.mode == 'compact' and elapsed >= M.LEGACY_FALLBACK_SEC then
+                    wr.mode = 'legacy'
+                    wr.sentAt = t
+                    state.v2ConsecutiveFails = (state.v2ConsecutiveFails or 0) + 1
+                    if state.v2ConsecutiveFails >= 2 then
+                        state.serverSupportsV2 = false
+                        if dataService then dataService:mark_legacy_server() end
                     end
-                    setStatus(state.wsError)
+                    if dataService then
+                        dataService:record_event('oxtl', 'ws_legacy_fallback', 'wsId=' .. tostring(wr.wsId))
+                    end
+                    sendTalentPacket(M.OP_WS, wr.wsId, 0, 0)
+                elseif elapsed >= M.REQUEST_TIMEOUT_SEC then
+                    if (wr.retries or 0) < M.MAX_WS_RETRIES then
+                        wr.retries = (wr.retries or 0) + 1
+                        local backoff = M.BACKOFF_SCHEDULE[wr.retries] or 2.4
+                        if dataService then
+                            dataService:record_metric('sync_retries', 1)
+                            dataService:record_event('oxtl', 'ws_retry', string.format('wsId=%d retry=%d', wr.wsId, wr.retries))
+                        end
+                        if elapsed >= (M.REQUEST_TIMEOUT_SEC + backoff) or backoff <= 0 then
+                            wr.nextRetryAt = nil
+                            wr.sentAt = t
+                            if wr.mode == 'compact' and isCompactEnabled() then
+                                local info = dataService:get_cache_info()
+                                sendTalentPacket(M.OP_WS_STATE, wr.wsId, info.schemaVersion or 1, wr.seq or 0)
+                            else
+                                sendTalentPacket(M.OP_WS, wr.wsId, 0, 0)
+                            end
+                        else
+                            wr.nextRetryAt = t + backoff
+                            wr.sentAt = t
+                        end
+                    else
+                        local wsEntry = state.catalogById and state.catalogById[wr.wsId]
+                        local wsName = wsEntry and wsEntry.name or ('Weapon Skill #' .. tostring(wr.wsId))
+                        state.wsRequest = nil
+                        state.wsError = 'No server talent tree response for ' .. wsName .. '. Click RETRY or SYNC.'
+                        if dataService then
+                            dataService:record_metric('timeouts', 1)
+                            dataService:record_event('oxtl', 'ws_timeout', state.wsError)
+                        end
+                        setStatus(state.wsError)
+                    end
                 end
             end
         end
+
+        -- 3. Expire stuck pendingOp cleanly
+        isPendingActive()
     end
 
     local function handleProtoLine(payload)
@@ -833,8 +1119,9 @@ function M.new(opts)
         local kind = parts[1]
 
         if kind == 'CACHE' then
-            state.serverSupportsV2 = true
-            state.protocolVersion  = tonumber(parts[2]) or 2
+            state.serverSupportsV2   = true
+            state.v2ConsecutiveFails = 0
+            state.protocolVersion    = tonumber(parts[2]) or 2
             local srv = {
                 protocolVersion = tonumber(parts[2]) or 2,
                 schemaVersion   = tonumber(parts[3]) or 1,
@@ -854,16 +1141,28 @@ function M.new(opts)
             end
             return true
         elseif kind == 'SYNC_END' then
-            state.serverSupportsV2 = true
+            local respGen = tonumber(parts[2]) or 0
+            -- Correlate syncGen: drop stale/out-of-order SYNC_END from an older sync generation!
+            if respGen > 0 and state.syncPending and state.syncPending.gen and respGen ~= state.syncPending.gen then
+                if dataService then
+                    dataService:record_metric('stale_dropped', 1)
+                    dataService:record_event('oxtl', 'stale_sync_end', string.format('got=%d want=%d', respGen, state.syncPending.gen))
+                end
+                return true
+            end
+            state.serverSupportsV2   = true
+            state.v2ConsecutiveFails = 0
             state.syncPending = nil
             state.lastSyncError = nil
             if #(state.catalog or {}) == 0 then
                 seedCatalogFromCache()
             end
+            local now = clockFn()
             state.synced = true
             state.syncState = 'synced'
-            state.lastSyncCompletedAt = clockFn()
+            state.lastSyncCompletedAt = now
             state.needsRefresh = false
+            publishProgressionToCharacterState('sync_end', now)
             autoSelectEligibleWS()
             return true
         elseif kind == 'META' then
@@ -871,15 +1170,17 @@ function M.new(opts)
             local prevSpec   = state.specName
             local prevMain   = state.mainSkill
             local prevRanged = state.rangedSkill
-            state.jobKey      = parts[2] or '---'
-            state.jobLevel    = tonumber(parts[3]) or 1
-            state.avail       = tonumber(parts[4]) or 0
-            state.spent       = tonumber(parts[5]) or 0
-            state.earned      = tonumber(parts[6]) or 1
-            state.mainSkill   = tonumber(parts[7]) or 0
-            state.rangedSkill = tonumber(parts[8]) or 0
-            state.rawSpecKey  = parts[9] or 'Base'
-            state.specName    = resolveSpecDisplayName(parts[9])
+            local now        = clockFn()
+            state.jobKey            = parts[2] or '---'
+            local confirmedLvl      = tonumber(parts[3]) or 1
+            state.confirmedJobLevel = confirmedLvl
+            state.avail             = tonumber(parts[4]) or 0
+            state.spent             = tonumber(parts[5]) or 0
+            state.earned            = tonumber(parts[6]) or 1
+            state.mainSkill         = tonumber(parts[7]) or 0
+            state.rangedSkill       = tonumber(parts[8]) or 0
+            state.rawSpecKey        = parts[9] or 'Base'
+            state.specName          = resolveSpecDisplayName(parts[9])
             if parts[10] and parts[10] ~= '' then
                 state.specKey = string.lower(parts[10])
             else
@@ -888,13 +1189,38 @@ function M.new(opts)
                     or string.lower(tostring(parts[9] or 'base'))
             end
 
+            -- Preserve immediate observed runtime level if newer; otherwise use confirmed server level
+            if characterState then
+                local snap = characterState:getSnapshot()
+                local obsLvl = snap.observed and snap.observed.mainLevel or 0
+                if obsLvl > 0 then
+                    state.jobLevel = obsLvl
+                    state.levelSource = (obsLvl == confirmedLvl) and 'confirmed' or 'observed'
+                    state.levelMismatch = (obsLvl ~= confirmedLvl)
+                else
+                    state.jobLevel = confirmedLvl
+                    state.levelSource = 'confirmed'
+                    state.levelMismatch = false
+                end
+            else
+                state.jobLevel = confirmedLvl
+                state.levelSource = 'confirmed'
+                state.levelMismatch = false
+            end
+
             if state.pendingOp and state.pendingOp.kind == 'reset_all' then
                 state.pendingOp = nil
                 state.wsDetailsById = {}
+                state.wsDetailSyncedAt = {}
+                if characterState then
+                    characterState:confirmTransaction('talent_reset_all', { avail = state.avail, spent = state.spent }, now)
+                end
                 if state.selectedWsId ~= nil then
-                    requestWS(state.selectedWsId)
+                    requestWS(state.selectedWsId, false, { force = true })
                 end
             end
+
+            publishProgressionToCharacterState('meta', now)
 
             -- Only treat as a real job/Soul transition when prevJob was already initialized (fixes initial double-OP_SYNC bug!).
             local wasInitialized = (prevJob ~= nil and prevJob ~= '---')
@@ -905,6 +1231,7 @@ function M.new(opts)
                 state.rejectedNodeKey  = nil
                 state.rejectedMsg      = nil
                 state.wsDetailsById    = {}
+                state.wsDetailSyncedAt = {}
                 state.wsDetail         = nil
                 state.wsRequest        = nil
                 state.wsError          = nil
@@ -914,11 +1241,11 @@ function M.new(opts)
                 if type(onJobChange) == 'function' then
                     onJobChange(state)
                 end
-                if state.open[1] and state.syncPending == nil then
+                if state.open[1] and state.syncPending == nil and not characterState then
                     if isCompactEnabled() then
-                        requestStateRefresh()
+                        requestStateRefresh({ force = true })
                     else
-                        requestFullSync()
+                        requestFullSync(false, { force = true })
                     end
                 end
             elseif (prevMain ~= state.mainSkill or prevRanged ~= state.rangedSkill) and state.selectedWsId == nil then
@@ -948,6 +1275,7 @@ function M.new(opts)
             end
             return true
         elseif kind == 'SPENT_END' then
+            local now = clockFn()
             if state.tempSpent ~= nil then
                 state.spentByWs    = state.tempSpent
                 state.unlockedByWs = state.tempUnlocked or {}
@@ -964,9 +1292,12 @@ function M.new(opts)
                 state.lastSyncError = nil
                 state.synced = true
                 state.syncState = 'synced'
-                state.lastSyncCompletedAt = clockFn()
+                state.lastSyncCompletedAt = now
                 state.needsRefresh = false
+                publishProgressionToCharacterState('spent_end', now)
                 autoSelectEligibleWS()
+            elseif state.synced then
+                publishProgressionToCharacterState('spent_update', now)
             end
             return true
         elseif kind == 'CAT_BEGIN' then
@@ -991,6 +1322,7 @@ function M.new(opts)
             return true
         elseif kind == 'CAT_END' then
             if state.tempCatalog ~= nil then
+                local now = clockFn()
                 -- Never overwrite a populated verified catalog with an empty truncated stream!
                 if #state.tempCatalog > 0 or #(state.catalog or {}) == 0 then
                     state.catalog = state.tempCatalog
@@ -1007,14 +1339,27 @@ function M.new(opts)
                 state.lastSyncError = nil
                 state.synced = true
                 state.syncState = 'synced'
-                state.lastSyncCompletedAt = clockFn()
+                state.lastSyncCompletedAt = now
                 state.needsRefresh = false
+                publishProgressionToCharacterState('cat_end', now)
                 autoSelectEligibleWS()
             end
             return true
         elseif kind == 'WSS_BEGIN' then
-            state.serverSupportsV2 = true
+            state.serverSupportsV2   = true
+            state.v2ConsecutiveFails = 0
             local wsIdNum = tonumber(parts[2])
+            local seqNum  = tonumber(parts[8]) or 0
+            -- Drop stale/out-of-order WSS response when a newer WS request is in flight
+            if seqNum > 0 and state.wsRequest and state.wsRequest.wsId == wsIdNum
+                and state.wsRequest.seq and seqNum ~= state.wsRequest.seq and state.pendingOp == nil then
+                if dataService then
+                    dataService:record_metric('stale_dropped', 1)
+                    dataService:record_event('oxtl', 'stale_wss', string.format('ws=%d got=%d want=%d', wsIdNum or 0, seqNum, state.wsRequest.seq))
+                end
+                state.tempWss = nil
+                return true
+            end
             local scStr = parts[7] or '0:0:0:0'
             local s1, s2, s3, s4 = string.match(scStr, '^(%d+):(%d+):(%d+):(%d+)$')
             state.tempWss = {
@@ -1024,7 +1369,7 @@ function M.new(opts)
                 unlocked   = (tonumber(parts[5]) or 0) == 1,
                 specKey    = string.lower(tostring(parts[6] or state.specKey or 'base')),
                 scIds      = { tonumber(s1) or 0, tonumber(s2) or 0, tonumber(s3) or 0, tonumber(s4) or 0 },
-                seq        = tonumber(parts[8]) or 0,
+                seq        = seqNum,
                 nodeStates = {},
             }
             return true
@@ -1044,7 +1389,15 @@ function M.new(opts)
             return true
         elseif kind == 'WSS_END' then
             local wsIdNum = tonumber(parts[2])
+            local endSeq  = tonumber(parts[5]) or 0
+            if endSeq > 0 and state.wsRequest and state.wsRequest.wsId == wsIdNum
+                and state.wsRequest.seq and endSeq ~= state.wsRequest.seq and state.pendingOp == nil then
+                state.tempWss = nil
+                if dataService then dataService:record_metric('stale_dropped', 1) end
+                return true
+            end
             if state.tempWss ~= nil and state.tempWss.id == wsIdNum then
+                local now = clockFn()
                 local wss = state.tempWss
                 state.tempWss = nil
                 state.avail = tonumber(parts[3]) or wss.avail or state.avail
@@ -1057,20 +1410,27 @@ function M.new(opts)
                     state.unlockedByWs[wsIdNum] = wss.unlocked == true
                     state.wsDetail = assembled
                     state.wsDetailsById[wsIdNum] = assembled
+                    state.wsDetailSyncedAt[wsIdNum] = now
                     state.wsError = nil
                     if state.wsRequest and state.wsRequest.wsId == wsIdNum then
                         state.wsRequest = nil
                     end
-                    if state.pendingOp ~= nil then
+                    local doneOp = state.pendingOp
+                    if doneOp ~= nil then
                         state.pendingOp = nil
+                        if characterState then
+                            characterState:confirmTransaction('talent_' .. tostring(doneOp.kind), { wsId = wsIdNum, spent = wss.spent, avail = state.avail }, now)
+                        end
                         setStatus('Soulforge updated.')
                     end
+                    -- Apply returned authoritative delta directly to CharacterState (no redundant full resync!)
+                    publishProgressionToCharacterState('wss_end', now)
                 else
                     -- Cache missing this tree: fall back transparently to legacy OP_WS
                     if dataService then
                         dataService:record_event('oxtl', 'wss_fallback', tostring(err))
                     end
-                    requestWS(wsIdNum, true)
+                    requestWS(wsIdNum, true, { force = true })
                 end
             end
             return true
@@ -1135,36 +1495,49 @@ function M.new(opts)
             return true
         elseif kind == 'WS_END' then
             if state.tempWs ~= nil and tonumber(parts[2]) == state.tempWs.id then
+                local now = clockFn()
+                local wsIdNum = state.tempWs.id
                 state.avail = tonumber(parts[3]) or state.avail
-                state.spentByWs[state.tempWs.id] = state.tempWs.spent or 0
+                state.spentByWs[wsIdNum] = state.tempWs.spent or 0
                 if parts[4] ~= nil then
-                    state.unlockedByWs[state.tempWs.id] = (tonumber(parts[4]) or 0) == 1
+                    state.unlockedByWs[wsIdNum] = (tonumber(parts[4]) or 0) == 1
                 else
-                    state.unlockedByWs[state.tempWs.id] = (state.tempWs.spent or 0) > 0
+                    state.unlockedByWs[wsIdNum] = (state.tempWs.spent or 0) > 0
                 end
                 state.wsDetail = state.tempWs
-                state.wsDetailsById[state.tempWs.id] = state.tempWs
+                state.wsDetailsById[wsIdNum] = state.tempWs
+                state.wsDetailSyncedAt[wsIdNum] = now
                 state.wsError = nil
-                if state.wsRequest and state.wsRequest.wsId == state.tempWs.id then
+                if state.wsRequest and state.wsRequest.wsId == wsIdNum then
                     state.wsRequest = nil
                 end
                 state.tempWs = nil
-                if state.pendingOp ~= nil then
+                local doneOp = state.pendingOp
+                if doneOp ~= nil then
                     state.pendingOp = nil
+                    if characterState then
+                        characterState:confirmTransaction('talent_' .. tostring(doneOp.kind), { wsId = wsIdNum, avail = state.avail }, now)
+                    end
                     setStatus('Soulforge updated.')
                 end
+                publishProgressionToCharacterState('ws_end', now)
             end
             return true
         elseif kind == 'ERR' then
+            local now = clockFn()
             local msg = parts[2] or 'Action failed.'
-            if state.pendingOp and state.pendingOp.nodeKey then
-                state.rejectedNodeKey = state.pendingOp.nodeKey
+            local failedOp = state.pendingOp
+            if failedOp and failedOp.nodeKey then
+                state.rejectedNodeKey = failedOp.nodeKey
             else
                 state.rejectedNodeKey = state.inspectedNodeKey
             end
             state.rejectedMsg = msg
-            state.rejectedAt  = clockFn()
+            state.rejectedAt  = now
             state.pendingOp   = nil
+            if characterState and failedOp then
+                characterState:rejectTransaction('talent_' .. tostring(failedOp.kind), msg, now)
+            end
             if state.wsRequest then
                 state.wsError = msg
                 state.wsRequest = nil
@@ -1184,6 +1557,7 @@ function M.new(opts)
             if type(data) == 'string' and sz >= 12 and data:sub(5, 8) == 'OXTL' then
                 local b11, b12 = data:byte(11, 12)
                 local payLen = (b11 or 0) + (b12 or 0) * 256
+                state.lastPacketBytes = sz
                 if dataService then
                     dataService:record_metric('packets_in_oxtl', 1)
                     dataService:record_metric('bytes_in_oxtl', sz)
@@ -1203,6 +1577,7 @@ function M.new(opts)
             if msg == nil or string.sub(msg, 1, #M.PROTO_TAG) ~= M.PROTO_TAG then
                 return false
             end
+            state.lastPacketBytes = #msg
             if dataService then
                 dataService:record_metric('packets_in_oxtl', 1)
                 dataService:record_metric('bytes_in_oxtl', #msg)
@@ -1211,6 +1586,44 @@ function M.new(opts)
             return true
         end
         return false
+    end
+
+    -- Wire shared CharacterState subscription, transport & session-reset hooks when attached
+    if characterState then
+        characterState:registerDomainTransport('progression', function(_req)
+            return requestFullSync(false, { force = true })
+        end)
+        characterState:onSessionReset(function(reason)
+            invalidateForLifecycle(reason or 'session_reset')
+        end)
+        csSubIds[#csSubIds + 1] = characterState:subscribe(
+            function(snap)
+                local eff = snap.effective or {}
+                return {
+                    mainJobKey  = eff.mainJobKey,
+                    mainLevel   = eff.mainLevel,
+                    levelSource = eff.mainLevelSource,
+                    levelMismatch = eff.levelMismatch,
+                    soulName    = eff.soulName,
+                    soulKey     = eff.soulKey,
+                    mainSkill   = eff.mainSkill,
+                    rangedSkill = eff.rangedSkill,
+                }
+            end,
+            function(_val, _prev, snap)
+                syncDisplayFromCharacterState(snap)
+            end,
+            { owner = 'soulforge_state', immediate = true }
+        )
+    end
+
+    local function destroy()
+        if characterState and characterState.unsubscribe then
+            for _, id in ipairs(csSubIds) do
+                characterState:unsubscribe(id)
+            end
+        end
+        csSubIds = {}
     end
 
     local function cycleSkillFilter(dir)
@@ -1250,7 +1663,7 @@ function M.new(opts)
             return true
         elseif kind == 'sync' then
             setStatus('Syncing weapon skill mastery from server...')
-            requestFullSync()
+            requestFullSync(false, { force = true })
             return true
         end
         return false
@@ -1280,8 +1693,10 @@ function M.new(opts)
         handleProtoLine    = handleProtoLine,
         handlePacketIn     = handlePacketIn,
         resetTransient     = resetTransient,
+        destroy            = destroy,
         savePrefs          = onSavePrefs,
         dataService        = dataService,
+        characterState     = characterState,
     }
 
     return state, actions
