@@ -216,59 +216,73 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $dllPath = "plugins/ashita4/soulspire_native.dll"
-          $testPath = "soulspire_native/selftest.exe"
-          if (-not (Test-Path $dllPath)) { throw "Missing built DLL: $dllPath" }
-          if (-not (Test-Path $testPath)) { throw "Missing built selftest.exe: $testPath" }
+          try {
+            $dllPath = "plugins/ashita4/soulspire_native.dll"
+            $testPath = "soulspire_native/selftest.exe"
+            if (-not (Test-Path $dllPath)) { throw "Missing built DLL: $dllPath" }
+            if (-not (Test-Path $testPath)) { throw "Missing built selftest.exe: $testPath" }
 
-          $dllBytes = [System.IO.File]::ReadAllBytes($dllPath)
-          $dllHash = (Get-FileHash -Path $dllPath -Algorithm SHA256).Hash.ToLowerInvariant()
-          $testBytes = [System.IO.File]::ReadAllBytes($testPath)
-          $testHash = (Get-FileHash -Path $testPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            $dllBytes = [System.IO.File]::ReadAllBytes($dllPath)
+            $dllHash = (Get-FileHash -Path $dllPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            $testBytes = [System.IO.File]::ReadAllBytes($testPath)
+            $testHash = (Get-FileHash -Path $testPath -Algorithm SHA256).Hash.ToLowerInvariant()
 
-          $regHash = "unknown"
-          if (Test-Path "soulspire_native/registry/labels_generated.h") {
-            $m = Select-String -Path "soulspire_native/registry/labels_generated.h" -Pattern 'kRegistryHash\s*=\s*"([^"]+)"'
-            if ($m) { $regHash = $m.Matches[0].Groups[1].Value }
+            $regHash = "unknown"
+            if (Test-Path "soulspire_native/registry/labels_generated.h") {
+              $m = Select-String -Path "soulspire_native/registry/labels_generated.h" -Pattern 'kRegistryHash\s*=\s*"([^"]+)"'
+              if ($m) { $regHash = $m.Matches[0].Groups[1].Value }
+            }
+
+            $provenance = [ordered]@{
+              dllPath               = "plugins/ashita4/soulspire_native.dll"
+              dllSha256             = $dllHash
+              dllSize               = $dllBytes.Length
+              expectedHooks         = 31
+              abiVersion            = 2
+              compiledRegistryHash  = $regHash
+              runtimeIdentityLoader = $true
+              identitySchemaVersion = 1
+              searchRenderMode      = "menu2fon-soa-corners (mode 1)"
+              sourceCommit          = "${{ github.sha }}"
+              branch                = "${{ github.ref_name }}"
+              ciRunId               = "${{ github.run_id }}"
+              ciRunUrl              = "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+              buildTarget           = "Win32-x86-MSVC"
+              ciVerified            = $true
+              clientVerified        = $false
+              notes                 = "CI-built 31-hook soulspire_native.dll (with native Commands menu entry) provenance. Never set clientVerified=true until verified in the Windows FFXI client."
+            }
+            $provenance | ConvertTo-Json -Depth 4 | Set-Content -Path "soulspire_native-provenance.json" -Encoding UTF8
+
+            @(
+              "commit_sha=${{ github.sha }}"
+              "ref=${{ github.ref }}"
+              "branch=${{ github.ref_name }}"
+              "run_id=${{ github.run_id }}"
+              "registry_hash=$regHash"
+              "expected_hooks=31"
+              "abi_version=2"
+              "soulspire_native_dll_size=$($dllBytes.Length)"
+              "soulspire_native_dll_sha256=$dllHash"
+              "selftest_exe_size=$($testBytes.Length)"
+              "selftest_exe_sha256=$testHash"
+            ) | Set-Content -Path "soulspire_native-build-info.txt" -Encoding UTF8
+
+            $ErrorActionPreference = 'Continue'
+            $verifyOut = (& python scripts/verify-soulspire-native-dll.py $dllPath --build-info soulspire_native-build-info.txt --expected-commit "${{ github.sha }}" 2>&1)
+            $vrc = $LASTEXITCODE
+            $ErrorActionPreference = 'Stop'
+            $verifyOut | ForEach-Object { Write-Host $_ }
+            if ($vrc -ne 0) {
+              $joined = ($verifyOut | ForEach-Object { $_.ToString() }) -join ' | '
+              Write-Host "::error::verify-soulspire-native-dll failed (rc=$vrc): $joined"
+              exit $vrc
+            }
+            Get-Content "soulspire_native-build-info.txt"
+          } catch {
+            Write-Host "::error::Step 5 exception: $($_.Exception.Message)"
+            throw
           }
-
-          $provenance = [ordered]@{
-            dllPath               = "plugins/ashita4/soulspire_native.dll"
-            dllSha256             = $dllHash
-            dllSize               = $dllBytes.Length
-            expectedHooks         = 31
-            abiVersion            = 2
-            compiledRegistryHash  = $regHash
-            runtimeIdentityLoader = $true
-            identitySchemaVersion = 1
-            searchRenderMode      = "menu2fon-soa-corners (mode 1)"
-            sourceCommit          = "${{ github.sha }}"
-            branch                = "${{ github.ref_name }}"
-            ciRunId               = "${{ github.run_id }}"
-            ciRunUrl              = "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            buildTarget           = "Win32-x86-MSVC"
-            ciVerified            = $true
-            clientVerified        = $false
-            notes                 = "CI-built 31-hook soulspire_native.dll (with native Commands menu entry) provenance. Never set clientVerified=true until verified in the Windows FFXI client."
-          }
-          $provenance | ConvertTo-Json -Depth 4 | Set-Content -Path "soulspire_native-provenance.json" -Encoding UTF8
-
-          @(
-            "commit_sha=${{ github.sha }}"
-            "ref=${{ github.ref }}"
-            "branch=${{ github.ref_name }}"
-            "run_id=${{ github.run_id }}"
-            "registry_hash=$regHash"
-            "expected_hooks=31"
-            "abi_version=2"
-            "soulspire_native_dll_size=$($dllBytes.Length)"
-            "soulspire_native_dll_sha256=$dllHash"
-            "selftest_exe_size=$($testBytes.Length)"
-            "selftest_exe_sha256=$testHash"
-          ) | Set-Content -Path "soulspire_native-build-info.txt" -Encoding UTF8
-
-          python scripts/verify-soulspire-native-dll.py $dllPath --build-info soulspire_native-build-info.txt --expected-commit "${{ github.sha }}"
-          Get-Content "soulspire_native-build-info.txt"
 
       - name: Upload soulspire_native.dll and selftest.exe build artifacts
         uses: actions/upload-artifact@v7
