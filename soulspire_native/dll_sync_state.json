@@ -1,19 +1,19 @@
 {
   "dllPath": "plugins/ashita4/soulspire_native.dll",
-  "dllSha256": "1111c4f2198ae71d3f6823061fb80b16c25ffa81033b208877d140bef566b85e",
+  "dllSha256": "ec8985192bdbb4561912959560afea8c51b569b3ee64b5b7fdc45271181466a2",
   "compiledRegistryHash": "cf86aa59ff8d16c6",
   "runtimeIdentityLoader": true,
   "identitySchemaVersion": 1,
   "nativeHooks": 27,
-  "sourceCommit": "1a9e22d9bdb1256fa5811f591cb895b6b008f3a8",
+  "sourceCommit": "2463859124cedb8fbdf39b6904ea7e1f13843bb1",
   "buildTarget": "Win32-x86-MSVC",
-  "ciRunId": "45289068399",
-  "ciRunUrl": "https://github.com/Infomatictek/soulspirexi-launcher/actions/runs/45289068399",
+  "ciRunId": "45449388008",
+  "ciRunUrl": "https://github.com/Infomatictek/soulspirexi-launcher/actions/runs/45449388008",
   "ciVerified": true,
   "clientVerified": false,
   "notes": "CI-built 27-hook soulspire_native.dll synced from GitHub Actions windows-latest MSVC x86 build. Client verification requires manual Windows Ashita v4 playtesting.",
-  "dllSize": 176128,
+  "dllSize": 215552,
   "expectedHooks": 27,
   "abiVersion": 2,
-  "branch": "feat/soulspire-native-foundation"
+  "branch": "feat/berserker-dual-great-axe"
 }
