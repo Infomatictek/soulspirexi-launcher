@@ -137,8 +137,14 @@ def build_testing_manifest(
             "nativeDllCompiledHash": str(prov.get("compiledRegistryHash") or reg_sync.get("registryHash") or ""),
             "nativeDllSha256": staged_dll_sha or str(prov.get("dllSha256") or ""),
             "nativeDllClientVerified": False,  # Never mark client-verified from CI alone
-            "crystalJobsHooks": 24,
+            "nativeHooks": crystaljobs_hooks,
+            "crystalJobsHooks": crystaljobs_hooks,
         }
+    elif staged_dll_sha and isinstance(testing_manifest.get("registry"), dict):
+        testing_manifest["registry"]["nativeDllSha256"] = staged_dll_sha
+        testing_manifest["registry"]["nativeDllClientVerified"] = False
+        testing_manifest["registry"]["nativeHooks"] = crystaljobs_hooks
+        testing_manifest["registry"]["crystalJobsHooks"] = crystaljobs_hooks
 
     if repo_branch:
         repo_cfg = testing_manifest.setdefault("repo", {})
