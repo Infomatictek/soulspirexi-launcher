@@ -26,6 +26,28 @@ public enum ServerTargetMode
     Custom = 2
 }
 
+public enum StagingLane
+{
+    Combat = 0,
+    CoreUi = 1,
+    Native = 2
+}
+
+public sealed record StagingLanePreset(
+    StagingLane Lane,
+    string Id,
+    string DisplayName,
+    string ShortBadgeLabel,
+    string PortBlockLabel,
+    int AuthPort,
+    int DataPort,
+    int ViewPort,
+    int SearchPort,
+    int ProfilePort,
+    int ProfileIrcPort,
+    int MapUdpPort,
+    bool IsFutureReserved = false);
+
 public sealed class LauncherSettings
 {
     public const string DefaultCustomDatOverlayPath = @"C:\DATs\Soulspire";
@@ -39,9 +61,74 @@ public sealed class LauncherSettings
     public const int DefaultStagingProfileIrcPort = 51241;
     public const int DefaultStagingMapPort = 55230;
 
+    public static readonly StagingLanePreset CombatStagingPreset = new(
+        Lane: StagingLane.Combat,
+        Id: "combat",
+        DisplayName: "Combat Staging (55xxx • Balance / Gauntlet)",
+        ShortBadgeLabel: "COMBAT STAGING",
+        PortBlockLabel: "55xxx",
+        AuthPort: 55231,
+        DataPort: 55230,
+        ViewPort: 55001,
+        SearchPort: 55002,
+        ProfilePort: 51221,
+        ProfileIrcPort: 51241,
+        MapUdpPort: 55230);
+
+    public static readonly StagingLanePreset CoreUiStagingPreset = new(
+        Lane: StagingLane.CoreUi,
+        Id: "core-ui",
+        DisplayName: "Core UI Staging (56xxx • Core UI / OXTL v2 Cache)",
+        ShortBadgeLabel: "CORE UI STAGING",
+        PortBlockLabel: "56xxx",
+        AuthPort: 56231,
+        DataPort: 56230,
+        ViewPort: 56001,
+        SearchPort: 56002,
+        ProfilePort: 51222,
+        ProfileIrcPort: 51242,
+        MapUdpPort: 56230);
+
+    public static readonly StagingLanePreset NativeStagingPreset = new(
+        Lane: StagingLane.Native,
+        Id: "native",
+        DisplayName: "Native Staging (57xxx • Future / Reserved)",
+        ShortBadgeLabel: "NATIVE STAGING (FUTURE)",
+        PortBlockLabel: "57xxx",
+        AuthPort: 57231,
+        DataPort: 57230,
+        ViewPort: 57001,
+        SearchPort: 57002,
+        ProfilePort: 51223,
+        ProfileIrcPort: 51243,
+        MapUdpPort: 57230,
+        IsFutureReserved: true);
+
+    public static StagingLanePreset GetStagingLanePreset(StagingLane lane) =>
+        lane switch
+        {
+            StagingLane.CoreUi => CoreUiStagingPreset,
+            StagingLane.Native => NativeStagingPreset,
+            _ => CombatStagingPreset
+        };
+
+    public void ApplyStagingLanePreset(StagingLane lane)
+    {
+        var preset = GetStagingLanePreset(lane);
+        StagingLane = preset.Lane;
+        StagingAuthPort = preset.AuthPort;
+        StagingDataPort = preset.DataPort;
+        StagingViewPort = preset.ViewPort;
+        StagingSearchPort = preset.SearchPort;
+        StagingProfilePort = preset.ProfilePort;
+        StagingProfileIrcPort = preset.ProfileIrcPort;
+        StagingMapPort = preset.MapUdpPort;
+    }
+
     public UpdateChannel UpdateChannel { get; set; } = UpdateChannel.Stable;
 
     public ServerTargetMode ServerTarget { get; set; } = ServerTargetMode.Production;
+    public StagingLane StagingLane { get; set; } = StagingLane.Combat;
     public string StagingServerHost { get; set; } = DefaultStagingHost;
     public int StagingAuthPort { get; set; } = DefaultStagingAuthPort;
     public int StagingDataPort { get; set; } = DefaultStagingDataPort;
@@ -49,6 +136,7 @@ public sealed class LauncherSettings
     public int StagingSearchPort { get; set; } = DefaultStagingSearchPort;
     public int StagingProfilePort { get; set; } = DefaultStagingProfilePort;
     public int StagingProfileIrcPort { get; set; } = DefaultStagingProfileIrcPort;
+    public int StagingMapPort { get; set; } = DefaultStagingMapPort;
 
     public bool UseCustomServer { get; set; }
     public string CustomServerHost { get; set; } = "play.soulspirexi.com";

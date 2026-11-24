@@ -108,7 +108,9 @@ public sealed record ResolvedServerConnectionPlan(
     bool BootUseHairpin,
     bool RequiresLoopbackRelay,
     StagingRelayConfig? RelayConfig,
-    int MapUdpPort);
+    int MapUdpPort,
+    StagingLane? StagingLane = null,
+    string? StagingLaneDisplayName = null);
 
 /// <summary>
 /// Zero-privilege, in-process loopback TCP relay for SoulspireXI Staging.
@@ -170,33 +172,72 @@ public sealed class StagingRelayService : IDisposable
         if (mode == ServerTargetMode.Staging)
         {
             var manifestStaging = manifest.StagingServer;
+            var lanePreset = LauncherSettings.GetStagingLanePreset(settings.StagingLane);
             var remoteHost = !string.IsNullOrWhiteSpace(settings.StagingServerHost)
                 ? settings.StagingServerHost.Trim()
                 : (!string.IsNullOrWhiteSpace(manifestStaging?.Host)
                     ? manifestStaging.Host.Trim()
                     : LauncherSettings.DefaultStagingHost);
 
-            var authPort = settings.StagingAuthPort is > 0 and <= 65535
-                ? settings.StagingAuthPort
-                : (manifestStaging?.Ports.Auth ?? LauncherSettings.DefaultStagingAuthPort);
-            var dataPort = settings.StagingDataPort is > 0 and <= 65535
-                ? settings.StagingDataPort
-                : (manifestStaging?.Ports.Data ?? LauncherSettings.DefaultStagingDataPort);
-            var viewPort = settings.StagingViewPort is > 0 and <= 65535
-                ? settings.StagingViewPort
-                : (manifestStaging?.Ports.View ?? LauncherSettings.DefaultStagingViewPort);
-            var searchPort = settings.StagingSearchPort is > 0 and <= 65535
-                ? settings.StagingSearchPort
-                : (manifestStaging?.Ports.Search ?? LauncherSettings.DefaultStagingSearchPort);
-            var profilePort = settings.StagingProfilePort is > 0 and <= 65535
-                ? settings.StagingProfilePort
-                : (manifestStaging?.Ports.Profile ?? LauncherSettings.DefaultStagingProfilePort);
-            var profileIrcPort = settings.StagingProfileIrcPort is > 0 and <= 65535
-                ? settings.StagingProfileIrcPort
-                : (manifestStaging?.Ports.ProfileIrc ?? LauncherSettings.DefaultStagingProfileIrcPort);
-            var mapPort = manifestStaging?.Ports.Map is > 0 and <= 65535
-                ? manifestStaging.Ports.Map
-                : LauncherSettings.DefaultStagingMapPort;
+            var hasUntouchedCombatDefaults =
+                settings.StagingAuthPort == LauncherSettings.DefaultStagingAuthPort &&
+                settings.StagingDataPort == LauncherSettings.DefaultStagingDataPort &&
+                settings.StagingViewPort == LauncherSettings.DefaultStagingViewPort &&
+                settings.StagingSearchPort == LauncherSettings.DefaultStagingSearchPort &&
+                settings.StagingProfilePort == LauncherSettings.DefaultStagingProfilePort &&
+                settings.StagingProfileIrcPort == LauncherSettings.DefaultStagingProfileIrcPort;
+
+            var useLanePresetDirectly = settings.StagingLane != StagingLane.Combat && hasUntouchedCombatDefaults;
+
+            var authPort = useLanePresetDirectly
+                ? lanePreset.AuthPort
+                : (settings.StagingAuthPort is > 0 and <= 65535
+                    ? settings.StagingAuthPort
+                    : (settings.StagingLane == StagingLane.Combat && manifestStaging?.Ports.Auth is > 0 and <= 65535
+                        ? manifestStaging.Ports.Auth
+                        : lanePreset.AuthPort));
+            var dataPort = useLanePresetDirectly
+                ? lanePreset.DataPort
+                : (settings.StagingDataPort is > 0 and <= 65535
+                    ? settings.StagingDataPort
+                    : (settings.StagingLane == StagingLane.Combat && manifestStaging?.Ports.Data is > 0 and <= 65535
+                        ? manifestStaging.Ports.Data
+                        : lanePreset.DataPort));
+            var viewPort = useLanePresetDirectly
+                ? lanePreset.ViewPort
+                : (settings.StagingViewPort is > 0 and <= 65535
+                    ? settings.StagingViewPort
+                    : (settings.StagingLane == StagingLane.Combat && manifestStaging?.Ports.View is > 0 and <= 65535
+                        ? manifestStaging.Ports.View
+                        : lanePreset.ViewPort));
+            var searchPort = useLanePresetDirectly
+                ? lanePreset.SearchPort
+                : (settings.StagingSearchPort is > 0 and <= 65535
+                    ? settings.StagingSearchPort
+                    : (settings.StagingLane == StagingLane.Combat && manifestStaging?.Ports.Search is > 0 and <= 65535
+                        ? manifestStaging.Ports.Search
+                        : lanePreset.SearchPort));
+            var profilePort = useLanePresetDirectly
+                ? lanePreset.ProfilePort
+                : (settings.StagingProfilePort is > 0 and <= 65535
+                    ? settings.StagingProfilePort
+                    : (settings.StagingLane == StagingLane.Combat && manifestStaging?.Ports.Profile is > 0 and <= 65535
+                        ? manifestStaging.Ports.Profile
+                        : lanePreset.ProfilePort));
+            var profileIrcPort = useLanePresetDirectly
+                ? lanePreset.ProfileIrcPort
+                : (settings.StagingProfileIrcPort is > 0 and <= 65535
+                    ? settings.StagingProfileIrcPort
+                    : (settings.StagingLane == StagingLane.Combat && manifestStaging?.Ports.ProfileIrc is > 0 and <= 65535
+                        ? manifestStaging.Ports.ProfileIrc
+                        : lanePreset.ProfileIrcPort));
+            var mapPort = settings.StagingLane != StagingLane.Combat && settings.StagingMapPort == LauncherSettings.DefaultStagingMapPort
+                ? lanePreset.MapUdpPort
+                : (settings.StagingMapPort is > 0 and <= 65535
+                    ? settings.StagingMapPort
+                    : (settings.StagingLane == StagingLane.Combat && manifestStaging?.Ports.Map is > 0 and <= 65535
+                        ? manifestStaging.Ports.Map
+                        : lanePreset.MapUdpPort));
 
             var relayConfig = StagingRelayConfig.CreateDefault(
                 remoteHost,
@@ -209,7 +250,7 @@ public sealed class StagingRelayService : IDisposable
 
             // Important: BootUseHairpin MUST remain false in Staging mode because xiloader's
             // --hairpin rewrites the server-supplied zone_settings.zoneip (e.g. 192.168.86.117)
-            // back to --server (127.0.0.1), which would break direct UDP map traffic on port 55230.
+            // back to --server (127.0.0.1), which would break direct UDP map traffic on the lane's UDP port.
             return new ResolvedServerConnectionPlan(
                 TargetMode: ServerTargetMode.Staging,
                 DisplayHost: $"{remoteHost}:{authPort}",
@@ -222,7 +263,9 @@ public sealed class StagingRelayService : IDisposable
                 BootUseHairpin: false,
                 RequiresLoopbackRelay: true,
                 RelayConfig: relayConfig,
-                MapUdpPort: mapPort);
+                MapUdpPort: mapPort,
+                StagingLane: lanePreset.Lane,
+                StagingLaneDisplayName: lanePreset.ShortBadgeLabel);
         }
 
         if (mode == ServerTargetMode.Custom && !string.IsNullOrWhiteSpace(settings.CustomServerHost))

@@ -139,6 +139,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         ServerTargetMode.Custom
     ];
 
+    public IReadOnlyList<StagingLane> StagingLaneOptions { get; } =
+    [
+        StagingLane.Combat,
+        StagingLane.CoreUi,
+        StagingLane.Native
+    ];
+
     public string SelectedTab
     {
         get => _selectedTab;
@@ -214,6 +221,41 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    public StagingLane SelectedStagingLane
+    {
+        get => _settings.StagingLane;
+        set
+        {
+            if (_settings.StagingLane == value)
+            {
+                return;
+            }
+
+            _settings.ApplyStagingLanePreset(value);
+            if (IsStagingRelayActive)
+            {
+                _stagingRelay.Stop();
+            }
+
+            _settingsService.Save(_settings, PlainPassword);
+
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(StagingAuthPort));
+            OnPropertyChanged(nameof(StagingDataPort));
+            OnPropertyChanged(nameof(StagingViewPort));
+            OnPropertyChanged(nameof(StagingSearchPort));
+            OnPropertyChanged(nameof(StagingProfilePort));
+            OnPropertyChanged(nameof(StagingProfileIrcPort));
+            NotifyEffectiveServerChanged();
+
+            var preset = LauncherSettings.GetStagingLanePreset(value);
+            var plan = CurrentConnectionPlan;
+            StatusMessage = $"Selected {preset.DisplayName} ({plan.DisplayHost}). Managed TCP relay starts on Play.";
+            Log($"Selected Staging Lane: {preset.DisplayName} ({plan.StatusProbeHost}, TCP {StagingAuthPort}/{StagingDataPort}/{StagingViewPort}/{StagingSearchPort}, Profile {StagingProfilePort}/{StagingProfileIrcPort}, Map UDP {plan.MapUdpPort}).");
+            _ = RefreshServerStatusAsync();
+        }
+    }
+
     public bool IsProductionMode => _settings.ServerTarget == ServerTargetMode.Production;
     public bool IsStagingMode => _settings.ServerTarget == ServerTargetMode.Staging;
     public bool IsCustomServerMode => _settings.ServerTarget == ServerTargetMode.Custom;
@@ -224,16 +266,46 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public int EffectiveLobbyPort => CurrentConnectionPlan.StatusProbeLobbyPort;
     public int EffectiveSearchPort => CurrentConnectionPlan.StatusProbeSearchPort;
 
-    public string ServerStatusDisplayHost => IsStagingMode
-        ? $"STAGING • {CurrentConnectionPlan.DisplayHost}"
-        : CurrentConnectionPlan.DisplayHost;
+    public string StagingHeaderBadgeText
+    {
+        get
+        {
+            var preset = LauncherSettings.GetStagingLanePreset(_settings.StagingLane);
+            return $"TARGET: {preset.ShortBadgeLabel} ({preset.PortBlockLabel})";
+        }
+    }
+
+    public string StagingCardHeaderText
+    {
+        get
+        {
+            var preset = LauncherSettings.GetStagingLanePreset(_settings.StagingLane);
+            return $"{preset.ShortBadgeLabel} ACTIVE ({preset.PortBlockLabel})";
+        }
+    }
+
+    public string ServerStatusDisplayHost
+    {
+        get
+        {
+            var plan = CurrentConnectionPlan;
+            if (!IsStagingMode)
+            {
+                return plan.DisplayHost;
+            }
+
+            var preset = LauncherSettings.GetStagingLanePreset(_settings.StagingLane);
+            return $"{preset.ShortBadgeLabel} • {plan.DisplayHost}";
+        }
+    }
 
     public string StagingTargetSummaryText
     {
         get
         {
             var plan = CurrentConnectionPlan;
-            return $"Target: {plan.StatusProbeHost} (Lobby/Search {StagingAuthPort}/{StagingDataPort}/{StagingViewPort}/{StagingSearchPort} • Profile {StagingProfilePort}/{StagingProfileIrcPort} • Map UDP {plan.MapUdpPort})";
+            var preset = LauncherSettings.GetStagingLanePreset(_settings.StagingLane);
+            return $"{preset.DisplayName} • {plan.StatusProbeHost} (Lobby/Search {StagingAuthPort}/{StagingDataPort}/{StagingViewPort}/{StagingSearchPort} • Profile {StagingProfilePort}/{StagingProfileIrcPort} • Map UDP {plan.MapUdpPort})";
         }
     }
 
@@ -254,11 +326,28 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
-    public string PlayButtonText => IsBusy
-        ? "PREPARING..."
-        : IsStagingMode
-            ? (PendingUpdatesCount > 0 ? $"UPDATE & PLAY STAGING ({PendingUpdatesCount})" : "PLAY STAGING SERVER")
-            : (PendingUpdatesCount > 0 ? $"UPDATE & PLAY ({PendingUpdatesCount})" : "PLAY SOULSPIREXI");
+    public string PlayButtonText
+    {
+        get
+        {
+            if (IsBusy)
+            {
+                return "PREPARING...";
+            }
+
+            if (IsStagingMode)
+            {
+                var preset = LauncherSettings.GetStagingLanePreset(_settings.StagingLane);
+                return PendingUpdatesCount > 0
+                    ? $"UPDATE & PLAY {preset.ShortBadgeLabel} ({PendingUpdatesCount})"
+                    : $"PLAY {preset.ShortBadgeLabel}";
+            }
+
+            return PendingUpdatesCount > 0
+                ? $"UPDATE & PLAY ({PendingUpdatesCount})"
+                : "PLAY SOULSPIREXI";
+        }
+    }
 
     public string StatusMessage
     {
@@ -2149,28 +2238,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _settings.StagingServerHost = !string.IsNullOrWhiteSpace(manifestStaging?.Host)
             ? manifestStaging.Host.Trim()
             : LauncherSettings.DefaultStagingHost;
-        _settings.StagingAuthPort = manifestStaging?.Ports.Auth is > 0 and <= 65535
-            ? manifestStaging.Ports.Auth
-            : LauncherSettings.DefaultStagingAuthPort;
-        _settings.StagingDataPort = manifestStaging?.Ports.Data is > 0 and <= 65535
-            ? manifestStaging.Ports.Data
-            : LauncherSettings.DefaultStagingDataPort;
-        _settings.StagingViewPort = manifestStaging?.Ports.View is > 0 and <= 65535
-            ? manifestStaging.Ports.View
-            : LauncherSettings.DefaultStagingViewPort;
-        _settings.StagingSearchPort = manifestStaging?.Ports.Search is > 0 and <= 65535
-            ? manifestStaging.Ports.Search
-            : LauncherSettings.DefaultStagingSearchPort;
-        _settings.StagingProfilePort = manifestStaging?.Ports.Profile is > 0 and <= 65535
-            ? manifestStaging.Ports.Profile
-            : LauncherSettings.DefaultStagingProfilePort;
-        _settings.StagingProfileIrcPort = manifestStaging?.Ports.ProfileIrc is > 0 and <= 65535
-            ? manifestStaging.Ports.ProfileIrc
-            : LauncherSettings.DefaultStagingProfileIrcPort;
+        _settings.ApplyStagingLanePreset(_settings.StagingLane);
 
         _stagingRelay.Stop();
         _settingsService.Save(_settings, PlainPassword);
 
+        OnPropertyChanged(nameof(SelectedStagingLane));
         OnPropertyChanged(nameof(StagingServerHost));
         OnPropertyChanged(nameof(StagingAuthPort));
         OnPropertyChanged(nameof(StagingDataPort));
@@ -2179,7 +2252,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(StagingProfilePort));
         OnPropertyChanged(nameof(StagingProfileIrcPort));
         NotifyEffectiveServerChanged();
-        StatusMessage = $"Restored Staging defaults ({_settings.StagingServerHost}:{_settings.StagingAuthPort}).";
+        var preset = LauncherSettings.GetStagingLanePreset(_settings.StagingLane);
+        StatusMessage = $"Restored {preset.DisplayName} defaults ({_settings.StagingServerHost}:{_settings.StagingAuthPort}).";
         Log(StatusMessage);
         _ = RefreshServerStatusAsync();
     }
@@ -2225,6 +2299,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(EffectiveLobbyPort));
         OnPropertyChanged(nameof(EffectiveSearchPort));
         OnPropertyChanged(nameof(ServerStatusDisplayHost));
+        OnPropertyChanged(nameof(StagingHeaderBadgeText));
+        OnPropertyChanged(nameof(StagingCardHeaderText));
         OnPropertyChanged(nameof(StagingTargetSummaryText));
         OnPropertyChanged(nameof(StagingRelayStatusText));
         OnPropertyChanged(nameof(PlayButtonText));

@@ -665,4 +665,115 @@ public sealed class StagingConnectionTests
         Assert.Contains("Profile IRC", ircDown.ProfileFailureDetail!, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Profile Offline", ircDown.SummaryText, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public void StagingLanes_ResolveIndependentPortBlocksAndPreserveProductionIsolation()
+    {
+        var manifest = new LauncherManifest
+        {
+            DefaultHost = "play.soulspirexi.com",
+            UseHairpin = false,
+            Ports = new ManifestPorts { Lobby = 54231, Auth = 54001, Search = 54002 },
+            StagingServer = new ManifestStagingServer
+            {
+                Host = "192.168.86.117",
+                UseHairpin = false,
+                Ports = new ManifestStagingPorts
+                {
+                    Auth = 55231,
+                    Data = 55230,
+                    View = 55001,
+                    Search = 55002,
+                    Profile = 51221,
+                    ProfileIrc = 51241,
+                    Map = 55230
+                }
+            }
+        };
+
+        var settings = new LauncherSettings
+        {
+            ServerTarget = ServerTargetMode.Staging
+        };
+
+        // 1. Combat Staging (55xxx)
+        settings.ApplyStagingLanePreset(StagingLane.Combat);
+        var combatPlan = StagingRelayService.ResolveConnectionPlan(settings, manifest);
+        Assert.Equal(StagingLane.Combat, combatPlan.StagingLane);
+        Assert.Equal(55231, combatPlan.StatusProbeLobbyPort);
+        Assert.Equal(55002, combatPlan.StatusProbeSearchPort);
+        Assert.Equal(51221, combatPlan.StatusProbeProfilePort);
+        Assert.Equal(51241, combatPlan.StatusProbeProfileIrcPort);
+        Assert.Equal(55230, combatPlan.MapUdpPort);
+        Assert.Contains(combatPlan.RelayConfig!.Routes, r => r.LocalPort == 54231 && r.RemotePort == 55231);
+        Assert.Contains(combatPlan.RelayConfig.Routes, r => r.LocalPort == 51220 && r.RemotePort == 51221);
+        Assert.Contains(combatPlan.RelayConfig.Routes, r => r.LocalPort == 51240 && r.RemotePort == 51241);
+
+        // 2. Core UI Staging (56xxx)
+        settings.ApplyStagingLanePreset(StagingLane.CoreUi);
+        var coreUiPlan = StagingRelayService.ResolveConnectionPlan(settings, manifest);
+        Assert.Equal(StagingLane.CoreUi, coreUiPlan.StagingLane);
+        Assert.Equal("CORE UI STAGING", coreUiPlan.StagingLaneDisplayName);
+        Assert.Equal("192.168.86.117:56231", coreUiPlan.DisplayHost);
+        Assert.Equal(56231, coreUiPlan.StatusProbeLobbyPort);
+        Assert.Equal(56002, coreUiPlan.StatusProbeSearchPort);
+        Assert.Equal(51222, coreUiPlan.StatusProbeProfilePort);
+        Assert.Equal(51242, coreUiPlan.StatusProbeProfileIrcPort);
+        Assert.Equal(56230, coreUiPlan.MapUdpPort);
+        Assert.False(coreUiPlan.BootUseHairpin);
+        Assert.Equal("127.0.0.1", coreUiPlan.BootServerHost);
+        Assert.Equal(6, coreUiPlan.RelayConfig!.Routes.Count);
+        Assert.Contains(coreUiPlan.RelayConfig.Routes, r => r.LocalPort == 54231 && r.RemotePort == 56231);
+        Assert.Contains(coreUiPlan.RelayConfig.Routes, r => r.LocalPort == 54230 && r.RemotePort == 56230);
+        Assert.Contains(coreUiPlan.RelayConfig.Routes, r => r.LocalPort == 54001 && r.RemotePort == 56001);
+        Assert.Contains(coreUiPlan.RelayConfig.Routes, r => r.LocalPort == 54002 && r.RemotePort == 56002);
+        Assert.Contains(coreUiPlan.RelayConfig.Routes, r => r.LocalPort == 51220 && r.RemotePort == 51222);
+        Assert.Contains(coreUiPlan.RelayConfig.Routes, r => r.LocalPort == 51240 && r.RemotePort == 51242);
+
+        // 3. Native Staging (57xxx, future/reserved)
+        settings.ApplyStagingLanePreset(StagingLane.Native);
+        var nativePlan = StagingRelayService.ResolveConnectionPlan(settings, manifest);
+        Assert.Equal(StagingLane.Native, nativePlan.StagingLane);
+        Assert.Equal(57231, nativePlan.StatusProbeLobbyPort);
+        Assert.Equal(57002, nativePlan.StatusProbeSearchPort);
+        Assert.Equal(51223, nativePlan.StatusProbeProfilePort);
+        Assert.Equal(51243, nativePlan.StatusProbeProfileIrcPort);
+        Assert.Equal(57230, nativePlan.MapUdpPort);
+
+        // 4. Switching back to Production completely isolates Production from Staging lanes
+        settings.ServerTarget = ServerTargetMode.Production;
+        var prodPlan = StagingRelayService.ResolveConnectionPlan(settings, manifest);
+        Assert.Equal(ServerTargetMode.Production, prodPlan.TargetMode);
+        Assert.Null(prodPlan.StagingLane);
+        Assert.False(prodPlan.RequiresLoopbackRelay);
+        Assert.Null(prodPlan.RelayConfig);
+        Assert.Equal("play.soulspirexi.com", prodPlan.BootServerHost);
+        Assert.Equal(54231, prodPlan.StatusProbeLobbyPort);
+        Assert.Equal(54002, prodPlan.StatusProbeSearchPort);
+        Assert.Equal(54230, prodPlan.MapUdpPort);
+    }
+
+    [Fact]
+    public void StagingLaneSelection_ResolvesCoreUiEvenWhenOnlyLanePropertyIsChanged()
+    {
+        var manifest = new LauncherManifest
+        {
+            DefaultHost = "play.soulspirexi.com",
+            Ports = new ManifestPorts { Lobby = 54231, Auth = 54001, Search = 54002 }
+        };
+
+        var settings = new LauncherSettings
+        {
+            ServerTarget = ServerTargetMode.Staging,
+            StagingLane = StagingLane.CoreUi
+        };
+
+        var plan = StagingRelayService.ResolveConnectionPlan(settings, manifest);
+        Assert.Equal(StagingLane.CoreUi, plan.StagingLane);
+        Assert.Equal(56231, plan.StatusProbeLobbyPort);
+        Assert.Equal(56002, plan.StatusProbeSearchPort);
+        Assert.Equal(51222, plan.StatusProbeProfilePort);
+        Assert.Equal(51242, plan.StatusProbeProfileIrcPort);
+        Assert.Equal(56230, plan.MapUdpPort);
+    }
 }
