@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.1.14-testing.core-ui",
+  "manifestVersion": "2.1.15-testing.core-ui",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
-    "version": "feat/soulspire-core-native-ui-gamepad (pending 31-hook CI build)",
+    "version": "feat/soulspire-core-native-ui-gamepad (31-hook soulspire_native.dll)",
     "branch": "feat/soulspire-core-native-ui-gamepad",
-    "commit": "9797b7c",
+    "commit": "4ca4df9",
     "dockerImage": "soulspirexi/server:v2026.11.21-weapon-config",
-    "crystalJobsHooks": 27,
-    "notes": "Staging native Commands menu integration before 31-hook Windows CI build."
+    "crystalJobsHooks": 31,
+    "notes": "True native FFXI Commands menu Soulspire entry (Btn 16 between Status and Equipment) via 31-hook soulspire_native.dll; floating ImGui Main Menu dock removed."
   },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
@@ -109,8 +109,8 @@
       "category": "plugin",
       "sourcePath": "channels/testing-core-ui/payload/plugins/ashita4/soulspire_native.dll",
       "targetPath": "soulspire_native.dll",
-      "sha256": "1111c4f2198ae71d3f6823061fb80b16c25ffa81033b208877d140bef566b85e",
-      "size": 176128
+      "sha256": "65d0a72d55dc8a63b9793d1ef9b23b1cb31c897fe4eb768dc2fb28950e2702ef",
+      "size": 184832
     },
     {
       "category": "addon",
@@ -10043,7 +10043,7 @@
     "hash": "cf86aa59ff8d16c6",
     "idLockStatus": "locked",
     "nativeDllCompiledHash": "cf86aa59ff8d16c6",
-    "nativeDllSha256": "1111c4f2198ae71d3f6823061fb80b16c25ffa81033b208877d140bef566b85e",
+    "nativeDllSha256": "65d0a72d55dc8a63b9793d1ef9b23b1cb31c897fe4eb768dc2fb28950e2702ef",
     "nativeDllClientVerified": false,
     "crystalJobsHooks": 24
   },
