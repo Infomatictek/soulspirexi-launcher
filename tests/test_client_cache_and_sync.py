@@ -59,6 +59,13 @@ class TestClientCacheAndSync(unittest.TestCase):
             "CACHE_SYNC_TEST_OK",
         )
 
+    def test_sync_reliability_stress_luajit_suite(self) -> None:
+        _run_lua_suite(
+            LAUNCHER_ROOT / "addons" / "ashita4" / "soulspire_core",
+            "tests/sync_reliability_test.lua",
+            "SYNC_RELIABILITY_OK",
+        )
+
     def test_existing_soulspire_core_suite_passes(self) -> None:
         _run_lua_suite(
             LAUNCHER_ROOT / "addons" / "ashita4" / "soulspire_core",

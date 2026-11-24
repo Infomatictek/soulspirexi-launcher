@@ -24,7 +24,29 @@ function WeaponMastery.new(sf_state, sf_actions, sf_ui)
         inspector_btn = 1,
         confirm_btn   = 1,
         prev_region   = 'tree',
+        path_filter   = nil, -- nil (all) | 'offense' | 'mastery' | 'utility'
     }, WeaponMastery)
+end
+
+local PATH_CYCLE = { 'offense', 'mastery', 'utility' }
+
+function WeaponMastery:toggle_path_filter(target)
+    if target ~= nil then
+        self.path_filter = (self.path_filter == target) and nil or target
+    elseif self.path_filter == nil then
+        self.path_filter = PATH_CYCLE[1]
+    elseif self.path_filter == PATH_CYCLE[1] then
+        self.path_filter = PATH_CYCLE[2]
+    elseif self.path_filter == PATH_CYCLE[2] then
+        self.path_filter = PATH_CYCLE[3]
+    else
+        self.path_filter = nil
+    end
+    if self.actions and self.actions.setStatus then
+        local lbl = self.path_filter and (string.upper(self.path_filter) .. ' PATH spotlight') or 'Showing all talent paths'
+        self.actions.setStatus(lbl)
+    end
+    return self.path_filter
 end
 
 function WeaponMastery:has_modal()
@@ -140,9 +162,9 @@ function WeaponMastery:on_open()
     if not self.state.synced or #(self.state.catalog or {}) == 0 then
         self.actions.sync()
     else
-        self.actions.refreshState()
+        self.actions.refreshState(true)
         if self.state.selectedWsId ~= nil then
-            self.actions.requestWS(self.state.selectedWsId)
+            self.actions.requestWS(self.state.selectedWsId, false, false)
         end
     end
     self:_ensure_valid_focus()
@@ -150,10 +172,17 @@ end
 
 function WeaponMastery:on_activate(_focus, opts)
     if not (opts and opts.from_open) then
-        self:on_open()
-    else
-        self:_ensure_valid_focus()
+        if not self.state.synced or #(self.state.catalog or {}) == 0 then
+            self.actions.sync()
+        else
+            -- Freshness-guarded refresh on tab switch: avoids duplicate sync storms!
+            self.actions.refreshState(false)
+            if self.state.selectedWsId ~= nil then
+                self.actions.requestWS(self.state.selectedWsId, false, false)
+            end
+        end
     end
+    self:_ensure_valid_focus()
 end
 
 function WeaponMastery:on_deactivate()
@@ -219,6 +248,31 @@ function WeaponMastery:on_action(action)
             self.region = order[nxt]
         end
         return true
+    end
+
+    -- [T] Toggle path spotlight (All -> Offense -> Mastery -> Utility -> All)
+    if action == 'toggle_paths' then
+        self:toggle_path_filter()
+        return true
+    end
+
+    -- [R] Two-step Respec active WS shortcut
+    if action == 'respec_ws' then
+        local d = st.wsDetail
+        if d and (tonumber(d.spent) or 0) > 0 then
+            if ui.confirmResetWs then
+                ui.confirmResetWs = false
+                self.actions.resetWS(d.id)
+            else
+                ui.confirmResetWs = true
+                ui.confirmResetWsAt = os.clock()
+                if self.actions.setStatus then
+                    self.actions.setStatus('Press [R] again within 5s to confirm Respec ' .. tostring(d.name))
+                end
+            end
+            return true
+        end
+        return false
     end
 
     -- 2. Arsenal Region (left rail weapon filter bar + WS browser)
@@ -507,17 +561,52 @@ function WeaponMastery:get_hints()
     end
 end
 
-function WeaponMastery:draw(_imgui, _dl, _F, L, x, y, w, h)
+function WeaponMastery:get_prompt_pills(last_device)
+    if self:has_modal() then
+        return {
+            { 'D-Pad', 'Confirm / Cancel' },
+            { 'A',     'Execute' },
+            { 'B',     'Cancel' },
+        }
+    end
+    if last_device == 'keyboard' then
+        return {
+            { 'Click',  'Select Node' },
+            { 'Hold',   'Upgrade (Hold)' },
+            { 'R',      'Respec WS' },
+            { 'Tab',    'Switch Panel' },
+            { 'T',      'Toggle Paths' },
+            { 'Esc',    'Close' },
+        }
+    end
+    return {
+        { 'D-Pad', 'Select Node' },
+        { 'A',     'Upgrade (Hold)' },
+        { 'R/X',   'Respec / Filter' },
+        { 'LB/RB', 'Modules' },
+        { 'T',     'Toggle Paths' },
+        { 'B',     'Close' },
+    }
+end
+
+function WeaponMastery:draw(_imgui, _dl, _F, L, x, y, w, h, ctx)
     self:_ensure_valid_focus()
+    ctx = ctx or {}
     local nav = {
-        region        = self.region,
-        arsenal_focus = self.arsenal_focus,
-        arsenal_index = self.arsenal_index,
-        sc_slot       = self.sc_slot,
-        node_key      = self.node_key,
-        inspector_btn = self.inspector_btn,
-        confirm_btn   = self.confirm_btn,
-        on_focus      = function(reg, arg1)
+        region         = self.region,
+        arsenal_focus  = self.arsenal_focus,
+        arsenal_index  = self.arsenal_index,
+        sc_slot        = self.sc_slot,
+        node_key       = self.node_key,
+        inspector_btn  = self.inspector_btn,
+        confirm_btn    = self.confirm_btn,
+        path_filter    = self.path_filter,
+        assets         = ctx.assets,
+        identity       = ctx.identity,
+        on_toggle_path = function(path_key)
+            self:toggle_path_filter(path_key)
+        end,
+        on_focus       = function(reg, arg1)
             self.region = reg
             if reg == 'arsenal' and type(arg1) == 'number' then
                 local rows = self.actions.filtered()

@@ -23,6 +23,7 @@ function SoulTalents.new(sf_state, sf_actions, sf_ui, opts)
         ui               = sf_ui,
         soul_registry    = opts.soul_registry,
         data_service     = opts.data_service,
+        assets           = opts.assets,
         on_jump_to_ws    = opts.on_jump_to_ws, -- fn(wsId, nodeKey)
         region           = 'slots', -- 'slots' | 'nodes' | 'confirm_reset'
         slot_index       = 1,
@@ -108,13 +109,18 @@ function SoulTalents:on_open()
     if not self.state.synced or #(self.state.catalog or {}) == 0 then
         self.actions.sync()
     else
-        self.actions.refreshState()
+        self.actions.refreshState(true)
     end
 end
 
 function SoulTalents:on_activate(_focus, opts)
     if not (opts and opts.from_open) then
-        self:on_open()
+        if not self.state.synced or #(self.state.catalog or {}) == 0 then
+            self.actions.sync()
+        else
+            -- Freshness-guarded refresh on tab switch: avoids duplicate sync storms!
+            self.actions.refreshState(false)
+        end
     end
     if self.region == 'confirm_reset' then
         self.region = 'slots'
@@ -236,10 +242,36 @@ function SoulTalents:get_hints()
     end
 end
 
-function SoulTalents:draw(imgui, dl, F, L, x, y, w, h)
+function SoulTalents:get_prompt_pills(last_device)
+    if self.region == 'confirm_reset' then
+        return {
+            { 'D-Pad', 'Confirm / Cancel' },
+            { 'A',     'Reset Spec' },
+            { 'B',     'Cancel' },
+        }
+    end
+    if last_device == 'keyboard' then
+        return {
+            { 'Arrows', 'Select' },
+            { 'Enter',  'Open Soulforge' },
+            { 'X',      'Reset / Sync' },
+            { 'Q/E',    'Modules' },
+            { 'Esc',    'Close' },
+        }
+    end
+    return {
+        { 'D-Pad', 'Select Slot / Node' },
+        { 'A',     'Open in Soulforge' },
+        { 'X',     'Reset Spec / Sync' },
+        { 'LB/RB', 'Modules' },
+        { 'B',     'Close' },
+    }
+end
+
+function SoulTalents:draw(imgui, dl, F, L, x, y, w, h, ctx)
     local s   = L.uiScale or 1.0
-    local gap = L.gap or math.floor(8 * s)
-    local pad = math.floor(14 * s)
+    local gap = L.gap or math.floor(10 * s)
+    local pad = math.floor(16 * s)
     local st  = self.state
 
     local slots = self.ui.getInvestedWeaponskills(st)
@@ -247,7 +279,6 @@ function SoulTalents:draw(imgui, dl, F, L, x, y, w, h)
     self.slot_index = clamp(self.slot_index, 1, self.ui.MAX_SPEC_WS_SLOTS)
     self.node_index = clamp(self.node_index, 1, math.max(1, #nodes))
 
-    -- Resolve canonical Soul metadata (prefer verified local cache via DataService)
     local soulEntry = nil
     if self.data_service and self.data_service:is_cache_usable() then
         soulEntry = self.data_service:get_soul_by_key(st.specKey)
@@ -260,62 +291,95 @@ function SoulTalents:draw(imgui, dl, F, L, x, y, w, h)
     local soulName = (soulEntry and soulEntry.displayName) or st.specName or 'Base'
     local soulRole = (soulEntry and soulEntry.roleLabel) or 'Base Adventurer'
 
+    local assetsRef  = self.assets or (ctx and ctx.assets)
+    local bannerTex  = assetsRef and assetsRef:load_texture('soulforge_banner_bg') or nil
+    local browserTex = assetsRef and assetsRef:load_from_addon('soulspire_talents', 'panel_browser') or nil
+    local inspTex    = assetsRef and assetsRef:load_from_addon('soulspire_talents', 'panel_inspector') or nil
+
+    -- Top Ornate Soul Talents Banner matching Weapon Mastery & Character
+    local avail  = tonumber(st.avail) or 0
+    local spent  = tonumber(st.spent) or 0
+    local earned = math.max(1, tonumber(st.earned) or (avail + spent))
+
+    local bannerH = math.floor(((L.mode == 'focused' and 56) or 78) * s)
+    F.drawOrnatePanel(dl, x, y, w, bannerH, {
+        texId      = bannerTex,
+        texTint    = F.abgr(F.rgba.white, 0.82),
+        scrimAlpha = 0.34,
+        border     = F.u32.soul_gold,
+        accent     = F.u32.soul_gold_bright,
+        rounding   = 6,
+        corners    = true,
+        shadow     = false,
+    })
+
+    F.drawShadowText(imgui, dl, x + 20 * s, y + 12 * s,
+        F.fitText(imgui, soulName, math.floor(w * 0.28), 1.24 * s), F.u32.white, 1.24 * s, 'l')
+    F.drawShadowText(imgui, dl, x + 20 * s, y + 42 * s,
+        F.fitText(imgui, string.format('%s Lv.%d  |  %s', st.jobKey or '---', st.jobLevel or 1, soulRole), math.floor(w * 0.30), 0.90 * s),
+        F.u32.crystal_violet_bright, 0.90 * s, 'l')
+
+    local midX = x + w * 0.5
+    F.drawShadowText(imgui, dl, midX, y + 12 * s, 'SOUL TALENTS', F.u32.soul_gold_bright, (L.mode == 'focused' and 1.12 or 1.46) * s, 'c')
+    if L.mode ~= 'focused' then
+        F.drawShadowText(imgui, dl, midX, y + 48 * s, 'ACTIVE SPEC LOADOUT & TELEMETRY', F.u32.soul_gold, 0.80 * s, 'c')
+    end
+
+    -- Far right: Talent Points star + Spent summary
+    local tpX = x + w - 128 * s
+    F.drawShadowText(imgui, dl, tpX + 54 * s, y + 8 * s, 'Talent Points', F.u32.soul_gold_bright, 0.82 * s, 'c')
+    if F.drawCrystalStar then
+        F.drawCrystalStar(dl, tpX + 24 * s, y + bannerH * 0.64, 13 * s, F.u32.crystal_violet_bright, F.u32.white)
+    end
+    F.drawShadowText(imgui, dl, tpX + 46 * s, y + bannerH * 0.42, tostring(avail),
+        avail > 0 and F.u32.white or F.u32.text_muted, 1.44 * s, 'l')
+
+    local bodyY = y + bannerH + gap
+    local bodyH = math.max(200, h - bannerH - gap)
     local leftW  = math.floor(w * (L.mode == 'focused' and 0.42 or 0.31))
     local rightW = math.floor(w * (L.mode == 'focused' and 0.00 or 0.28))
     local midW   = math.max(200, w - leftW - rightW - (rightW > 0 and gap * 2 or gap))
 
     -- 1. Left Panel: Active Soul Spec Ledger & 4-WS Mastery Loadout Slots
     local slotsFocused = (self.region == 'slots')
-    F.drawPanelFrame(dl, x, y, leftW, h, {
-        fillTop   = F.u32.midnight,
-        fillBot   = F.u32.abyss,
-        border    = slotsFocused and F.u32.aether_cyan or F.u32.border_subtle,
-        accent    = slotsFocused and F.u32.aether_cyan or F.u32.soul_gold_dim,
-        thickness = slotsFocused and 1.6 or 1.1,
-        corners   = (L.ornamentLevel >= 1),
-        shadow    = false,
+    F.drawOrnatePanel(dl, x, bodyY, leftW, bodyH, {
+        texId      = browserTex,
+        texTint    = F.abgr(F.rgba.white, 0.24),
+        scrimAlpha = 0.74,
+        border     = slotsFocused and F.u32.aether_cyan or F.u32.soul_gold_dim,
+        accent     = slotsFocused and F.u32.aether_cyan or F.u32.soul_gold,
+        thickness  = slotsFocused and 1.8 or 1.3,
+        corners    = true,
+        shadow     = false,
     })
 
-    F.drawShadowText(imgui, dl, x + pad, y + 10 * s,
+    F.drawShadowText(imgui, dl, x + pad, bodyY + 12 * s,
         slotsFocused and '> SOUL SPEC LOADOUT' or 'SOUL SPEC LOADOUT',
-        slotsFocused and F.u32.aether_cyan or F.u32.soul_gold, 0.94 * s, 'l')
-    F.drawDivider(dl, x + pad, y + 32 * s, leftW - pad * 2, slotsFocused and F.u32.aether_cyan or F.u32.soul_gold_dim)
+        slotsFocused and F.u32.aether_cyan or F.u32.soul_gold_bright, 1.04 * s, 'l')
+    F.drawDivider(dl, x + pad, bodyY + 38 * s, leftW - pad * 2, slotsFocused and F.u32.aether_cyan or F.u32.soul_gold_dim)
 
-    -- Soul identity banner
-    local cy = y + 42 * s
-    F.drawShadowText(imgui, dl, x + pad, cy, F.fitText(imgui, soulName:upper(), leftW - pad * 2, 1.02 * s), F.u32.soul_gold_bright, 1.02 * s, 'l')
-    cy = cy + 20 * s
-    F.drawShadowText(imgui, dl, x + pad, cy,
-        F.fitText(imgui, string.format('%s  Lv.%d  |  %s', st.jobKey or '---', st.jobLevel or 1, soulRole), leftW - pad * 2, 0.76 * s),
-        F.u32.crystal_violet_bright, 0.76 * s, 'l')
-    cy = cy + 22 * s
-
-    -- Points progress gauge
-    local avail  = tonumber(st.avail) or 0
-    local spent  = tonumber(st.spent) or 0
-    local earned = math.max(1, tonumber(st.earned) or (avail + spent))
-    F.drawSegmentedGauge(imgui, dl, x + pad, cy, leftW - pad * 2, math.floor(18 * s), spent, earned, {
+    local cy = bodyY + 48 * s
+    F.drawSegmentedGauge(imgui, dl, x + pad, cy, leftW - pad * 2, math.floor(22 * s), spent, earned, {
         fill      = avail > 0 and F.rgba.aether_cyan or F.rgba.soul_gold,
-        border    = F.u32.border_strong,
+        border    = F.u32.soul_gold_dim,
         notches   = 4,
         label     = string.format('%d AVAIL', avail),
         valueText = string.format('%d / %d SPENT', spent, earned),
-        fontScale = 0.74 * s,
+        fontScale = 0.80 * s,
     })
-    cy = cy + 28 * s
+    cy = cy + 34 * s
 
-    -- 4 Spec WS Mastery Slots
     F.drawShadowText(imgui, dl, x + pad, cy,
         string.format('MASTERY SLOTS (%d / %d)', #slots, self.ui.MAX_SPEC_WS_SLOTS),
-        F.u32.text_secondary, 0.76 * s, 'l')
-    cy = cy + 20 * s
+        F.u32.soul_gold, 0.84 * s, 'l')
+    cy = cy + 24 * s
 
-    local slotH = math.floor(54 * s)
+    local slotH = math.floor(66 * s)
     local slotW = leftW - pad * 2
     for i = 1, self.ui.MAX_SPEC_WS_SLOTS do
         local sl = slots[i]
         local focused = slotsFocused and (self.slot_index == i)
-        local sy = cy + (i - 1) * (slotH + math.floor(6 * s))
+        local sy = cy + (i - 1) * (slotH + math.floor(10 * s))
 
         imgui.SetCursorScreenPos({ x + pad, sy })
         if imgui.InvisibleButton('##st_slot_' .. i, { slotW, slotH }) then
@@ -326,60 +390,76 @@ function SoulTalents:draw(imgui, dl, F, L, x, y, w, h)
             end
         end
         local hovered = imgui.IsItemHovered and imgui.IsItemHovered() or false
-        local bg = focused and F.u32.midnight_selected or (hovered and F.u32.midnight_alt or F.u32.midnight_deep)
         local border = focused and F.u32.aether_cyan
-            or (sl and (sl.mastered and F.u32.soul_gold or F.u32.crystal_violet) or F.u32.border_subtle)
+            or (sl and (sl.mastered and F.u32.soul_gold_bright or F.u32.crystal_violet) or F.u32.border_subtle)
 
-        dl:AddRectFilled({ x + pad, sy }, { x + pad + slotW, sy + slotH }, bg, 5)
-        dl:AddRect({ x + pad, sy }, { x + pad + slotW, sy + slotH }, border, 5, 0, focused and 1.8 or 1.1)
-        if focused then
-            dl:AddRectFilled({ x + pad + 1, sy + 5 }, { x + pad + 4, sy + slotH - 5 }, F.u32.aether_cyan, 1)
+        if focused or (sl and sl.mastered) then
+            F.drawGradRect(dl, x + pad, sy, x + pad + slotW, sy + slotH,
+                F.abgr(F.hex('#3C2D15', 0.92)), F.abgr(F.hex('#141826', 0.96)))
+        else
+            dl:AddRectFilled({ x + pad, sy }, { x + pad + slotW, sy + slotH },
+                hovered and F.u32.midnight_alt or F.abgr(F.hex('#0D1221', 0.90)), 5)
         end
+        dl:AddRect({ x + pad, sy }, { x + pad + slotW, sy + slotH }, border, 5, 0, focused and 1.9 or 1.1)
 
+        local dr = math.floor(16 * s)
+        local dCx = x + pad + 12 * s + dr
+        local dCy = sy + slotH * 0.5
+        F.drawDiamondSocket(dl, dCx, dCy, dr, {
+            lit     = (sl ~= nil),
+            active  = focused,
+            coreU32 = (sl and sl.mastered) and F.u32.soul_gold_bright or F.u32.crystal_violet_bright,
+        })
+
+        local tx = dCx + dr + 12 * s
+        local tw = math.max(80, slotW - (tx - (x + pad)) - 10 * s)
         if sl then
-            F.drawShadowText(imgui, dl, x + pad + 10 * s, sy + 7 * s,
-                F.fitText(imgui, string.format('SLOT %d  |  %s', i, sl.name), slotW - 20 * s, 0.86 * s),
-                focused and F.u32.soul_gold_bright or F.u32.text_primary, 0.86 * s, 'l')
-            F.drawSegmentedGauge(imgui, dl, x + pad + 10 * s, sy + 29 * s, slotW - 20 * s, math.floor(15 * s), sl.spent, sl.cap, {
+            F.drawShadowText(imgui, dl, tx, sy + 10 * s,
+                F.fitText(imgui, string.format('SLOT %d  |  %s', i, sl.name), tw, 0.94 * s),
+                focused and F.u32.soul_gold_bright or F.u32.white, 0.94 * s, 'l')
+            F.drawSegmentedGauge(imgui, dl, tx, sy + 36 * s, tw, math.floor(17 * s), sl.spent, sl.cap, {
                 fill      = sl.mastered and F.rgba.soul_gold or F.rgba.crystal_violet,
                 label     = sl.mastered and 'MASTERED' or 'IN PROGRESS',
                 valueText = string.format('%d / %d', sl.spent, sl.cap),
-                fontScale = 0.68 * s,
+                fontScale = 0.74 * s,
             })
         else
-            F.drawShadowText(imgui, dl, x + pad + 10 * s, sy + 10 * s,
-                string.format('SLOT %d  |  OPEN MASTERY SLOT', i), F.u32.text_muted, 0.82 * s, 'l')
-            F.drawShadowText(imgui, dl, x + pad + 10 * s, sy + 28 * s,
-                'Press [A] or click to forge a Weapon Skill in The Soulforge.', F.u32.text_disabled, 0.70 * s, 'l')
+            F.drawShadowText(imgui, dl, tx, sy + 12 * s,
+                string.format('SLOT %d  |  OPEN MASTERY SLOT', i), F.u32.text_secondary, 0.88 * s, 'l')
+            F.drawShadowText(imgui, dl, tx, sy + 36 * s,
+                F.fitText(imgui, 'Press [A] or click to forge in The Soulforge.', tw, 0.76 * s), F.u32.text_muted, 0.76 * s, 'l')
         end
     end
 
     -- Reset Spec action button at bottom of Left panel
-    local actH = math.floor(30 * s)
-    local actY = y + h - pad - actH
+    local actH = math.floor(38 * s)
+    local actY = bodyY + bodyH - pad - actH
     if self.region == 'confirm_reset' then
-        local cH = math.floor(62 * s)
-        local cY = y + h - pad - cH
-        dl:AddRectFilled({ x + pad, cY }, { x + leftW - pad, cY + cH }, F.u32.midnight_alt, 5)
-        dl:AddRect({ x + pad, cY }, { x + leftW - pad, cY + cH }, F.u32.danger, 5, 0, 1.5)
-        F.drawShadowText(imgui, dl, x + pad + 8 * s, cY + 6 * s,
-            'Reset ALL Soulforge talents for ' .. soulName .. '?', F.u32.soul_gold_bright, 0.74 * s, 'l')
-        local halfW = math.floor((slotW - 18 * s) * 0.5)
-        local by = cY + cH - math.floor(26 * s) - 6 * s
-        local bh = math.floor(24 * s)
-        if F.drawActionButton(imgui, dl, '##st_rst_ok', x + pad + 6 * s, by, halfW, bh,
-            (self.confirm_btn == 1 and '> ' or '') .. 'CONFIRM', 'danger', { fontScale = 0.74 * s }) then
+        local cH = math.floor(72 * s)
+        local cY = bodyY + bodyH - pad - cH
+        F.drawOrnatePanel(dl, x + pad, cY, slotW, cH, {
+            fillTop = F.u32.midnight_alt, fillBot = F.u32.abyss_solid,
+            border = F.u32.danger, corners = false, shadow = false,
+        })
+        F.drawShadowText(imgui, dl, x + pad + 10 * s, cY + 8 * s,
+            F.fitText(imgui, 'Reset ALL Soulforge talents for ' .. soulName .. '?', slotW - 20 * s, 0.80 * s),
+            F.u32.soul_gold_bright, 0.80 * s, 'l')
+        local halfW = math.floor((slotW - 22 * s) * 0.5)
+        local by = cY + cH - math.floor(30 * s) - 7 * s
+        local bh = math.floor(28 * s)
+        if F.drawBeveledCtaButton(imgui, dl, '##st_rst_ok', x + pad + 8 * s, by, halfW, bh,
+            'CONFIRM', 'danger', { focused = (self.confirm_btn == 1), fontScale = 0.80 * s }) then
             self.region = 'slots'
             self.actions.resetAll()
         end
-        if F.drawActionButton(imgui, dl, '##st_rst_no', x + pad + 12 * s + halfW, by, halfW, bh,
-            (self.confirm_btn == 2 and '> ' or '') .. 'CANCEL', 'neutral', { fontScale = 0.74 * s }) then
+        if F.drawActionButton(imgui, dl, '##st_rst_no', x + pad + 14 * s + halfW, by, halfW, bh,
+            (self.confirm_btn == 2 and '> ' or '') .. 'CANCEL', 'neutral', { fontScale = 0.80 * s }) then
             self.region = 'slots'
         end
     else
-        if F.drawActionButton(imgui, dl, '##st_rst_btn', x + pad, actY, slotW, actH,
-            spent > 0 and 'RESET SPEC TALENTS [X]' or 'SYNC TALENTS [X]',
-            spent > 0 and 'danger' or 'cyan', { fontScale = 0.78 * s }) then
+        if F.drawBeveledCtaButton(imgui, dl, '##st_rst_btn', x + pad, actY, slotW, actH,
+            spent > 0 and 'Reset Spec Talents [X]' or 'Sync Talents [X]',
+            spent > 0 and 'danger' or 'cyan', { fontScale = 0.88 * s }) then
             if spent > 0 then
                 self.region = 'confirm_reset'
                 self.confirm_btn = 2
@@ -390,38 +470,38 @@ function SoulTalents:draw(imgui, dl, F, L, x, y, w, h)
     end
 
     -- 2. Center Panel: Invested Talent Nodes across synced Weapon Skills
-    local midX = x + leftW + gap
+    local midPanelX = x + leftW + gap
     local nodesFocused = (self.region == 'nodes')
-    F.drawPanelFrame(dl, midX, y, midW, h, {
-        fillTop   = F.u32.midnight,
-        fillBot   = F.u32.abyss,
+    F.drawOrnatePanel(dl, midPanelX, bodyY, midW, bodyH, {
+        fillTop   = F.abgr(F.hex('#101628', 0.94)),
+        fillBot   = F.abgr(F.hex('#080C17', 0.97)),
         border    = nodesFocused and F.u32.aether_cyan or F.u32.soul_gold_dim,
         accent    = nodesFocused and F.u32.aether_cyan or F.u32.soul_gold,
-        thickness = nodesFocused and 1.6 or 1.1,
-        corners   = (L.ornamentLevel >= 1),
+        thickness = nodesFocused and 1.8 or 1.3,
+        corners   = true,
         shadow    = false,
     })
 
-    F.drawShadowText(imgui, dl, midX + pad, y + 10 * s,
+    F.drawShadowText(imgui, dl, midPanelX + pad, bodyY + 12 * s,
         nodesFocused and '> INVESTED TALENT NODES' or 'INVESTED TALENT NODES',
-        nodesFocused and F.u32.aether_cyan or F.u32.soul_gold, 0.94 * s, 'l')
-    F.drawShadowText(imgui, dl, midX + midW - pad, y + 12 * s,
-        string.format('%d ACTIVE', #nodes), F.u32.aether_cyan, 0.78 * s, 'r')
-    F.drawDivider(dl, midX + pad, y + 32 * s, midW - pad * 2, nodesFocused and F.u32.aether_cyan or F.u32.soul_gold_dim)
+        nodesFocused and F.u32.aether_cyan or F.u32.soul_gold_bright, 1.04 * s, 'l')
+    F.drawShadowText(imgui, dl, midPanelX + midW - pad, bodyY + 15 * s,
+        string.format('%d ACTIVE', #nodes), F.u32.aether_cyan, 0.84 * s, 'r')
+    F.drawDivider(dl, midPanelX + pad, bodyY + 38 * s, midW - pad * 2, nodesFocused and F.u32.aether_cyan or F.u32.soul_gold_dim)
 
-    local listY = y + 42 * s
-    local listH = math.max(100, h - 56 * s)
-    imgui.SetCursorScreenPos({ midX + pad, listY })
+    local listY = bodyY + 48 * s
+    local listH = math.max(100, bodyH - 64 * s)
+    imgui.SetCursorScreenPos({ midPanelX + pad, listY })
     if imgui.BeginChild('##st_nodes_list', { midW - pad * 2, listH }, ImGuiChildFlags_None or 0) then
         local cdl = imgui.GetWindowDrawList()
         local rowW = math.max(160, midW - pad * 2 - 12 * s)
-        local rowH = math.floor(54 * s)
+        local rowH = math.floor(66 * s)
         if #nodes == 0 then
-            F.drawShadowText(imgui, cdl, midX + pad + 8 * s, listY + 12 * s,
-                'No talent nodes loaded yet.', F.u32.text_secondary, 0.86 * s, 'l')
-            F.drawShadowText(imgui, cdl, midX + pad + 8 * s, listY + 34 * s,
-                'Select a Weapon Skill in Weapon Mastery to inspect or forge techniques.',
-                F.u32.text_muted, 0.76 * s, 'l')
+            F.drawShadowText(imgui, cdl, midPanelX + pad + 10 * s, listY + 16 * s,
+                'No invested talent nodes loaded yet.', F.u32.text_primary, 0.94 * s, 'l')
+            F.drawShadowText(imgui, cdl, midPanelX + pad + 10 * s, listY + 42 * s,
+                'Open Weapon Mastery to awaken techniques on the Soulforge constellation.',
+                F.u32.text_secondary, 0.84 * s, 'l')
         else
             for idx, nd in ipairs(nodes) do
                 local rx, ry = F.toXY(imgui.GetCursorScreenPos())
@@ -436,68 +516,70 @@ function SoulTalents:draw(imgui, dl, F, L, x, y, w, h)
                     end
                 end
                 local maxed = nd.rank >= nd.maxRank
-                local bg = focused and F.u32.midnight_selected or (hovered and F.u32.midnight_alt or F.u32.midnight_deep)
-                local border = focused and F.u32.aether_cyan or (maxed and F.u32.soul_gold or F.u32.border_subtle)
-                cdl:AddRectFilled({ rx, ry }, { rx + rowW, ry + rowH - 4 }, bg, 5)
-                cdl:AddRect({ rx, ry }, { rx + rowW, ry + rowH - 4 }, border, 5, 0, focused and 1.8 or 1.0)
+                local rh = rowH - 6
+                local bg = focused and F.u32.midnight_selected or (hovered and F.u32.midnight_alt or F.abgr(F.hex('#0D1221', 0.90)))
+                local border = focused and F.u32.aether_cyan or (maxed and F.u32.soul_gold or F.u32.border_strong)
+                cdl:AddRectFilled({ rx, ry }, { rx + rowW, ry + rh }, bg, 5)
+                cdl:AddRect({ rx, ry }, { rx + rowW, ry + rh }, border, 5, 0, focused and 1.9 or 1.1)
                 if focused then
-                    cdl:AddRectFilled({ rx + 1, ry + 4 }, { rx + 4, ry + rowH - 8 }, F.u32.aether_cyan, 1)
+                    cdl:AddRectFilled({ rx + 1, ry + 5 }, { rx + 4, ry + rh - 5 }, F.u32.aether_cyan, 1)
                 end
 
-                F.drawShadowText(imgui, cdl, rx + 10 * s, ry + 6 * s,
-                    F.fitText(imgui, nd.name, rowW - 110 * s, 0.88 * s),
-                    maxed and F.u32.soul_gold_bright or F.u32.text_primary, 0.88 * s, 'l')
-                F.drawShadowText(imgui, cdl, rx + rowW - 10 * s, ry + 7 * s,
-                    string.format('Rank %d/%d', nd.rank, nd.maxRank),
-                    maxed and F.u32.soul_gold or F.u32.aether_cyan, 0.74 * s, 'r')
-                F.drawShadowText(imgui, cdl, rx + 10 * s, ry + 26 * s,
-                    F.fitText(imgui, string.format('%s (Ch.%d)  |  %s', nd.wsName, nd.tier, nd.desc), rowW - 20 * s, 0.72 * s),
-                    F.u32.text_secondary, 0.72 * s, 'l')
+                F.drawShadowText(imgui, cdl, rx + 12 * s, ry + 8 * s,
+                    F.fitText(imgui, nd.name, rowW - 120 * s, 0.96 * s),
+                    maxed and F.u32.soul_gold_bright or F.u32.white, 0.96 * s, 'l')
+                F.drawShadowText(imgui, cdl, rx + rowW - 12 * s, ry + 10 * s,
+                    string.format('Rank %d / %d', nd.rank, nd.maxRank),
+                    maxed and F.u32.soul_gold_bright or F.u32.aether_cyan, 0.82 * s, 'r')
+                F.drawShadowText(imgui, cdl, rx + 12 * s, ry + 32 * s,
+                    F.fitText(imgui, string.format('%s (Tier %d) | %s', nd.wsName, nd.tier, nd.desc), rowW - 32 * s, 0.78 * s),
+                    F.u32.text_secondary, 0.78 * s, 'l')
             end
         end
     end
     imgui.EndChild()
 
-    -- 3. Right Panel: Focused Talent / Live Soul Mechanics Inspector
+    -- 3. Right Panel: Focused Talent & Live Soul Telemetry Inspector
     if rightW > 0 then
-        local rx = midX + midW + gap
-        F.drawPanelFrame(dl, rx, y, rightW, h, {
-            fillTop  = F.u32.midnight,
-            fillBot  = F.u32.abyss,
-            border   = F.u32.border_subtle,
-            accent   = F.u32.crystal_violet,
-            corners  = (L.ornamentLevel >= 1),
-            shadow   = false,
+        local rx = midPanelX + midW + gap
+        F.drawOrnatePanel(dl, rx, bodyY, rightW, bodyH, {
+            texId      = inspTex,
+            texTint    = F.abgr(F.rgba.white, 0.26),
+            scrimAlpha = 0.72,
+            border     = F.u32.soul_gold_dim,
+            accent     = F.u32.crystal_violet,
+            corners    = true,
+            shadow     = false,
         })
 
-        F.drawShadowText(imgui, dl, rx + pad, y + 10 * s, 'TALENT & SOUL DETAILS', F.u32.soul_gold, 0.94 * s, 'l')
-        F.drawDivider(dl, rx + pad, y + 32 * s, rightW - pad * 2, F.u32.crystal_violet)
+        F.drawShadowText(imgui, dl, rx + pad, bodyY + 12 * s, 'TALENT & SOUL DETAILS', F.u32.soul_gold_bright, 1.04 * s, 'l')
+        F.drawDivider(dl, rx + pad, bodyY + 38 * s, rightW - pad * 2, F.u32.crystal_violet)
 
-        local iy = y + 44 * s
+        local iy = bodyY + 50 * s
         local innerW = rightW - pad * 2
         local focusedNode = nodes[self.node_index]
         if focusedNode then
-            F.drawShadowText(imgui, dl, rx + pad, iy, F.fitText(imgui, focusedNode.name, innerW, 0.96 * s), F.u32.soul_gold_bright, 0.96 * s, 'l')
-            iy = iy + 22 * s
-            F.drawShadowText(imgui, dl, rx + pad, iy,
-                string.format('%s  |  Chapter %d  |  Rank %d/%d', focusedNode.wsName, focusedNode.tier, focusedNode.rank, focusedNode.maxRank),
-                F.u32.aether_cyan, 0.76 * s, 'l')
-            iy = iy + 20 * s
-            local chars = math.max(18, math.floor(innerW / (7.6 * s)))
-            for _, line in ipairs(F.wrapLines(focusedNode.desc, chars, 5)) do
-                F.drawShadowText(imgui, dl, rx + pad, iy, line, F.u32.text_primary, 0.78 * s, 'l')
-                iy = iy + math.floor(16 * s)
-            end
-            iy = iy + 12 * s
-        else
-            F.drawShadowText(imgui, dl, rx + pad, iy, 'Select a Spec Slot or Talent Node to inspect.', F.u32.text_secondary, 0.80 * s, 'l')
+            F.drawShadowText(imgui, dl, rx + pad, iy, F.fitText(imgui, focusedNode.name, innerW, 1.12 * s), F.u32.white, 1.12 * s, 'l')
             iy = iy + 26 * s
+            F.drawShadowText(imgui, dl, rx + pad, iy,
+                string.format('%s  |  Tier %d  |  Rank %d/%d', focusedNode.wsName, focusedNode.tier, focusedNode.rank, focusedNode.maxRank),
+                F.u32.aether_cyan, 0.84 * s, 'l')
+            iy = iy + 24 * s
+            local chars = math.max(20, math.floor(innerW / (7.8 * s)))
+            for _, line in ipairs(F.wrapLines(focusedNode.desc, chars, 5)) do
+                F.drawShadowText(imgui, dl, rx + pad, iy, line, F.u32.text_primary, 0.86 * s, 'l')
+                iy = iy + math.floor(19 * s)
+            end
+            iy = iy + 14 * s
+        else
+            F.drawShadowText(imgui, dl, rx + pad, iy, 'Select a Mastery Slot or Talent Node to inspect.', F.u32.text_secondary, 0.86 * s, 'l')
+            iy = iy + 28 * s
         end
 
-        F.drawDivider(dl, rx + pad, iy, innerW, F.u32.border_strong)
-        iy = iy + 12 * s
-        F.drawShadowText(imgui, dl, rx + pad, iy, 'LIVE SOUL TELEMETRY', F.u32.crystal_violet_bright, 0.80 * s, 'l')
-        iy = iy + 20 * s
+        F.drawDivider(dl, rx + pad, iy, innerW, F.u32.soul_gold_dim)
+        iy = iy + 14 * s
+        F.drawShadowText(imgui, dl, rx + pad, iy, 'LIVE SOUL TELEMETRY', F.u32.crystal_violet_bright, 0.90 * s, 'l')
+        iy = iy + 24 * s
 
         local kvCount = 0
         local keys = {}
@@ -505,15 +587,17 @@ function SoulTalents:draw(imgui, dl, F, L, x, y, w, h)
         table.sort(keys)
         for _, k in ipairs(keys) do
             if kvCount < 6 then
-                F.drawShadowText(imgui, dl, rx + pad, iy,
-                    F.fitText(imgui, string.format('%s: %s', tostring(k), tostring(self.hud_kv[k])), innerW, 0.76 * s),
-                    F.u32.text_secondary, 0.76 * s, 'l')
-                iy = iy + math.floor(16 * s)
+                dl:AddRectFilled({ rx + pad, iy - 2 }, { rx + rightW - pad, iy + 22 * s }, F.abgr(F.hex('#0B101E', 0.85)), 4)
+                F.drawShadowText(imgui, dl, rx + pad + 8 * s, iy + 2 * s,
+                    F.fitText(imgui, string.upper(tostring(k)), innerW * 0.55, 0.80 * s), F.u32.text_secondary, 0.80 * s, 'l')
+                F.drawShadowText(imgui, dl, rx + rightW - pad - 8 * s, iy + 2 * s,
+                    F.fitText(imgui, tostring(self.hud_kv[k]), innerW * 0.42, 0.84 * s), F.u32.soul_gold_bright, 0.84 * s, 'r')
+                iy = iy + math.floor(28 * s)
                 kvCount = kvCount + 1
             end
         end
         if kvCount == 0 then
-            F.drawShadowText(imgui, dl, rx + pad, iy, 'Waiting for live [OXHUD] server telemetry.', F.u32.text_muted, 0.74 * s, 'l')
+            F.drawShadowText(imgui, dl, rx + pad, iy, 'Waiting for live [OXHUD] server telemetry.', F.u32.text_muted, 0.82 * s, 'l')
         end
     end
 end

@@ -126,6 +126,40 @@ F.roles = {
     damage  = { accent = F.hex('#E55C6C', 1.0), secondary = F.rgba.soul_gold,      deep = F.hex('#27121C', 0.95), label = 'DAMAGE' },
 }
 
+-- Approved Soulforge Path Identities (Offense / Mastery / Utility)
+F.PATHS = {
+    offense = {
+        id       = 'offense',
+        title    = 'Offense Path',
+        subtitle = 'Increase damage and amplify potency.',
+        primary  = F.hex('#E04F5F', 1.00),
+        bright   = F.hex('#F89C74', 1.00),
+        rim      = F.hex('#E8BD70', 1.00),
+        deep     = F.hex('#2A111A', 0.94),
+        wash     = F.hex('#D94654', 0.22),
+    },
+    mastery = {
+        id       = 'mastery',
+        title    = 'Mastery Path',
+        subtitle = 'Enhance core potency and skill performance.',
+        primary  = F.hex('#A855F7', 1.00),
+        bright   = F.hex('#D8B4FE', 1.00),
+        rim      = F.hex('#C084FC', 1.00),
+        deep     = F.hex('#1E1136', 0.96),
+        wash     = F.hex('#9333EA', 0.26),
+    },
+    utility = {
+        id       = 'utility',
+        title    = 'Utility Path',
+        subtitle = 'Improve execution, consistency, and synergy.',
+        primary  = F.hex('#39CFE5', 1.00),
+        bright   = F.hex('#7DD3FC', 1.00),
+        rim      = F.hex('#38BDF8', 1.00),
+        deep     = F.hex('#0D2234', 0.94),
+        wash     = F.hex('#39CFE5', 0.22),
+    },
+}
+
 -- Spacing tokens (base pixels at uiScale = 1.0)
 F.space = {
     xs = 4,
@@ -249,8 +283,8 @@ function F.computeViewportLayout(viewW, viewH, uiScale, opts)
     local vh = math.max(480, tonumber(viewH) or 1080)
     local scale = clamp(tonumber(uiScale) or 1.0, 0.75, 1.50)
 
-    local marginX = math.max(12, math.floor(math.min(40, vw * 0.025)))
-    local marginY = math.max(12, math.floor(math.min(36, vh * 0.028)))
+    local marginX = math.max(10, math.floor(math.min(24, vw * 0.015)))
+    local marginY = math.max(10, math.floor(math.min(20, vh * 0.016)))
     local maxWinW = math.floor(math.min(vw - marginX * 2, (opts.maxLogicalW or 1920) * scale))
     local maxWinH = math.floor(math.min(vh - marginY * 2, (opts.maxLogicalH or 1160) * scale))
 
@@ -262,7 +296,7 @@ function F.computeViewportLayout(viewW, viewH, uiScale, opts)
     local effH = winH / scale
 
     local mode
-    if effW >= 1720 and effH >= 1040 then
+    if effW >= 1720 and effH >= 1080 then
         mode = 'expanded'
     elseif effW >= 1260 and effH >= 740 then
         mode = 'balanced'
@@ -952,23 +986,356 @@ end
 -- Crisp keycap / gamepad badge + label pair for the bottom controls legend bar
 function F.drawPromptPill(imgui, dl, x, y, keyLabel, descLabel, opts)
     opts = opts or {}
-    local fs = opts.fontScale or 0.74
-    local padX = math.floor(6 * fs + 0.5)
-    local h = math.floor(20 * fs + 0.5)
+    local fs = opts.fontScale or 0.84
+    local padX = math.floor(10 * fs + 0.5)
+    local h = math.floor(24 * fs + 0.5)
     local kw = F.measureText(imgui, keyLabel, fs)
-    local pillW = math.max(math.floor(20 * fs), math.floor(kw + padX * 2 + 0.5))
+    local pillW = math.max(math.floor(28 * fs), math.floor(kw + padX * 2 + 4 * fs + 0.5))
     local dw = F.measureText(imgui, descLabel, fs)
 
     if dl then
-        dl:AddRectFilled({ x, y }, { x + pillW, y + h }, F.u32.abyss_solid, 4)
-        dl:AddRect({ x, y }, { x + pillW, y + h }, opts.keyBorder or F.u32.soul_gold_dim, 4, 0, 1.1)
+        dl:AddRectFilled({ x, y }, { x + pillW, y + h }, F.abgr(F.rgba.midnight_alt, 0.96), 5)
+        dl:AddRect({ x, y }, { x + pillW, y + h }, opts.keyBorder or F.u32.soul_gold_dim, 5, 0, 1.2)
+        if dl.AddLine then
+            dl:AddLine({ x + 3, y + 1 }, { x + pillW - 3, y + 1 }, F.abgr(F.rgba.soul_gold_bright, 0.35), 1.0)
+        end
     end
-    F.drawShadowText(imgui, dl, x + pillW * 0.5, y + (h - 13 * fs) * 0.5, keyLabel,
+    F.drawShadowText(imgui, dl, x + pillW * 0.5, y + (h - 14 * fs) * 0.5, keyLabel,
         opts.keyCol or F.u32.soul_gold_bright, fs, 'c')
-    F.drawShadowText(imgui, dl, x + pillW + math.floor(6 * fs), y + (h - 13 * fs) * 0.5, descLabel,
-        opts.descCol or F.u32.text_secondary, fs, 'l')
+    F.drawShadowText(imgui, dl, x + pillW + math.floor(10 * fs), y + (h - 14 * fs) * 0.5, descLabel,
+        opts.descCol or F.u32.text_primary, fs, 'l')
 
-    return pillW + math.floor(6 * fs) + dw + math.floor(14 * fs)
+    return pillW + math.floor(10 * fs) + dw + math.floor(28 * fs)
+end
+
+-- ---------------------------------------------------------------------------
+-- 6. Approved Soulforge Visual Target Primitives (Ornate Frames, Circular
+--    Talent Medallions, Glowing Energy Conduits, Weapon Category Icons,
+--    Hold-to-Confirm Beveled RPG CTA Buttons)
+-- ---------------------------------------------------------------------------
+
+-- Ornate dark-fantasy panel frame matching the approved Soulforge aesthetic:
+-- optional texture backdrop, double antique-gold bevels, and corner crystal finials.
+function F.drawOrnatePanel(dl, x, y, w, h, opts)
+    if not dl then return end
+    opts = opts or {}
+    local r       = opts.rounding or 6
+    local fillTop = opts.fillTop or F.abgr(F.hex('#121829', 0.94))
+    local fillBot = opts.fillBot or F.abgr(F.hex('#080C15', 0.97))
+    local border  = opts.border or F.u32.soul_gold_dim
+    local accent  = opts.accent or F.u32.soul_gold
+    local thick   = opts.thickness or 1.4
+
+    if opts.shadow ~= false then
+        dl:AddRectFilled({ x + 4, y + 5 }, { x + w + 4, y + h + 5 }, F.abgr(F.rgba.black, 0.62), r)
+    end
+    dl:AddRectFilled({ x, y }, { x + w, y + h }, fillBot, r)
+    if opts.texId and dl.AddImage then
+        dl:AddImage(opts.texId, { x + 2, y + 2 }, { x + w - 2, y + h - 2 }, { 0, 0 }, { 1, 1 },
+            opts.texTint or F.abgr(F.rgba.white, 0.42))
+        if opts.scrim ~= false then
+            dl:AddRectFilled({ x + 2, y + 2 }, { x + w - 2, y + h - 2 },
+                F.abgr(F.rgba.abyss_solid, opts.scrimAlpha or 0.54), math.max(0, r - 1))
+        end
+    elseif dl.AddRectFilledMultiColor and h > 16 then
+        dl:AddRectFilledMultiColor({ x + 1, y + 1 }, { x + w - 1, y + math.min(h - 1, 90) },
+            fillTop, fillTop, fillBot, fillBot)
+    end
+
+    -- Outer gilded rim + subtle inner recessed bevel
+    dl:AddRect({ x, y }, { x + w, y + h }, border, r, 0, thick)
+    if w >= 40 and h >= 30 then
+        dl:AddRect({ x + 3, y + 3 }, { x + w - 3, y + h - 3 }, F.abgr(F.rgba.soul_gold_dim, 0.32), math.max(0, r - 2), 0, 1.0)
+    end
+    if dl.AddLine and w > 32 then
+        dl:AddLine({ x + 14, y + 1 }, { x + w - 14, y + 1 }, F.abgr(F.rgba.soul_gold_bright, 0.28), 1.0)
+    end
+
+    -- Corner filigree L-brackets + miniature crystal diamond studs
+    if opts.corners ~= false and dl.AddLine and w >= 72 and h >= 48 then
+        local tk = opts.cornerSize or 14
+        local ct = opts.cornerThickness or 1.8
+        -- TL
+        dl:AddLine({ x + 1, y + tk }, { x + 1, y + 1 }, accent, ct)
+        dl:AddLine({ x + 1, y + 1 }, { x + tk, y + 1 }, accent, ct)
+        -- TR
+        dl:AddLine({ x + w - tk, y + 1 }, { x + w - 1, y + 1 }, accent, ct)
+        dl:AddLine({ x + w - 1, y + 1 }, { x + w - 1, y + tk }, accent, ct)
+        -- BL
+        dl:AddLine({ x + 1, y + h - tk }, { x + 1, y + h - 1 }, accent, ct)
+        dl:AddLine({ x + 1, y + h - 1 }, { x + tk, y + h - 1 }, accent, ct)
+        -- BR
+        dl:AddLine({ x + w - tk, y + h - 1 }, { x + w - 1, y + h - 1 }, accent, ct)
+        dl:AddLine({ x + w - 1, y + h - tk }, { x + w - 1, y + h - 1 }, accent, ct)
+
+        if dl.AddQuadFilled then
+            local d = 3.2
+            local stud = opts.studCol or F.u32.aether_cyan
+            for _, pt in ipairs({
+                { x + 5, y + 5 }, { x + w - 5, y + 5 },
+                { x + 5, y + h - 5 }, { x + w - 5, y + h - 5 },
+            }) do
+                dl:AddQuadFilled({ pt[1], pt[2] - d }, { pt[1] + d, pt[2] }, { pt[1], pt[2] + d }, { pt[1] - d, pt[2] }, stud)
+            end
+        end
+    end
+end
+
+-- Glowing 3-layer energy conduit connecting real talent tree dependencies (parent -> child)
+function F.drawEnergyConduit(dl, x1, y1, x2, y2, stateKey, pathKey, opts)
+    if not dl or not dl.AddLine then return end
+    opts = opts or {}
+    local pathSpec = F.PATHS[pathKey or 'mastery'] or F.PATHS.mastery
+    local alpha = opts.alpha or 1.0
+    local thick = opts.thickness or 2.6
+
+    if stateKey == 'active' or stateKey == 'maxed' then
+        local glow = F.abgr(pathSpec.primary, 0.24 * alpha)
+        local mid  = F.abgr(pathSpec.bright, 0.88 * alpha)
+        local core = F.abgr(F.rgba.white, 0.72 * alpha)
+        dl:AddLine({ x1, y1 }, { x2, y2 }, glow, thick + 7.5)
+        dl:AddLine({ x1, y1 }, { x2, y2 }, mid, thick + 2.0)
+        dl:AddLine({ x1, y1 }, { x2, y2 }, core, math.max(1.2, thick * 0.55))
+    elseif stateKey == 'available' then
+        local glow = F.abgr(pathSpec.primary, 0.16 * alpha)
+        local mid  = F.abgr(pathSpec.primary, 0.74 * alpha)
+        dl:AddLine({ x1, y1 }, { x2, y2 }, glow, thick + 5.0)
+        dl:AddLine({ x1, y1 }, { x2, y2 }, mid, thick)
+    else
+        dl:AddLine({ x1, y1 }, { x2, y2 }, F.abgr(F.rgba.abyss_solid, 0.85 * alpha), thick + 2.0)
+        dl:AddLine({ x1, y1 }, { x2, y2 }, F.abgr(F.rgba.border_strong, 0.55 * alpha), math.max(1.4, thick * 0.7))
+    end
+end
+
+-- Circular ornate RPG talent node medallion (matching approved Soulforge concept)
+function F.drawNodeMedallion(dl, cx, cy, r, opts)
+    if not dl then return end
+    opts = opts or {}
+    local stateKey = opts.stateKey or 'locked'
+    local pathSpec = F.PATHS[opts.pathKey or 'mastery'] or F.PATHS.mastery
+    local alpha    = opts.alpha or 1.0
+    local selected = opts.selected == true
+    local focused  = opts.focused == true
+    local hovered  = opts.hovered == true
+    local isLocked = (stateKey == 'locked' or stateKey == 'prereq_blocked')
+    local isActive = (stateKey == 'learned' or stateKey == 'maxed')
+    local isAvail  = (stateKey == 'available')
+
+    -- 1. Outer ambient aura glow
+    if dl.AddCircleFilled then
+        if selected or focused then
+            dl:AddCircleFilled({ cx, cy }, r + 10, F.abgr(focused and F.rgba.aether_cyan or F.rgba.soul_gold, 0.24 * alpha), 32)
+            dl:AddCircleFilled({ cx, cy }, r + 5, F.abgr(focused and F.rgba.aether_cyan or F.rgba.soul_gold_bright, 0.34 * alpha), 28)
+        elseif isActive then
+            dl:AddCircleFilled({ cx, cy }, r + 7, F.abgr(pathSpec.primary, 0.22 * alpha), 28)
+        elseif isAvail then
+            dl:AddCircleFilled({ cx, cy }, r + 5, F.abgr(pathSpec.primary, 0.16 * alpha), 24)
+        elseif hovered then
+            dl:AddCircleFilled({ cx, cy }, r + 4, F.abgr(F.rgba.soul_gold, 0.16 * alpha), 24)
+        end
+        -- Dark drop shadow + obsidian disc fill
+        dl:AddCircleFilled({ cx + 1, cy + 2 }, r + 1.5, F.abgr(F.rgba.black, 0.65 * alpha), 28)
+        local bgCol = isActive and F.abgr(pathSpec.deep, 0.98 * alpha)
+            or (isAvail and F.abgr(F.rgba.midnight_alt, 0.96 * alpha)
+            or F.abgr(F.rgba.abyss_solid, 0.94 * alpha))
+        dl:AddCircleFilled({ cx, cy }, r, bgCol, 28)
+    end
+
+    -- 2. Center artwork: real PNG icon, lock silhouette, or crisp path-specific vector emblem
+    if isLocked and not opts.showIconWhenLocked then
+        -- Crisp metallic lock silhouette inside locked medallion (matching mockup!)
+        if dl.AddRect and dl.AddCircle then
+            local lw, lh = r * 0.30, r * 0.28
+            local lkCol = F.abgr(F.rgba.text_muted, 0.85 * alpha)
+            dl:AddCircle({ cx, cy - lh * 0.45 }, lw * 0.65, lkCol, 14, 1.8)
+            dl:AddRectFilled({ cx - lw, cy - lh * 0.15 }, { cx + lw, cy + lh * 1.05 }, F.abgr(F.rgba.midnight_alt, 0.95 * alpha), 2)
+            dl:AddRect({ cx - lw, cy - lh * 0.15 }, { cx + lw, cy + lh * 1.05 }, lkCol, 2, 0, 1.6)
+            dl:AddCircleFilled({ cx, cy + lh * 0.42 }, math.max(1.8, r * 0.08), lkCol, 8)
+        end
+    elseif opts.texId and dl.AddImage then
+        local ir = r * 0.68
+        local tint = isLocked and F.abgr(F.rgba.text_muted, 0.65 * alpha) or F.abgr(F.rgba.white, alpha)
+        dl:AddImage(opts.texId, { cx - ir, cy - ir }, { cx + ir, cy + ir }, { 0, 0 }, { 1, 1 }, tint)
+    else
+        -- Path-themed crisp vector glyph (Offense slash, Mastery radiant burst, Utility hourglass)
+        local glyphCol = isActive and F.abgr(pathSpec.bright, alpha)
+            or (isAvail and F.abgr(pathSpec.primary, alpha)
+            or F.abgr(F.rgba.text_secondary, 0.80 * alpha))
+        local accentCol = F.abgr(F.rgba.white, (isActive and 0.85 or 0.45) * alpha)
+        local gr = r * 0.50
+        if opts.pathKey == 'offense' and dl.AddLine then
+            dl:AddLine({ cx - gr, cy + gr * 0.85 }, { cx + gr * 0.85, cy - gr }, glyphCol, 2.8)
+            dl:AddLine({ cx - gr * 0.45, cy + gr * 0.95 }, { cx + gr, cy - gr * 0.45 }, accentCol, 1.8)
+            dl:AddLine({ cx - gr * 0.95, cy + gr * 0.35 }, { cx + gr * 0.35, cy - gr * 0.95 }, glyphCol, 1.6)
+        elseif opts.pathKey == 'utility' and dl.AddTriangleFilled and dl.AddLine then
+            dl:AddTriangleFilled({ cx - gr * 0.7, cy - gr * 0.8 }, { cx + gr * 0.7, cy - gr * 0.8 }, { cx, cy }, glyphCol)
+            dl:AddTriangleFilled({ cx - gr * 0.7, cy + gr * 0.8 }, { cx + gr * 0.7, cy + gr * 0.8 }, { cx, cy }, F.abgr(pathSpec.primary, 0.65 * alpha))
+            dl:AddLine({ cx - gr * 0.8, cy - gr * 0.8 }, { cx + gr * 0.8, cy - gr * 0.8 }, accentCol, 1.6)
+            dl:AddLine({ cx - gr * 0.8, cy + gr * 0.8 }, { cx + gr * 0.8, cy + gr * 0.8 }, accentCol, 1.6)
+        else
+            -- Mastery radiant crystal star
+            F.drawCrystalStar(dl, cx, cy, gr * 1.15, glyphCol, accentCol)
+        end
+    end
+
+    -- 3. Ornate double metallic bezel ring
+    if dl.AddCircle then
+        local outerRim = focused and F.abgr(F.rgba.aether_cyan, alpha)
+            or (selected and F.abgr(F.rgba.soul_gold_bright, alpha)
+            or (stateKey == 'maxed' and F.abgr(F.rgba.soul_gold_bright, alpha)
+            or (isActive and F.abgr(pathSpec.rim, alpha)
+            or (isAvail and F.abgr(pathSpec.primary, 0.92 * alpha)
+            or (stateKey == 'rejected' and F.u32.danger
+            or F.abgr(F.rgba.border_strong, 0.88 * alpha))))))
+        local ringThick = (focused or selected) and 3.0 or ((isActive or isAvail) and 2.3 or 1.6)
+        dl:AddCircle({ cx, cy }, r, outerRim, 32, ringThick)
+        dl:AddCircle({ cx, cy }, r - 3.2, F.abgr(isActive and F.rgba.soul_gold_bright or F.rgba.white, (isActive and 0.35 or 0.14) * alpha), 28, 1.0)
+        if stateKey == 'maxed' or selected or focused then
+            dl:AddCircle({ cx, cy }, r + 3.5, F.abgr(focused and F.rgba.aether_cyan or F.rgba.soul_gold, 0.72 * alpha), 32, 1.3)
+        end
+    end
+
+    -- 4. Cardinal diamond pointers on selected/focused/keystone nodes
+    if (selected or focused or opts.keystone) and dl.AddQuadFilled then
+        local ptCol = focused and F.u32.aether_cyan or F.u32.soul_gold_bright
+        local d = (selected or focused) and 4.2 or 3.2
+        for _, pt in ipairs({ { cx, cy - r - 2 }, { cx + r + 2, cy }, { cx, cy + r + 2 }, { cx - r - 2, cy } }) do
+            dl:AddQuadFilled({ pt[1], pt[2] - d }, { pt[1] + d, pt[2] }, { pt[1], pt[2] + d }, { pt[1] - d, pt[2] }, ptCol)
+        end
+    end
+end
+
+-- Crisp vector weapon-category emblem for the Arsenal circular filter bar
+function F.drawWeaponIcon(dl, skillId, cx, cy, r, colU32, accentU32)
+    if not dl or not dl.AddLine then return end
+    local id = tonumber(skillId) or 0
+    if id == -1 then
+        -- Equipped: radiant diamond sword crest
+        if dl.AddQuadFilled then
+            dl:AddQuadFilled({ cx, cy - r * 0.75 }, { cx + r * 0.52, cy }, { cx, cy + r * 0.75 }, { cx - r * 0.52, cy }, accentU32)
+        end
+        dl:AddLine({ cx, cy - r * 0.85 }, { cx, cy + r * 0.85 }, colU32, 1.8)
+    elseif id == 0 then
+        -- All Weapons: crossed blades
+        dl:AddLine({ cx - r * 0.72, cy + r * 0.72 }, { cx + r * 0.72, cy - r * 0.72 }, colU32, 2.0)
+        dl:AddLine({ cx + r * 0.72, cy + r * 0.72 }, { cx - r * 0.72, cy - r * 0.72 }, colU32, 2.0)
+        dl:AddLine({ cx - r * 0.45, cy + r * 0.12 }, { cx - r * 0.12, cy + r * 0.45 }, accentU32, 1.6)
+        dl:AddLine({ cx + r * 0.45, cy + r * 0.12 }, { cx + r * 0.12, cy + r * 0.45 }, accentU32, 1.6)
+    elseif id == 3 or id == 4 or id == 9 or id == 10 then
+        -- Sword / Great Sword / Katana diagonal blade
+        dl:AddLine({ cx - r * 0.68, cy + r * 0.68 }, { cx + r * 0.76, cy - r * 0.76 }, colU32, id == 4 and 2.8 or 2.2)
+        dl:AddLine({ cx - r * 0.52, cy + r * 0.08 }, { cx - r * 0.08, cy + r * 0.52 }, accentU32, 2.0)
+    elseif id == 2 then
+        -- Dagger
+        dl:AddLine({ cx - r * 0.48, cy + r * 0.48 }, { cx + r * 0.62, cy - r * 0.62 }, colU32, 1.9)
+        dl:AddLine({ cx - r * 0.36, cy + r * 0.10 }, { cx - r * 0.10, cy + r * 0.36 }, accentU32, 1.6)
+    elseif id == 5 or id == 6 then
+        -- Axe / Great Axe
+        dl:AddLine({ cx - r * 0.62, cy + r * 0.72 }, { cx + r * 0.56, cy - r * 0.68 }, accentU32, 1.8)
+        if dl.AddQuadFilled then
+            dl:AddQuadFilled({ cx + r * 0.12, cy - r * 0.64 }, { cx + r * 0.76, cy - r * 0.20 },
+                { cx + r * 0.48, cy + r * 0.18 }, { cx - r * 0.04, cy - r * 0.24 }, colU32)
+        end
+    elseif id == 11 or id == 12 then
+        -- Club / Staff
+        dl:AddLine({ cx - r * 0.62, cy + r * 0.70 }, { cx + r * 0.56, cy - r * 0.56 }, accentU32, 2.0)
+        if dl.AddCircleFilled then
+            dl:AddCircleFilled({ cx + r * 0.52, cy - r * 0.52 }, r * 0.28, colU32, 12)
+        end
+    elseif id == 25 or id == 26 or id == 27 then
+        -- Archery / Marksmanship / Throwing
+        if dl.AddCircle then
+            dl:AddCircle({ cx, cy }, r * 0.62, colU32, 16, 1.6)
+        end
+        dl:AddLine({ cx - r * 0.75, cy }, { cx + r * 0.75, cy }, accentU32, 1.5)
+        dl:AddLine({ cx, cy - r * 0.75 }, { cx, cy + r * 0.75 }, accentU32, 1.5)
+    else
+        -- Hand-to-Hand / Polearm / Scythe
+        dl:AddLine({ cx - r * 0.66, cy + r * 0.66 }, { cx + r * 0.66, cy - r * 0.66 }, colU32, 2.2)
+        if dl.AddCircleFilled then
+            dl:AddCircleFilled({ cx, cy }, r * 0.26, accentU32, 10)
+        end
+    end
+end
+
+-- Ornate beveled antique-gold RPG primary CTA button with optional hold-to-confirm progress bar
+function F.drawBeveledCtaButton(imgui, dl, id, x, y, w, h, label, variant, opts)
+    opts = opts or {}
+    local disabled = opts.disabled == true
+    local focused  = opts.focused == true
+    local holdProg = F.clamp(tonumber(opts.holdProgress) or 0, 0, 1)
+    local fs = opts.fontScale or 0.96
+    local clicked, hovered, held = false, false, false
+
+    if imgui and imgui.SetCursorScreenPos and imgui.InvisibleButton then
+        imgui.SetCursorScreenPos({ x, y })
+        if imgui.InvisibleButton(id, { w, h }) and not disabled then
+            clicked = true
+        end
+        hovered = (not disabled) and (imgui.IsItemHovered and imgui.IsItemHovered() or false)
+        held    = (not disabled) and (imgui.IsItemActive and imgui.IsItemActive() or false)
+    end
+
+    if dl then
+        local bevel = math.min(math.floor(h * 0.38), math.floor(w * 0.14))
+        local fillTop, fillBot, border, glow, textCol
+        if disabled then
+            fillTop = F.abgr(F.rgba.midnight_deep, 0.92)
+            fillBot = F.abgr(F.rgba.abyss_solid, 0.96)
+            border  = F.u32.border_subtle
+            glow    = nil
+            textCol = F.u32.text_disabled
+        elseif variant == 'danger' then
+            fillTop = F.abgr(hovered and F.hex('#6B2026', 0.98) or F.hex('#4B171C', 0.96))
+            fillBot = F.abgr(F.hex('#240B0E', 0.98))
+            border  = focused and F.u32.aether_cyan or F.u32.danger
+            glow    = F.abgr(F.rgba.danger, hovered and 0.24 or 0.12)
+            textCol = F.u32.white
+        elseif variant == 'cyan' then
+            fillTop = F.abgr(hovered and F.hex('#1D667D', 0.98) or F.hex('#134254', 0.96))
+            fillBot = F.abgr(F.hex('#0A2230', 0.98))
+            border  = focused and F.u32.soul_gold_bright or F.u32.aether_cyan
+            glow    = F.abgr(F.rgba.aether_cyan, hovered and 0.28 or 0.16)
+            textCol = F.u32.white
+        else
+            -- Signature Soulforge Antique Gold CTA
+            fillTop = F.abgr(hovered and F.hex('#7C5D29', 0.98) or F.hex('#56401C', 0.97))
+            fillBot = F.abgr(F.hex('#261C0D', 0.99))
+            border  = focused and F.u32.aether_cyan or (hovered and F.u32.soul_gold_bright or F.u32.soul_gold)
+            glow    = F.abgr(F.rgba.soul_gold, hovered and 0.30 or 0.18)
+            textCol = F.u32.soul_gold_bright
+        end
+
+        F.drawBeveledPill(dl, x, y, w, h, {
+            bevel     = bevel,
+            fillTop   = fillTop,
+            fillBot   = fillBot,
+            border    = border,
+            glow      = glow,
+            highlight = (not disabled) and F.abgr(F.rgba.soul_gold_bright, 0.42) or nil,
+            thickness = focused and 2.2 or 1.6,
+        })
+
+        -- Hold-to-confirm luminous fill sweep
+        if holdProg > 0.01 and not disabled then
+            local fillW = math.max(4, (w - bevel * 2) * holdProg)
+            dl:AddRectFilled({ x + bevel, y + 2 }, { x + bevel + fillW, y + h - 2 },
+                F.abgr(F.rgba.soul_gold_bright, 0.32), 2)
+        end
+
+        -- Ornamental diamond finials at left & right bevel tips
+        if not disabled and dl.AddQuadFilled then
+            local d = 3.5
+            local finCol = focused and F.u32.aether_cyan or F.u32.soul_gold_bright
+            dl:AddQuadFilled({ x + 3, y + h * 0.5 - d }, { x + 3 + d, y + h * 0.5 }, { x + 3, y + h * 0.5 + d }, { x + 3 - d, y + h * 0.5 }, finCol)
+            dl:AddQuadFilled({ x + w - 3, y + h * 0.5 - d }, { x + w - 3 + d, y + h * 0.5 }, { x + w - 3, y + h * 0.5 + d }, { x + w - 3 - d, y + h * 0.5 }, finCol)
+        end
+
+        local fit = F.fitText(imgui, label, w - bevel * 2 - 12, fs)
+        F.drawShadowText(imgui, dl, x + w * 0.5, y + (h - 14 * fs) * 0.5, fit, textCol, fs, 'c')
+    end
+
+    return clicked, hovered, held
 end
 
 -- Unified SoulspireXI tooltip card (Abyss/Midnight + Gold/Cyan/Violet accents)

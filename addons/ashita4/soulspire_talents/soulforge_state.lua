@@ -34,6 +34,9 @@ M.MAX_SYNC_RETRIES      = 2
 M.MAX_WS_RETRIES        = 2
 M.LEGACY_FALLBACK_SEC   = 1.8
 M.REQUEST_TIMEOUT_SEC   = 5.0
+M.BACKOFF_SCHEDULE      = { 1.5, 3.0, 5.0 }
+M.STATE_FRESH_SEC       = 2.5
+M.WS_FRESH_SEC          = 3.0
 
 M.SKILL_LIST = {
     { id = -1, name = 'Equipped' },
@@ -262,17 +265,23 @@ function M.new(opts)
         open                = { false },
         synced              = false,
         syncState           = 'idle', -- 'idle' | 'loading' | 'synced' | 'error'
+        wsSyncState         = 'idle', -- 'idle' | 'loading' | 'authoritative' | 'error'
+        waitingOn           = 'idle', -- 'idle' | 'static_cache' | 'live_meta' | 'live_ws_state' | 'mutation'
         syncRequestedAt     = 0,
         lastSyncCompletedAt = 0,
+        lastSyncLatencyMs   = 0,
+        lastWsLatencyMs     = 0,
         lastSyncError       = nil,
-        syncPending         = nil, -- { kind, gen, sentAt, retries, fallbackTried }
+        syncPending         = nil, -- { kind, gen, sentAt, startedAt, retries, fallbackTried, pktsIn, bytesIn }
         syncGen             = 0,
         wsReqSeq            = 0,
-        wsRequest           = nil, -- { wsId, seq, sentAt, retries, mode }
+        wsRequest           = nil, -- { wsId, seq, sentAt, startedAt, retries, mode, pktsIn, bytesIn }
         wsError             = nil,
         needsRefresh        = false,
         protocolVersion     = 1,
         serverSupportsV2    = nil, -- nil (unknown) | true | false
+        v2Confirmed         = false, -- true once server answered CACHE/SYNC_END/WSS_BEGIN
+        v2MissCount         = 0,
         catalogSource       = 'none', -- 'cache' | 'server' | 'none'
         cacheNotice         = nil,
         jobKey              = '---',
@@ -412,26 +421,105 @@ function M.new(opts)
         return false
     end
 
-    local function requestWS(wsId, forceLegacy)
-        if wsId == nil then return end
+    local function backoffDelay(retryNum)
+        local sched = M.BACKOFF_SCHEDULE
+        return sched[retryNum] or M.REQUEST_TIMEOUT_SEC
+    end
+
+    local function updateWaitingOn()
+        if state.pendingOp ~= nil then
+            state.waitingOn = 'mutation'
+        elseif state.syncPending ~= nil then
+            state.waitingOn = 'live_meta'
+        elseif state.wsRequest ~= nil then
+            state.waitingOn = 'live_ws_state'
+        elseif dataService and dataService:is_cache_usable() and dataService.is_talents_warm and not dataService:is_talents_warm() then
+            state.waitingOn = 'static_cache'
+        else
+            state.waitingOn = 'idle'
+        end
+    end
+
+    local function recordSyncDone(req, opName, wsIdVal, outcome, timeoutReason, cacheHit)
+        if not dataService or not dataService.record_sync_attempt then return end
+        local nowT = clockFn()
+        local started = (req and req.startedAt) or (req and req.sentAt) or nowT
+        local latMs = math.max(0, (nowT - started) * 1000)
+        dataService:record_sync_attempt({
+            reqId           = (req and (req.gen or req.seq)) or 0,
+            op              = opName,
+            wsId            = wsIdVal or 0,
+            startedAt       = started,
+            completedAt     = nowT,
+            latencyMs       = latMs,
+            packetsIn       = (req and req.pktsIn) or 0,
+            bytesIn         = (req and req.bytesIn) or 0,
+            retries         = (req and req.retries) or 0,
+            outcome         = outcome or 'ok',
+            timeoutReason   = timeoutReason,
+            cacheHit        = cacheHit == true,
+            protocolVersion = state.protocolVersion or 1,
+            waitingOn       = state.waitingOn,
+        })
+        return latMs
+    end
+
+    local function requestWS(wsId, forceLegacy, forceFresh)
+        if wsId == nil then return false end
         local now = clockFn()
+        local switchingWs = (state.selectedWsId ~= wsId)
         state.selectedWsId = wsId
         state.wsError = nil
-        if state.wsDetailsById[wsId] and (not state.wsDetail or state.wsDetail.id ~= wsId) then
-            state.wsDetail = state.wsDetailsById[wsId]
+
+        -- 1. Immediately display existing authoritative cached WS detail OR static cache preview
+        --    so the UI NEVER freezes waiting on network round-trips!
+        local cachedDetail = state.wsDetailsById[wsId]
+        if cachedDetail then
+            state.wsDetail = cachedDetail
+            if cachedDetail.authoritative == true and not forceLegacy and not forceFresh and not state.needsRefresh
+                and (now - (cachedDetail.syncedAt or 0)) < M.WS_FRESH_SEC then
+                state.wsSyncState = 'authoritative'
+                if dataService then
+                    dataService:record_metric('deduped_requests', 1)
+                end
+                updateWaitingOn()
+                return false
+            end
+        elseif dataService and dataService.build_static_ws_preview and dataService:is_cache_usable() then
+            local preview = dataService:build_static_ws_preview(wsId, state.specKey)
+            if preview then
+                state.wsDetail = preview
+            elseif switchingWs then
+                state.wsDetail = nil
+            end
+        elseif switchingWs then
+            state.wsDetail = nil
+        end
+
+        -- 2. Strict in-flight deduplication: never fire duplicate OP_WS_STATE for same WS!
+        if state.wsRequest ~= nil and state.wsRequest.wsId == wsId and not forceLegacy and not forceFresh then
+            if dataService then
+                dataService:record_metric('deduped_requests', 1)
+            end
+            return false
         end
 
         state.wsReqSeq = (state.wsReqSeq % 250) + 1
         local seq = state.wsReqSeq
         local useCompact = (not forceLegacy) and isCompactEnabled()
         local mode = useCompact and 'compact' or 'legacy'
+        state.wsSyncState = 'loading'
         state.wsRequest = {
-            wsId    = wsId,
-            seq     = seq,
-            sentAt  = now,
-            retries = 0,
-            mode    = mode,
+            wsId      = wsId,
+            seq       = seq,
+            startedAt = now,
+            sentAt    = now,
+            retries   = 0,
+            mode      = mode,
+            pktsIn    = 0,
+            bytesIn   = 0,
         }
+        updateWaitingOn()
 
         if useCompact then
             local info = dataService:get_cache_info()
@@ -439,10 +527,24 @@ function M.new(opts)
         else
             sendTalentPacket(M.OP_WS, wsId, 0, 0)
         end
+        return true
     end
 
-    local function requestFullSync(forceLegacyCatalog)
+    local function requestFullSync(forceLegacyCatalog, forceFresh)
         local now = clockFn()
+        -- Strict in-flight deduplication unless caller explicitly forces a fresh/legacy sync
+        if state.syncPending ~= nil and not forceLegacyCatalog and not forceFresh then
+            if dataService then
+                dataService:record_metric('deduped_requests', 1)
+            end
+            return false
+        end
+        -- Fresh manual sync resets transient v2 miss counter so a brief hiccup never permanently poisons v2
+        if forceFresh and state.v2Confirmed then
+            state.serverSupportsV2 = true
+            state.v2MissCount = 0
+        end
+
         state.syncRequestedAt = now
         state.lastSyncError = nil
         if not state.synced then
@@ -460,56 +562,87 @@ function M.new(opts)
                 state.syncPending = {
                     kind          = 'cache_sync',
                     gen           = gen,
+                    startedAt     = now,
                     sentAt        = now,
                     retries       = 0,
                     fallbackTried = false,
+                    pktsIn        = 0,
+                    bytesIn       = 0,
                 }
+                updateWaitingOn()
                 sendTalentPacket(M.OP_CACHE_SYNC, info.schemaVersion or 1, 0, gen)
-                return
+                return true
             else
-                -- Known legacy server + verified local cache: only request META + SPENT (skip 36-packet CAT flood!)
                 state.syncPending = {
                     kind          = 'legacy_state',
                     gen           = gen,
+                    startedAt     = now,
                     sentAt        = now,
                     retries       = 0,
                     fallbackTried = true,
+                    pktsIn        = 0,
+                    bytesIn       = 0,
                 }
+                updateWaitingOn()
                 sendTalentPacket(M.OP_STATE, 0, 0, 0)
-                return
+                return true
             end
         end
 
-        -- Fallback when local cache is missing/corrupt/incompatible or legacy full catalog explicitly requested
         state.syncPending = {
             kind          = 'legacy_full',
             gen           = gen,
+            startedAt     = now,
             sentAt        = now,
             retries       = 0,
             fallbackTried = true,
+            pktsIn        = 0,
+            bytesIn       = 0,
         }
+        updateWaitingOn()
         sendTalentPacket(M.OP_SYNC, 0, 0, 0)
+        return true
     end
 
-    local function requestStateRefresh()
+    local function requestStateRefresh(forceFresh)
         local now = clockFn()
+        if state.syncPending ~= nil and not forceFresh then
+            if dataService then
+                dataService:record_metric('deduped_requests', 1)
+            end
+            return false
+        end
+        if not forceFresh and not state.needsRefresh and state.synced
+            and (now - (state.lastSyncCompletedAt or 0)) < M.STATE_FRESH_SEC then
+            if dataService then
+                dataService:record_metric('deduped_requests', 1)
+            end
+            return false
+        end
         state.needsRefresh = false
         state.syncRequestedAt = now
         state.lastSyncError = nil
+        state.syncGen = (state.syncGen % 250) + 1
         state.syncPending = {
             kind          = 'state_refresh',
             gen           = state.syncGen,
+            startedAt     = now,
             sentAt        = now,
             retries       = 0,
             fallbackTried = true,
+            pktsIn        = 0,
+            bytesIn       = 0,
         }
+        updateWaitingOn()
         sendTalentPacket(M.OP_STATE, 0, 0, 0)
+        return true
     end
 
     local function invalidateForLifecycle(reason)
         state.needsRefresh = true
         state.syncPending  = nil
         state.wsRequest    = nil
+        state.wsSyncState  = 'idle'
         state.tempWs       = nil
         state.tempWss      = nil
         state.tempCatalog  = nil
@@ -518,6 +651,11 @@ function M.new(opts)
         state.pendingOp    = nil
         state.wsDetailsById = {}
         state.wsDetail     = nil
+        state.v2MissCount  = 0
+        if state.v2Confirmed then
+            state.serverSupportsV2 = true
+        end
+        updateWaitingOn()
         if dataService then
             dataService:invalidate_dynamic_state(reason)
         end
@@ -721,32 +859,40 @@ function M.new(opts)
         end
 
         return {
-            id        = wss.id,
-            name      = wsMeta.name,
-            skillName = wsMeta.skillName or '',
-            wsType    = wsMeta.wsType or 'physical',
-            spent     = wss.spent or 0,
-            orig      = summary,
-            nodes     = nodes,
-            byKey     = byKey,
-            source    = 'cache+wss',
+            id            = wss.id,
+            name          = wsMeta.name,
+            skillName     = wsMeta.skillName or '',
+            wsType        = wsMeta.wsType or 'physical',
+            spent         = wss.spent or 0,
+            orig          = summary,
+            nodes         = nodes,
+            byKey         = byKey,
+            source        = 'cache+wss',
+            syncStatus    = 'authoritative',
+            authoritative = true,
+            syncedAt      = clockFn(),
         }, nil
     end
 
     local function tick(now)
         local t = now or clockFn()
 
-        -- 1. Bounded sync timeout & legacy server auto-fallback
+        -- 1. Bounded exponential-backoff sync timeout & non-permanent v2 fallback
         local sp = state.syncPending
         if sp then
             local elapsed = t - (sp.sentAt or 0)
+            local nextDelay = backoffDelay((sp.retries or 0) + 1)
             if sp.kind == 'cache_sync' and not sp.fallbackTried and elapsed >= M.LEGACY_FALLBACK_SEC then
-                -- Legacy server did not recognize OP_CACHE_SYNC (9): switch cleanly to OP_STATE (2) or OP_SYNC (1)
                 sp.fallbackTried = true
                 sp.sentAt = t
-                state.serverSupportsV2 = false
+                state.v2MissCount = (state.v2MissCount or 0) + 1
+                if not state.v2Confirmed and state.v2MissCount >= 2 then
+                    state.serverSupportsV2 = false
+                end
                 if dataService then
-                    dataService:mark_legacy_server()
+                    if not state.v2Confirmed then
+                        dataService:mark_legacy_server()
+                    end
                     dataService:record_event('oxtl', 'legacy_fallback', 'OP_CACHE_SYNC timed out; falling back to OP_STATE/OP_SYNC')
                 end
                 if dataService and dataService:is_cache_usable() and #(state.catalog or {}) > 0 then
@@ -756,13 +902,13 @@ function M.new(opts)
                     sp.kind = 'legacy_full'
                     sendTalentPacket(M.OP_SYNC, 0, 0, 0)
                 end
-            elseif elapsed >= M.REQUEST_TIMEOUT_SEC then
+            elseif elapsed >= nextDelay then
                 if (sp.retries or 0) < M.MAX_SYNC_RETRIES then
                     sp.retries = (sp.retries or 0) + 1
                     sp.sentAt = t
                     if dataService then
                         dataService:record_metric('sync_retries', 1)
-                        dataService:record_event('oxtl', 'sync_retry', 'retry #' .. tostring(sp.retries) .. ' kind=' .. tostring(sp.kind))
+                        dataService:record_event('oxtl', 'sync_retry', string.format('retry=%d/%d kind=%s backoff=%.1fs', sp.retries, M.MAX_SYNC_RETRIES, tostring(sp.kind), nextDelay))
                     end
                     if sp.kind == 'cache_sync' and dataService and dataService:is_cache_usable() then
                         local info = dataService:get_cache_info()
@@ -773,9 +919,12 @@ function M.new(opts)
                         sendTalentPacket(M.OP_SYNC, 0, 0, 0)
                     end
                 else
+                    local failed = sp
                     state.syncPending = nil
                     state.syncState = 'error'
                     state.lastSyncError = 'Server did not reply to Weapon Mastery sync. Click SYNC NOW or press [X] to retry.'
+                    updateWaitingOn()
+                    recordSyncDone(failed, tostring(failed.kind), 0, 'timeout', 'sync_retries_exhausted', state.catalogSource == 'cache')
                     if dataService then
                         dataService:record_metric('timeouts', 1)
                         dataService:record_event('oxtl', 'sync_timeout', state.lastSyncError)
@@ -785,26 +934,32 @@ function M.new(opts)
             end
         end
 
-        -- 2. Bounded per-WS request timeout & legacy fallback (prevents infinite "LOADING WS #16...")
+        -- 2. Bounded exponential-backoff per-WS request timeout & non-permanent fallback
         local wr = state.wsRequest
         if wr then
             local elapsed = t - (wr.sentAt or 0)
+            local nextDelay = backoffDelay((wr.retries or 0) + 1)
             if wr.mode == 'compact' and elapsed >= M.LEGACY_FALLBACK_SEC then
                 wr.mode = 'legacy'
                 wr.sentAt = t
-                state.serverSupportsV2 = false
+                state.v2MissCount = (state.v2MissCount or 0) + 1
+                if not state.v2Confirmed and state.v2MissCount >= 2 then
+                    state.serverSupportsV2 = false
+                end
                 if dataService then
-                    dataService:mark_legacy_server()
+                    if not state.v2Confirmed then
+                        dataService:mark_legacy_server()
+                    end
                     dataService:record_event('oxtl', 'ws_legacy_fallback', 'wsId=' .. tostring(wr.wsId))
                 end
                 sendTalentPacket(M.OP_WS, wr.wsId, 0, 0)
-            elseif elapsed >= M.REQUEST_TIMEOUT_SEC then
+            elseif elapsed >= nextDelay then
                 if (wr.retries or 0) < M.MAX_WS_RETRIES then
                     wr.retries = (wr.retries or 0) + 1
                     wr.sentAt = t
                     if dataService then
                         dataService:record_metric('sync_retries', 1)
-                        dataService:record_event('oxtl', 'ws_retry', string.format('wsId=%d retry=%d', wr.wsId, wr.retries))
+                        dataService:record_event('oxtl', 'ws_retry', string.format('wsId=%d retry=%d/%d backoff=%.1fs', wr.wsId, wr.retries, M.MAX_WS_RETRIES, nextDelay))
                     end
                     if wr.mode == 'compact' and isCompactEnabled() then
                         local info = dataService:get_cache_info()
@@ -813,10 +968,14 @@ function M.new(opts)
                         sendTalentPacket(M.OP_WS, wr.wsId, 0, 0)
                     end
                 else
+                    local failed = wr
                     local wsEntry = state.catalogById and state.catalogById[wr.wsId]
                     local wsName = wsEntry and wsEntry.name or ('Weapon Skill #' .. tostring(wr.wsId))
                     state.wsRequest = nil
+                    state.wsSyncState = 'error'
                     state.wsError = 'No server talent tree response for ' .. wsName .. '. Click RETRY or SYNC.'
+                    updateWaitingOn()
+                    recordSyncDone(failed, failed.mode == 'compact' and 'OP_WS_STATE' or 'OP_WS', failed.wsId, 'timeout', 'ws_retries_exhausted', state.catalogSource == 'cache')
                     if dataService then
                         dataService:record_metric('timeouts', 1)
                         dataService:record_event('oxtl', 'ws_timeout', state.wsError)
@@ -834,6 +993,8 @@ function M.new(opts)
 
         if kind == 'CACHE' then
             state.serverSupportsV2 = true
+            state.v2Confirmed      = true
+            state.v2MissCount      = 0
             state.protocolVersion  = tonumber(parts[2]) or 2
             local srv = {
                 protocolVersion = tonumber(parts[2]) or 2,
@@ -855,6 +1016,17 @@ function M.new(opts)
             return true
         elseif kind == 'SYNC_END' then
             state.serverSupportsV2 = true
+            state.v2Confirmed      = true
+            state.v2MissCount      = 0
+            local rxGen = tonumber(parts[2]) or 0
+            if rxGen > 0 and state.syncPending ~= nil and (state.syncPending.gen or 0) > 0 and rxGen ~= state.syncPending.gen then
+                if dataService then
+                    dataService:record_metric('stale_dropped', 1)
+                    dataService:record_event('oxtl', 'stale_sync_end', string.format('rxGen=%d expected=%d', rxGen, state.syncPending.gen))
+                end
+                return true
+            end
+            local doneReq = state.syncPending
             state.syncPending = nil
             state.lastSyncError = nil
             if #(state.catalog or {}) == 0 then
@@ -864,6 +1036,9 @@ function M.new(opts)
             state.syncState = 'synced'
             state.lastSyncCompletedAt = clockFn()
             state.needsRefresh = false
+            updateWaitingOn()
+            local lat = recordSyncDone(doneReq, 'OP_CACHE_SYNC', 0, 'ok', nil, state.catalogSource == 'cache')
+            if lat then state.lastSyncLatencyMs = lat end
             autoSelectEligibleWS()
             return true
         elseif kind == 'META' then
@@ -960,12 +1135,16 @@ function M.new(opts)
                 if #(state.catalog or {}) == 0 then
                     seedCatalogFromCache()
                 end
+                local doneReq = state.syncPending
                 state.syncPending = nil
                 state.lastSyncError = nil
                 state.synced = true
                 state.syncState = 'synced'
                 state.lastSyncCompletedAt = clockFn()
                 state.needsRefresh = false
+                updateWaitingOn()
+                local lat = recordSyncDone(doneReq, tostring(doneReq.kind), 0, 'ok', nil, state.catalogSource == 'cache')
+                if lat then state.lastSyncLatencyMs = lat end
                 autoSelectEligibleWS()
             end
             return true
@@ -1014,6 +1193,8 @@ function M.new(opts)
             return true
         elseif kind == 'WSS_BEGIN' then
             state.serverSupportsV2 = true
+            state.v2Confirmed      = true
+            state.v2MissCount      = 0
             local wsIdNum = tonumber(parts[2])
             local scStr = parts[7] or '0:0:0:0'
             local s1, s2, s3, s4 = string.match(scStr, '^(%d+):(%d+):(%d+):(%d+)$')
@@ -1047,6 +1228,16 @@ function M.new(opts)
             if state.tempWss ~= nil and state.tempWss.id == wsIdNum then
                 local wss = state.tempWss
                 state.tempWss = nil
+                local rxSeq = tonumber(parts[5]) or wss.seq or 0
+                -- Drop stale out-of-order responses when a newer request for this WS is in flight
+                if rxSeq > 0 and state.wsRequest ~= nil and state.wsRequest.wsId == wsIdNum
+                    and (state.wsRequest.seq or 0) > 0 and rxSeq ~= state.wsRequest.seq then
+                    if dataService then
+                        dataService:record_metric('stale_dropped', 1)
+                        dataService:record_event('oxtl', 'stale_wss_end', string.format('ws=%d rxSeq=%d expected=%d', wsIdNum, rxSeq, state.wsRequest.seq))
+                    end
+                    return true
+                end
                 state.avail = tonumber(parts[3]) or wss.avail or state.avail
                 if parts[4] ~= nil then
                     wss.unlocked = (tonumber(parts[4]) or 0) == 1
@@ -1055,22 +1246,34 @@ function M.new(opts)
                 if assembled then
                     state.spentByWs[wsIdNum] = wss.spent or 0
                     state.unlockedByWs[wsIdNum] = wss.unlocked == true
-                    state.wsDetail = assembled
                     state.wsDetailsById[wsIdNum] = assembled
-                    state.wsError = nil
+                    -- Never let a delayed response for an older WS overwrite a newly selected WS!
+                    if state.selectedWsId == nil or state.selectedWsId == wsIdNum then
+                        state.wsDetail = assembled
+                        state.wsError = nil
+                        state.wsSyncState = 'authoritative'
+                    elseif dataService then
+                        dataService:record_metric('stale_dropped', 1)
+                        dataService:record_event('oxtl', 'stale_ws_focus', string.format('cached ws=%d while viewing ws=%d', wsIdNum, state.selectedWsId))
+                    end
+                    local doneReq = nil
                     if state.wsRequest and state.wsRequest.wsId == wsIdNum then
+                        doneReq = state.wsRequest
                         state.wsRequest = nil
                     end
-                    if state.pendingOp ~= nil then
+                    if state.pendingOp ~= nil and (state.pendingOp.wsId == 0 or state.pendingOp.wsId == wsIdNum) then
                         state.pendingOp = nil
                         setStatus('Soulforge updated.')
                     end
+                    updateWaitingOn()
+                    local lat = recordSyncDone(doneReq, 'OP_WS_STATE', wsIdNum, 'ok', nil, true)
+                    if lat then state.lastWsLatencyMs = lat end
                 else
                     -- Cache missing this tree: fall back transparently to legacy OP_WS
                     if dataService then
                         dataService:record_event('oxtl', 'wss_fallback', tostring(err))
                     end
-                    requestWS(wsIdNum, true)
+                    requestWS(wsIdNum, true, true)
                 end
             end
             return true
@@ -1135,24 +1338,38 @@ function M.new(opts)
             return true
         elseif kind == 'WS_END' then
             if state.tempWs ~= nil and tonumber(parts[2]) == state.tempWs.id then
+                local wsIdNum = state.tempWs.id
+                state.tempWs.syncStatus    = 'authoritative'
+                state.tempWs.authoritative = true
+                state.tempWs.syncedAt      = clockFn()
                 state.avail = tonumber(parts[3]) or state.avail
-                state.spentByWs[state.tempWs.id] = state.tempWs.spent or 0
+                state.spentByWs[wsIdNum] = state.tempWs.spent or 0
                 if parts[4] ~= nil then
-                    state.unlockedByWs[state.tempWs.id] = (tonumber(parts[4]) or 0) == 1
+                    state.unlockedByWs[wsIdNum] = (tonumber(parts[4]) or 0) == 1
                 else
-                    state.unlockedByWs[state.tempWs.id] = (state.tempWs.spent or 0) > 0
+                    state.unlockedByWs[wsIdNum] = (state.tempWs.spent or 0) > 0
                 end
-                state.wsDetail = state.tempWs
-                state.wsDetailsById[state.tempWs.id] = state.tempWs
-                state.wsError = nil
-                if state.wsRequest and state.wsRequest.wsId == state.tempWs.id then
+                state.wsDetailsById[wsIdNum] = state.tempWs
+                if state.selectedWsId == nil or state.selectedWsId == wsIdNum then
+                    state.wsDetail = state.tempWs
+                    state.wsError = nil
+                    state.wsSyncState = 'authoritative'
+                elseif dataService then
+                    dataService:record_metric('stale_dropped', 1)
+                end
+                local doneReq = nil
+                if state.wsRequest and state.wsRequest.wsId == wsIdNum then
+                    doneReq = state.wsRequest
                     state.wsRequest = nil
                 end
                 state.tempWs = nil
-                if state.pendingOp ~= nil then
+                if state.pendingOp ~= nil and (state.pendingOp.wsId == 0 or state.pendingOp.wsId == wsIdNum) then
                     state.pendingOp = nil
                     setStatus('Soulforge updated.')
                 end
+                updateWaitingOn()
+                local lat = recordSyncDone(doneReq, 'OP_WS', wsIdNum, 'ok', nil, false)
+                if lat then state.lastWsLatencyMs = lat end
             end
             return true
         elseif kind == 'ERR' then
@@ -1187,6 +1404,14 @@ function M.new(opts)
                 if dataService then
                     dataService:record_metric('packets_in_oxtl', 1)
                     dataService:record_metric('bytes_in_oxtl', sz)
+                end
+                if state.syncPending then
+                    state.syncPending.pktsIn  = (state.syncPending.pktsIn or 0) + 1
+                    state.syncPending.bytesIn = (state.syncPending.bytesIn or 0) + sz
+                end
+                if state.wsRequest then
+                    state.wsRequest.pktsIn  = (state.wsRequest.pktsIn or 0) + 1
+                    state.wsRequest.bytesIn = (state.wsRequest.bytesIn or 0) + sz
                 end
                 if payLen > 0 and #data >= 12 + payLen then
                     local line = data:sub(13, 12 + payLen)

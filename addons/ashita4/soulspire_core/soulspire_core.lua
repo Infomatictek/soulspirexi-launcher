@@ -350,6 +350,7 @@ local function init_modules()
         soul_talents_mod = SoulTalents.new(sf_state, sf_actions, sf_ui, {
             soul_registry = Registry.souls,
             data_service  = data_service,
+            assets        = assets,
             on_jump_to_ws = function(ws_id, node_key)
                 focus:select_module('weapon_mastery')
                 weapon_mastery_mod:focus_ws_and_node(ws_id, node_key)
@@ -369,7 +370,7 @@ ashita.events.register('load', 'soulspire_core_load', function()
 
     if imgui.AddFontFromFileTTF then
         for _, fontPath in ipairs({ 'C:\\Windows\\Fonts\\segoeui.ttf', 'C:\\Windows\\Fonts\\arial.ttf' }) do
-            local okF, f = pcall(imgui.AddFontFromFileTTF, fontPath, 16)
+            local okF, f = pcall(imgui.AddFontFromFileTTF, fontPath, 20)
             if okF and f ~= nil then
                 ui_font = f
                 break
@@ -390,6 +391,7 @@ ashita.events.register('load', 'soulspire_core_load', function()
     ui = UI.new(imgui, registry, focus, assets, {
         ui_scale        = saved_scale,
         on_scale_change = function() save_settings() end,
+        get_last_device = function() return input and input.last_device or 'gamepad' end,
         get_identity    = function()
             if character_mod then
                 return character_mod:get_header_identity()
@@ -529,13 +531,17 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
             local diag_ds = data_service:get_diagnostics()
             local c = diag_ds.cache
             local m = diag_ds.metrics
-            line5 = ('cache status=%s compat=%s schema=v%d proto=v%d ver=%s reg=%s load=%.1fms oxtl_rx=%d(%dB) crys_rx=%d(%dB) retries=%d timeouts=%d'):format(
+            local st_sync = diag_ds.syncStats or {}
+            line5 = ('cache status=%s compat=%s schema=v%d proto=v%d ver=%s reg=%s load=%.1fms wait=%s oxtl_rx=%d(%dB) crys_rx=%d(%dB) retries=%d timeouts=%d stale=%d dedup=%d avg=%.1fms p95=%.1fms'):format(
                 tostring(c.status), tostring(c.compatState), c.schemaVersion or 0,
                 sf_state and (sf_state.protocolVersion or 1) or 1,
                 tostring(c.contentVersion), tostring(c.registryHash), tonumber(c.loadMs) or 0,
+                tostring(sf_state and sf_state.waitingOn or 'idle'),
                 m.packets_in_oxtl or 0, m.bytes_in_oxtl or 0,
                 m.packets_in_crys or 0, m.bytes_in_crys or 0,
-                m.sync_retries or 0, m.timeouts or 0
+                m.sync_retries or 0, m.timeouts or 0,
+                m.stale_dropped or 0, m.deduped_requests or 0,
+                tonumber(st_sync.avgLatencyMs) or 0, tonumber(st_sync.p95LatencyMs) or 0
             )
             log(line5)
         end
@@ -565,6 +571,36 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
             tostring(c.error or 'none')))
         for _, ev in ipairs(diag_ds.recentEvents or {}) do
             log(('  [%.2fs] %s/%s: %s'):format(ev.at or 0, ev.domain, ev.kind, ev.detail))
+        end
+    elseif sub == 'syncdiag' then
+        if not data_service then
+            log('DataService not initialized.')
+            return
+        end
+        local diag_ds = data_service:get_diagnostics()
+        local c = diag_ds.cache
+        local m = diag_ds.metrics
+        local ss = diag_ds.syncStats or {}
+        log(('syncdiag proto=v%d v2Confirmed=%s cache=%s/%s talentsWarm=%s wait=%s avg=%.1fms p95=%.1fms max=%.1fms ok=%d fail=%d retries=%d timeouts=%d stale=%d dedup=%d oxtl_in=%d(%dB) oxtl_out=%d'):format(
+            sf_state and (sf_state.protocolVersion or 1) or 1,
+            tostring(sf_state and sf_state.v2Confirmed == true),
+            tostring(c.status), tostring(c.compatState),
+            tostring(data_service:is_talents_warm()),
+            tostring(sf_state and sf_state.waitingOn or 'idle'),
+            tonumber(ss.avgLatencyMs) or 0, tonumber(ss.p95LatencyMs) or 0, tonumber(ss.maxLatencyMs) or 0,
+            tonumber(ss.completedCount) or 0, tonumber(ss.failureCount) or 0,
+            m.sync_retries or 0, m.timeouts or 0, m.stale_dropped or 0, m.deduped_requests or 0,
+            m.packets_in_oxtl or 0, m.bytes_in_oxtl or 0, m.packets_out_oxtl or 0
+        ))
+        local logList = diag_ds.syncLog or {}
+        local firstIdx = math.max(1, #logList - 7)
+        for i = firstIdx, #logList do
+            local r = logList[i]
+            log(('  [%.2fs] req=%d op=%s ws=%d out=%s lat=%.1fms pkts=%d bytes=%d ret=%d cache=%s proto=v%d reason=%s'):format(
+                r.completedAt or 0, r.reqId or 0, tostring(r.op), r.wsId or 0, tostring(r.outcome),
+                r.latencyMs or 0, r.packetsIn or 0, r.bytesIn or 0, r.retries or 0,
+                tostring(r.cacheHit), r.protocolVersion or 1, tostring(r.timeoutReason or 'none')
+            ))
         end
     elseif sub == 'debug' then
         if not menu or not menu:is_available() then
@@ -748,6 +784,12 @@ ashita.events.register('d3d_present', 'soulspire_core_present', function()
         input:arm_open_guard(0.20)
     end
 
+    -- Cooperative background warmup for talents.json (<=4ms/frame) so opening Weapon Mastery
+    -- displays cached trees instantaneously with zero main-thread stutter.
+    if data_service and data_service.step_warmup and data_service:is_cache_usable() and not data_service:is_talents_warm() then
+        data_service:step_warmup(4.0)
+    end
+
     -- Keep shared Soulforge & Character state lifecycles in sync with bounded retry/timeout ticking
     if character_mod and character_mod.tick then
         character_mod:tick(now)
@@ -809,7 +851,7 @@ ashita.events.register('d3d_present', 'soulspire_core_present', function()
     local pushed = push_core_imgui_style()
     local font_pushed = false
     if ui_font ~= nil and imgui.PushFont then
-        font_pushed = pcall(imgui.PushFont, ui_font, math.floor(16 * (ui.ui_scale or 1.0) + 0.5))
+        font_pushed = pcall(imgui.PushFont, ui_font, math.floor(19 * (ui.ui_scale or 1.0) + 0.5))
     end
 
     local okDraw, errDraw = xpcall(function()

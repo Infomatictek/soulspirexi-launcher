@@ -525,6 +525,32 @@ function Character:get_hints()
     return '[D-Pad/Stick] Browse Souls   [A] Socket Soul Crystal   [X] Refresh Sync   [LB/RB] Switch Module   [Y] Help   [B] Close'
 end
 
+function Character:get_prompt_pills(last_device)
+    if self:has_modal() then
+        return {
+            { 'D-Pad', 'Choose' },
+            { 'A',     'Confirm Socket' },
+            { 'B',     'Cancel' },
+        }
+    end
+    if last_device == 'keyboard' then
+        return {
+            { 'Arrows', 'Browse Souls' },
+            { 'Enter',  'Socket Soul' },
+            { 'X',      'Sync Collection' },
+            { 'Q/E',    'Switch Module' },
+            { 'Esc',    'Close' },
+        }
+    end
+    return {
+        { 'D-Pad', 'Browse Souls' },
+        { 'A',     'Socket Soul' },
+        { 'X',     'Sync Collection' },
+        { 'LB/RB', 'Modules' },
+        { 'B',     'Close' },
+    }
+end
+
 function Character:_get_dll_status()
     if type(self.dll_status_fn) == 'function' then
         local ok, st = pcall(self.dll_status_fn)
@@ -533,13 +559,13 @@ function Character:_get_dll_status()
     return nil
 end
 
-function Character:draw(imgui, dl, F, L, x, y, w, h)
+function Character:draw(imgui, dl, F, L, x, y, w, h, ctx)
     self:refresh_player_context()
     self:tick(self.clock())
 
     local s   = L.uiScale or 1.0
-    local gap = L.gap or math.floor(8 * s)
-    local pad = math.floor(14 * s)
+    local gap = L.gap or math.floor(10 * s)
+    local pad = math.floor(16 * s)
     local entries, snap, activeBranch, jobKey = self:get_entries()
     self.selected_idx = clamp(self.selected_idx, 1, math.max(1, #entries))
     local focused = entries[self.selected_idx]
@@ -548,28 +574,90 @@ function Character:draw(imgui, dl, F, L, x, y, w, h)
         if e.branch == activeBranch then activeEntry = e; break end
     end
 
-    local leftW  = math.floor(w * (L.mode == 'focused' and 0.44 or 0.30))
-    local rightW = math.floor(w * (L.mode == 'focused' and 0.00 or 0.32))
-    local midW   = math.max(200, w - leftW - rightW - (rightW > 0 and gap * 2 or gap))
+    local assetsRef  = self.assets or (ctx and ctx.assets)
+    local chamberTex = assetsRef and assetsRef:load_texture('character_chamber_bg') or nil
+    local bannerTex  = assetsRef and assetsRef:load_texture('soulforge_banner_bg') or nil
+    local browserTex = assetsRef and assetsRef:load_from_addon('soulspire_talents', 'panel_browser') or nil
+    local inspTex    = assetsRef and assetsRef:load_from_addon('soulspire_talents', 'panel_inspector') or nil
 
-    -- 1. Left Panel: Character Identity Card & Native Hook Status
-    F.drawPanelFrame(dl, x, y, leftW, h, {
-        fillTop  = F.u32.midnight,
-        fillBot  = F.u32.abyss,
-        border   = F.u32.crystal_violet,
-        accent   = F.u32.soul_gold,
-        corners  = (L.ornamentLevel >= 1),
-        shadow   = false,
+    -- Top Character Identity Banner matching The Soulforge visual language
+    local bannerH = math.floor(((L.mode == 'focused' and 56) or 78) * s)
+    F.drawOrnatePanel(dl, x, y, w, bannerH, {
+        texId      = bannerTex,
+        texTint    = F.abgr(F.rgba.white, 0.80),
+        scrimAlpha = 0.34,
+        border     = F.u32.soul_gold,
+        accent     = F.u32.soul_gold_bright,
+        rounding   = 6,
+        corners    = true,
+        shadow     = false,
     })
 
-    F.drawShadowText(imgui, dl, x + pad, y + 10 * s, 'SOUL IDENTITY', F.u32.soul_gold, 0.94 * s, 'l')
-    F.drawDivider(dl, x + pad, y + 32 * s, leftW - pad * 2, F.u32.crystal_violet)
+    local ownedCount = 0
+    for _, e in ipairs(entries) do
+        if e.branch > 0 and e.owned then ownedCount = ownedCount + 1 end
+    end
+    local totalSouls = math.max(0, #entries - 1)
 
-    local medR = math.floor(38 * s)
+    local subStr = (self.player_info.sub_job and self.player_info.sub_job > 0)
+        and (' / ' .. (JOB_NAMES[self.player_info.sub_job] or '---') .. ' Lv.' .. tostring(self.player_info.sub_lvl or 0))
+        or ''
+    local jobLine = string.format('%s Lv.%d%s', jobKey, snap.current_lvl or self.player_info.main_lvl or 0, subStr)
+
+    F.drawShadowText(imgui, dl, x + 20 * s, y + 12 * s,
+        F.fitText(imgui, self.player_info.name or 'Adventurer', math.floor(w * 0.28), 1.24 * s),
+        F.u32.white, 1.24 * s, 'l')
+    F.drawShadowText(imgui, dl, x + 20 * s, y + 42 * s, jobLine, F.u32.soul_gold_bright, 0.94 * s, 'l')
+
+    local midX = x + w * 0.5
+    F.drawShadowText(imgui, dl, midX, y + 12 * s, 'SOUL SANCTUM', F.u32.soul_gold_bright, (L.mode == 'focused' and 1.12 or 1.46) * s, 'c')
+    if L.mode ~= 'focused' then
+        F.drawShadowText(imgui, dl, midX, y + 48 * s, 'CHARACTER IDENTITY & SOUL CRYSTALS', F.u32.soul_gold, 0.80 * s, 'c')
+    end
+
+    local syncBtnW = math.floor(114 * s)
+    local syncBtnH = math.floor(30 * s)
+    if F.drawBeveledCtaButton(imgui, dl, '##ch_sync_btn', x + w - pad - syncBtnW, y + math.floor((bannerH - syncBtnH) * 0.5),
+        syncBtnW, syncBtnH, 'SYNC [X]', 'cyan', { fontScale = 0.78 * s }) then
+        self.sync_retries = 0
+        self:sync(not self:_cache_ready())
+    end
+    if L.mode ~= 'focused' then
+        F.drawShadowText(imgui, dl, x + w - pad - syncBtnW - 18 * s, y + 14 * s,
+            'SOULS AWAKENED', F.u32.soul_gold, 0.76 * s, 'r')
+        F.drawShadowText(imgui, dl, x + w - pad - syncBtnW - 18 * s, y + 36 * s,
+            string.format('%d / %d', ownedCount, totalSouls), F.u32.white, 1.24 * s, 'r')
+    end
+
+    local bodyY  = y + bannerH + gap
+    local bodyH  = math.max(200, h - bannerH - gap)
+    local leftW  = math.floor(w * (L.mode == 'focused' and 0.42 or 0.29))
+    local rightW = math.floor(w * (L.mode == 'focused' and 0.00 or 0.31))
+    local midW   = math.max(220, w - leftW - rightW - (rightW > 0 and gap * 2 or gap))
+
+    -- 1. Left Panel: Dramatic Character & Active Soul Sanctum Portrait
+    F.drawOrnatePanel(dl, x, bodyY, leftW, bodyH, {
+        texId      = chamberTex,
+        texTint    = F.abgr(F.rgba.white, 0.78),
+        scrimAlpha = 0.38,
+        border     = F.u32.soul_gold_dim,
+        accent     = F.u32.soul_gold_bright,
+        corners    = true,
+        shadow     = false,
+    })
+
+    F.drawShadowText(imgui, dl, x + pad, bodyY + 12 * s, 'ACTIVE SOUL', F.u32.soul_gold_bright, 1.06 * s, 'l')
+    F.drawDivider(dl, x + pad, bodyY + 38 * s, leftW - pad * 2, F.u32.soul_gold_dim)
+
+    local medR = math.floor(math.min(58 * s, leftW * 0.24))
     local medX = x + leftW * 0.5
-    local medY = y + 44 * s + medR
-    local activeTex = (self.assets and activeEntry and activeEntry.icon)
-        and self.assets:load_from_addon('crystalsocket', activeEntry.icon) or nil
+    local medY = bodyY + 58 * s + medR
+    local activeTex = (assetsRef and activeEntry and activeEntry.icon)
+        and assetsRef:load_from_addon('crystalsocket', activeEntry.icon) or nil
+
+    if F.drawAstralRing then
+        F.drawAstralRing(dl, medX, medY, medR * 1.48, { alpha = 0.85 })
+    end
     F.drawCrystalMedallion(dl, medX, medY, medR, {
         texId = activeTex,
         rim   = F.u32.soul_gold_bright,
@@ -577,92 +665,98 @@ function Character:draw(imgui, dl, F, L, x, y, w, h)
         studs = true,
     })
 
-    local cy = medY + medR + 14 * s
+    local cy = medY + medR + 22 * s
     F.drawShadowText(imgui, dl, medX, cy,
-        F.fitText(imgui, self.player_info.name or 'Adventurer', leftW - pad * 2, 1.06 * s),
-        F.u32.text_primary, 1.06 * s, 'c')
-    cy = cy + 22 * s
+        F.fitText(imgui, activeEntry and activeEntry.name or 'Base', leftW - pad * 2, 1.32 * s),
+        F.u32.white, 1.32 * s, 'c')
+    cy = cy + 30 * s
 
-    local subStr = (self.player_info.sub_job and self.player_info.sub_job > 0)
-        and (' / ' .. (JOB_NAMES[self.player_info.sub_job] or '---') .. ' Lv.' .. tostring(self.player_info.sub_lvl or 0))
-        or ''
-    local jobLine = string.format('%s Lv.%d%s', jobKey, snap.current_lvl or self.player_info.main_lvl or 0, subStr)
-    F.drawShadowText(imgui, dl, medX, cy, jobLine, F.u32.soul_gold_bright, 0.88 * s, 'c')
-    cy = cy + 24 * s
-
-    F.drawBadgePill(imgui, dl, medX - math.floor(82 * s), cy,
-        string.format('SOUL: %s [%s]', activeEntry and activeEntry.name or 'Base', activeEntry and activeEntry.abbr or jobKey), {
-            width     = math.floor(164 * s),
-            height    = math.floor(24 * s),
-            fill      = F.abgr(F.rgba.crystal_violet_wash, 0.95),
-            border    = F.u32.crystal_violet,
-            textCol   = F.u32.crystal_violet_bright,
-            fontScale = 0.76 * s,
+    local rolePillW = math.min(leftW - pad * 2, math.floor(290 * s))
+    local rolePillText = F.fitText(imgui,
+        string.format('%s | [%s]', string.upper(activeEntry and activeEntry.role or 'BASE JOB'), activeEntry and activeEntry.abbr or jobKey),
+        rolePillW - 18 * s, 0.78 * s)
+    F.drawBadgePill(imgui, dl, medX - math.floor(rolePillW * 0.5), cy, rolePillText, {
+            width     = rolePillW,
+            height    = math.floor(26 * s),
+            fill      = F.abgr(F.rgba.crystal_violet_wash, 0.96),
+            border    = F.u32.crystal_violet_bright,
+            textCol   = F.u32.white,
+            fontScale = 0.78 * s,
         })
-    cy = cy + 34 * s
+    cy = cy + 38 * s
 
-    F.drawShadowText(imgui, dl, medX, cy,
-        F.fitText(imgui, activeEntry and activeEntry.role or 'Base Job', leftW - pad * 2, 0.80 * s),
-        F.u32.text_secondary, 0.80 * s, 'c')
-    cy = cy + 26 * s
+    -- Active Soul summary plaque inside Left Sanctum (strictly bounded)
+    local leftCharPx = math.max(9.0 * s, F.measureText(imgui, 'M', 0.82 * s))
+    local sumChars = math.max(18, math.floor((leftW - pad * 2 - 28 * s) / leftCharPx))
+    local sumLines = F.wrapLines((activeEntry and activeEntry.description) or '', sumChars, 4)
+    local sumBoxH = math.floor(20 * s + #sumLines * 18 * s)
+    local statusBoxH = math.floor(82 * s)
+    local maxSumBottom = bodyY + bodyH - pad - statusBoxH - 12 * s
+    if #sumLines > 0 and (cy + sumBoxH) < maxSumBottom then
+        dl:AddRectFilled({ x + pad, cy }, { x + leftW - pad, cy + sumBoxH }, F.abgr(F.hex('#0B101E', 0.88)), 5)
+        dl:AddRect({ x + pad, cy }, { x + leftW - pad, cy + sumBoxH }, F.abgr(F.rgba.soul_gold_dim, 0.65), 5, 0, 1.0)
+        for i, ln in ipairs(sumLines) do
+            F.drawShadowText(imgui, dl, medX, cy + 10 * s + (i - 1) * 18 * s,
+                F.fitText(imgui, ln, leftW - pad * 2 - 20 * s, 0.80 * s), F.u32.text_primary, 0.80 * s, 'c')
+        end
+    end
 
-    -- Native Integration & Protocol Status Box
-    local boxH = math.floor(74 * s)
-    local boxY = math.min(y + h - pad - boxH, cy)
-    dl:AddRectFilled({ x + pad, boxY }, { x + leftW - pad, boxY + boxH }, F.u32.abyss_solid, 5)
-    dl:AddRect({ x + pad, boxY }, { x + leftW - pad, boxY + boxH }, F.u32.border_subtle, 5, 0, 1.0)
-    F.drawShadowText(imgui, dl, x + pad + 10 * s, boxY + 8 * s, 'SYNC & NATIVE STATUS', F.u32.aether_cyan, 0.72 * s, 'l')
+    -- Clean bottom Sync & Native Integration Card
+    local boxY = bodyY + bodyH - pad - statusBoxH
+    dl:AddRectFilled({ x + pad, boxY }, { x + leftW - pad, boxY + statusBoxH }, F.abgr(F.hex('#080C17', 0.92)), 5)
+    dl:AddRect({ x + pad, boxY }, { x + leftW - pad, boxY + statusBoxH }, F.u32.border_strong, 5, 0, 1.1)
+    F.drawShadowText(imgui, dl, x + pad + 12 * s, boxY + 10 * s, 'SYNCHRONIZATION', F.u32.aether_cyan, 0.78 * s, 'l')
     local statusLabel
     if snap.loaded then
-        statusLabel = self:_cache_ready() and 'Collection: ready (cached)' or 'Collection: ready'
+        statusLabel = self:_cache_ready() and 'Live Authoritative (Verified Cache)' or 'Live Authoritative'
     elseif snap.pending or self.retry_after then
-        statusLabel = 'Collection: syncing...'
+        statusLabel = 'Syncing Soul collection...'
     elseif self.last_sync_err then
-        statusLabel = 'Collection: ' .. tostring(self.last_sync_err)
+        statusLabel = tostring(self.last_sync_err)
     else
-        statusLabel = 'Collection: ' .. tostring(snap.status or 'offline')
+        statusLabel = 'Status: ' .. tostring(snap.status or 'offline')
     end
-    F.drawShadowText(imgui, dl, x + pad + 10 * s, boxY + 26 * s,
-        F.fitText(imgui, statusLabel, leftW - pad * 2 - 20 * s, 0.74 * s),
-        snap.loaded and F.u32.success or F.u32.text_secondary, 0.74 * s, 'l')
+    F.drawShadowText(imgui, dl, x + pad + 12 * s, boxY + 32 * s,
+        F.fitText(imgui, statusLabel, leftW - pad * 2 - 24 * s, 0.82 * s),
+        snap.loaded and F.u32.success or F.u32.text_secondary, 0.82 * s, 'l')
     local dll = self:_get_dll_status()
-    local dllLine = dll and string.format('Native DLL: %d hooks active', dll.hooks or 0)
-        or 'Native DLL: CrystalSocket managed'
-    F.drawShadowText(imgui, dl, x + pad + 10 * s, boxY + 46 * s,
-        F.fitText(imgui, dllLine, leftW - pad * 2 - 20 * s, 0.74 * s),
-        dll and F.u32.soul_gold or F.u32.text_muted, 0.74 * s, 'l')
+    local dllLine = dll and string.format('Soulspire Native: %d hooks active', dll.hooks or 0)
+        or 'Soulspire Native: standby'
+    F.drawShadowText(imgui, dl, x + pad + 12 * s, boxY + 54 * s,
+        F.fitText(imgui, dllLine, leftW - pad * 2 - 24 * s, 0.78 * s),
+        dll and F.u32.soul_gold or F.u32.text_muted, 0.78 * s, 'l')
 
-    -- 2. Center Panel: Soul Crystal Collection
-    local midX = x + leftW + gap
+    -- 2. Center Panel: Rich Soul Crystal Cards
+    local midPanelX = x + leftW + gap
     local listFocused = (self.region == 'crystals')
-    F.drawPanelFrame(dl, midX, y, midW, h, {
-        fillTop   = F.u32.midnight,
-        fillBot   = F.u32.abyss,
-        border    = listFocused and F.u32.aether_cyan or F.u32.soul_gold_dim,
-        accent    = listFocused and F.u32.aether_cyan or F.u32.soul_gold,
-        thickness = listFocused and 1.6 or 1.1,
-        corners   = (L.ornamentLevel >= 1),
-        shadow    = false,
+    F.drawOrnatePanel(dl, midPanelX, bodyY, midW, bodyH, {
+        texId      = browserTex,
+        texTint    = F.abgr(F.rgba.white, 0.24),
+        scrimAlpha = 0.74,
+        border     = listFocused and F.u32.aether_cyan or F.u32.soul_gold_dim,
+        accent     = listFocused and F.u32.aether_cyan or F.u32.soul_gold,
+        thickness  = listFocused and 1.8 or 1.3,
+        corners    = true,
+        shadow     = false,
     })
 
-    F.drawShadowText(imgui, dl, midX + pad, y + 10 * s,
+    F.drawShadowText(imgui, dl, midPanelX + pad, bodyY + 12 * s,
         listFocused and '> SOUL CRYSTALS' or 'SOUL CRYSTALS',
-        listFocused and F.u32.aether_cyan or F.u32.soul_gold, 0.94 * s, 'l')
-    if F.drawActionButton(imgui, dl, '##ch_sync_btn', midX + midW - pad - math.floor(62 * s), y + 6 * s,
-        math.floor(62 * s), math.floor(22 * s), 'SYNC [X]', 'cyan', { fontScale = 0.70 * s }) then
-        self.sync_retries = 0
-        self:sync(not self:_cache_ready())
-    end
-    F.drawDivider(dl, midX + pad, y + 32 * s, midW - pad * 2, listFocused and F.u32.aether_cyan or F.u32.soul_gold_dim)
+        listFocused and F.u32.aether_cyan or F.u32.soul_gold_bright, 1.06 * s, 'l')
+    F.drawShadowText(imgui, dl, midPanelX + midW - pad, bodyY + 15 * s,
+        string.format('%s  |  %d PATHS', jobKey, #entries), F.u32.text_secondary, 0.82 * s, 'r')
+    F.drawDivider(dl, midPanelX + pad, bodyY + 38 * s, midW - pad * 2, listFocused and F.u32.aether_cyan or F.u32.soul_gold_dim)
 
     local rowW = midW - pad * 2
-    local rowH = math.floor(68 * s)
-    local rowStartY = y + 44 * s
+    local rowGap = math.floor(12 * s)
+    local availListH = math.max(200, bodyH - 56 * s)
+    local rowH = math.floor(F.clamp((availListH - rowGap * math.max(0, #entries - 1)) / math.max(1, #entries), 84 * s, 128 * s))
+    local rowStartY = bodyY + 48 * s
 
     for i, e in ipairs(entries) do
-        local ry = rowStartY + (i - 1) * (rowH + math.floor(8 * s))
+        local ry = rowStartY + (i - 1) * (rowH + rowGap)
         local isSel = (i == self.selected_idx)
-        imgui.SetCursorScreenPos({ midX + pad, ry })
+        imgui.SetCursorScreenPos({ midPanelX + pad, ry })
         if imgui.InvisibleButton('##ch_soul_' .. tostring(e.branch), { rowW, rowH }) then
             self.selected_idx = i
             self.region = 'crystals'
@@ -674,133 +768,193 @@ function Character:draw(imgui, dl, F, L, x, y, w, h)
         end
         local hovered = imgui.IsItemHovered and imgui.IsItemHovered() or false
 
-        local bg = isSel and F.u32.midnight_selected or (hovered and F.u32.midnight_alt or F.u32.midnight_deep)
-        local border = (isSel and listFocused) and F.u32.aether_cyan
-            or (e.active and F.u32.soul_gold or (e.owned and F.u32.crystal_violet or F.u32.border_subtle))
-        dl:AddRectFilled({ midX + pad, ry }, { midX + pad + rowW, ry + rowH }, bg, 6)
-        dl:AddRect({ midX + pad, ry }, { midX + pad + rowW, ry + rowH }, border, 6, 0, (isSel or e.active) and 1.8 or 1.0)
-        if isSel then
-            dl:AddRectFilled({ midX + pad + 1, ry + 6 }, { midX + pad + 4, ry + rowH - 6 },
-                listFocused and F.u32.aether_cyan or F.u32.soul_gold, 1)
+        if isSel or e.active then
+            F.drawGradRect(dl, midPanelX + pad, ry, midPanelX + pad + rowW, ry + rowH,
+                e.active and F.abgr(F.hex('#443218', 0.94)) or F.abgr(F.hex('#182842', 0.94)),
+                F.abgr(F.hex('#0D1322', 0.96)))
+        else
+            dl:AddRectFilled({ midPanelX + pad, ry }, { midPanelX + pad + rowW, ry + rowH },
+                hovered and F.u32.midnight_alt or F.abgr(F.hex('#0C1120', 0.90)), 6)
         end
 
-        local icSz = math.floor(46 * s)
-        local ix, iy = midX + pad + 10 * s, ry + math.floor((rowH - icSz) * 0.5)
-        local tex = (self.assets and e.icon) and self.assets:load_from_addon('crystalsocket', e.icon) or nil
+        local border = (isSel and listFocused) and F.u32.aether_cyan
+            or (e.active and F.u32.soul_gold_bright or (e.owned and F.u32.crystal_violet or F.u32.border_subtle))
+        dl:AddRect({ midPanelX + pad, ry }, { midPanelX + pad + rowW, ry + rowH }, border, 6, 0, (isSel or e.active) and 2.0 or 1.1)
+        if isSel then
+            dl:AddRectFilled({ midPanelX + pad + 1, ry + 8 }, { midPanelX + pad + 5, ry + rowH - 8 },
+                listFocused and F.u32.aether_cyan or F.u32.soul_gold_bright, 1)
+        end
+
+        local icSz = math.floor(math.min(62 * s, rowH - 22 * s))
+        local ix, iy = midPanelX + pad + 14 * s, ry + math.floor((rowH - icSz) * 0.5)
+        local tex = (assetsRef and e.icon) and assetsRef:load_from_addon('crystalsocket', e.icon) or nil
         F.drawCrystalMedallion(dl, ix + icSz * 0.5, iy + icSz * 0.5, icSz * 0.48, {
             texId = tex,
-            rim   = e.active and F.u32.soul_gold_bright or (e.owned and F.u32.crystal_violet or F.u32.border_strong),
+            rim   = e.active and F.u32.soul_gold_bright or (e.owned and F.u32.crystal_violet_bright or F.u32.border_strong),
             core  = e.owned and F.rgba.crystal_violet or F.rgba.text_muted,
-            studs = false,
+            studs = e.active,
         })
 
-        local tx = ix + icSz + 12 * s
-        local textW = math.max(80, rowW - (tx - (midX + pad)) - 96 * s)
-        F.drawShadowText(imgui, dl, tx, ry + 10 * s,
-            F.fitText(imgui, e.name, textW, 0.94 * s),
-            e.active and F.u32.soul_gold_bright or (e.owned and F.u32.text_primary or F.u32.text_muted), 0.94 * s, 'l')
-        F.drawShadowText(imgui, dl, tx, ry + 32 * s,
-            F.fitText(imgui, e.role or '', textW, 0.76 * s), F.u32.text_secondary, 0.76 * s, 'l')
-        F.drawShadowText(imgui, dl, tx, ry + 48 * s,
-            string.format('Badge: %s  |  Req Lv.%d', e.abbr or jobKey, e.req_level or 1),
-            F.u32.text_muted, 0.70 * s, 'l')
+        local tx = ix + icSz + 16 * s
+        local rowContentW = math.max(100, rowW - (tx - (midPanelX + pad)) - 22 * s)
+        local titleMaxW = math.max(80, rowContentW - 118 * s)
+        F.drawShadowText(imgui, dl, tx, ry + 12 * s,
+            F.fitText(imgui, e.name, titleMaxW, 1.10 * s),
+            e.active and F.u32.soul_gold_bright or (e.owned and F.u32.white or F.u32.text_muted), 1.10 * s, 'l')
+        F.drawShadowText(imgui, dl, tx, ry + 38 * s,
+            F.fitText(imgui, string.format('%s | %s | Req Lv.%d', e.role or '', e.abbr or jobKey, e.req_level or 1), rowContentW, 0.82 * s),
+            F.u32.crystal_violet_bright, 0.82 * s, 'l')
 
-        local stateTag, stateCol
-        if e.active then
-            stateTag, stateCol = '[*] SOCKETED', F.u32.soul_gold_bright
-        elseif e.owned then
-            stateTag, stateCol = '[+] OWNED', F.u32.aether_cyan
-        else
-            stateTag, stateCol = '[x] LOCKED', F.u32.text_muted
+        if rowH >= 88 * s and e.description and e.description ~= '' then
+            F.drawShadowText(imgui, dl, tx, ry + 60 * s,
+                F.fitText(imgui, e.description, rowContentW, 0.78 * s),
+                F.u32.text_secondary, 0.78 * s, 'l')
         end
-        F.drawShadowText(imgui, dl, midX + pad + rowW - 10 * s, ry + 12 * s, stateTag, stateCol, 0.74 * s, 'r')
+
+        local stateTag, stateCol, stateBorder
+        if e.active then
+            stateTag, stateCol, stateBorder = '[*] SOCKETED', F.u32.soul_gold_bright, F.u32.soul_gold
+        elseif e.owned then
+            stateTag, stateCol, stateBorder = '[+] OWNED', F.u32.aether_cyan, F.u32.aether_cyan_dim
+        else
+            stateTag, stateCol, stateBorder = '[x] LOCKED', F.u32.text_muted, F.u32.border_subtle
+        end
+        F.drawBadgePill(imgui, dl, midPanelX + pad + rowW - math.floor(108 * s), ry + 12 * s, stateTag, {
+            width     = math.floor(98 * s),
+            height    = math.floor(22 * s),
+            fill      = F.u32.abyss_solid,
+            border    = stateBorder,
+            textCol   = stateCol,
+            fontScale = 0.74 * s,
+        })
     end
 
-    -- 3. Right Panel: Soul Crystal Inspector & Deliberate Socket Confirmation
+    -- 3. Right Panel: Rich Soul Crystal Inspector & Deliberate Socket CTA
     if rightW > 0 and focused then
-        local rx = midX + midW + gap
+        local rx = midPanelX + midW + gap
         local modalActive = self:has_modal()
-        F.drawPanelFrame(dl, rx, y, rightW, h, {
-            fillTop   = F.u32.midnight,
-            fillBot   = F.u32.abyss,
-            border    = modalActive and F.u32.soul_gold or F.u32.border_subtle,
-            accent    = modalActive and F.u32.soul_gold or F.u32.aether_cyan_dim,
-            thickness = modalActive and 1.6 or 1.1,
-            corners   = (L.ornamentLevel >= 1),
-            shadow    = false,
+        F.drawOrnatePanel(dl, rx, bodyY, rightW, bodyH, {
+            texId      = inspTex,
+            texTint    = F.abgr(F.rgba.white, 0.26),
+            scrimAlpha = 0.72,
+            border     = modalActive and F.u32.soul_gold_bright or F.u32.soul_gold_dim,
+            accent     = modalActive and F.u32.soul_gold_bright or F.u32.soul_gold,
+            thickness  = modalActive and 1.8 or 1.3,
+            corners    = true,
+            shadow     = false,
         })
 
-        F.drawShadowText(imgui, dl, rx + pad, y + 10 * s, 'SOUL INSPECTOR', F.u32.soul_gold, 0.94 * s, 'l')
-        F.drawDivider(dl, rx + pad, y + 32 * s, rightW - pad * 2, F.u32.soul_gold_dim)
+        F.drawShadowText(imgui, dl, rx + pad, bodyY + 12 * s, 'SOUL INSPECTOR', F.u32.soul_gold_bright, 1.06 * s, 'l')
+        F.drawDivider(dl, rx + pad, bodyY + 38 * s, rightW - pad * 2, F.u32.soul_gold_dim)
 
-        local iy = y + 44 * s
+        local iy = bodyY + 50 * s
         local innerW = rightW - pad * 2
-        F.drawShadowText(imgui, dl, rx + pad, iy, F.fitText(imgui, focused.name, innerW, 1.04 * s), F.u32.soul_gold_bright, 1.04 * s, 'l')
-        iy = iy + 24 * s
-        F.drawShadowText(imgui, dl, rx + pad, iy, F.fitText(imgui, focused.role or '', innerW, 0.80 * s), F.u32.crystal_violet_bright, 0.80 * s, 'l')
-        iy = iy + 22 * s
+        local fTex = (assetsRef and focused.icon) and assetsRef:load_from_addon('crystalsocket', focused.icon) or nil
+        local fSz = math.floor(58 * s)
+        F.drawCrystalMedallion(dl, rx + pad + fSz * 0.5, iy + fSz * 0.5, fSz * 0.48, {
+            texId = fTex,
+            rim   = focused.active and F.u32.soul_gold_bright or F.u32.crystal_violet_bright,
+            core  = F.rgba.crystal_violet,
+            studs = true,
+        })
+        F.drawShadowText(imgui, dl, rx + pad + fSz + 14 * s, iy + 6 * s,
+            F.fitText(imgui, focused.name, innerW - fSz - 14 * s, 1.18 * s), F.u32.white, 1.18 * s, 'l')
+        F.drawShadowText(imgui, dl, rx + pad + fSz + 14 * s, iy + 34 * s,
+            F.fitText(imgui, focused.role or '', innerW - fSz - 14 * s, 0.88 * s), F.u32.crystal_violet_bright, 0.88 * s, 'l')
+        iy = iy + fSz + 16 * s
 
-        local chars = math.max(20, math.floor(innerW / (7.6 * s)))
-        for _, line in ipairs(F.wrapLines(focused.description or '', chars, 6)) do
-            F.drawShadowText(imgui, dl, rx + pad, iy, line, F.u32.text_primary, 0.80 * s, 'l')
-            iy = iy + math.floor(17 * s)
+        local inspCharPx = math.max(9.6 * s, F.measureText(imgui, 'M', 0.84 * s))
+        local chars = math.max(18, math.floor((innerW - 28 * s) / inspCharPx))
+        local dLines = F.wrapLines(focused.description or '', chars, 5)
+        local dBoxH = math.floor(20 * s + #dLines * 19 * s)
+        dl:AddRectFilled({ rx + pad, iy }, { rx + rightW - pad, iy + dBoxH }, F.abgr(F.hex('#0D1322', 0.90)), 5)
+        dl:AddRect({ rx + pad, iy }, { rx + rightW - pad, iy + dBoxH }, F.u32.border_strong, 5, 0, 1.0)
+        for i, line in ipairs(dLines) do
+            F.drawShadowText(imgui, dl, rx + pad + 10 * s, iy + 10 * s + (i - 1) * 19 * s,
+                F.fitText(imgui, line, innerW - 22 * s, 0.84 * s), F.u32.text_primary, 0.84 * s, 'l')
         end
-        iy = iy + 10 * s
+        iy = iy + dBoxH + 14 * s
 
         if focused.highlights and #focused.highlights > 0 then
-            F.drawShadowText(imgui, dl, rx + pad, iy, 'SIGNATURE TRAITS', F.u32.aether_cyan, 0.76 * s, 'l')
-            iy = iy + 18 * s
+            F.drawShadowText(imgui, dl, rx + pad, iy, 'SIGNATURE TRAITS', F.u32.soul_gold, 0.88 * s, 'l')
+            iy = iy + 22 * s
             for _, hl in ipairs(focused.highlights) do
-                for _, line in ipairs(F.wrapLines('- ' .. tostring(hl), chars, 2)) do
-                    F.drawShadowText(imgui, dl, rx + pad, iy, line, F.u32.text_secondary, 0.76 * s, 'l')
-                    iy = iy + math.floor(16 * s)
+                for _, line in ipairs(F.wrapLines('- ' .. tostring(hl), math.max(18, chars - 2), 2)) do
+                    if iy < bodyY + bodyH - 115 * s then
+                        F.drawShadowText(imgui, dl, rx + pad + 6 * s, iy,
+                            F.fitText(imgui, line, innerW - 14 * s, 0.82 * s), F.u32.text_primary, 0.82 * s, 'l')
+                        iy = iy + math.floor(19 * s)
+                    end
+                end
+            end
+            iy = iy + 10 * s
+        end
+
+        if self.data_service and self.data_service.get_abilities_for_soul and focused.key and focused.key ~= 'base' then
+            local okAb, abList = pcall(self.data_service.get_abilities_for_soul, self.data_service, focused.key)
+            if okAb and type(abList) == 'table' and #abList > 0 and iy < bodyY + bodyH - 140 * s then
+                F.drawDivider(dl, rx + pad, iy, innerW, F.u32.border_subtle)
+                iy = iy + 10 * s
+                F.drawShadowText(imgui, dl, rx + pad, iy, 'SIGNATURE ABILITIES', F.u32.aether_cyan, 0.86 * s, 'l')
+                iy = iy + 22 * s
+                for idx = 1, math.min(4, #abList) do
+                    local ab = abList[idx]
+                    if iy < bodyY + bodyH - 96 * s then
+                        local abName = type(ab) == 'table' and (ab.name or ab.displayName or '') or tostring(ab)
+                        local abLvl = type(ab) == 'table' and tonumber(ab.level or ab.reqLevel) or nil
+                        local abStr = abLvl and string.format('Lv.%d  %s', abLvl, abName) or abName
+                        F.drawShadowText(imgui, dl, rx + pad + 6 * s, iy,
+                            F.fitText(imgui, abStr, innerW - 12 * s, 0.82 * s), F.u32.text_secondary, 0.82 * s, 'l')
+                        iy = iy + math.floor(19 * s)
+                    end
                 end
             end
         end
 
-        -- Bottom action / confirmation dock
-        local actBtnH = math.floor(34 * s)
-        local actY = y + h - pad - actBtnH
+        local actBtnH = math.floor(42 * s)
+        local actY = bodyY + bodyH - pad - actBtnH
         if modalActive and self.confirm_entry then
-            local cH = math.floor(66 * s)
-            local cTop = y + h - pad - cH
-            dl:AddRectFilled({ rx + pad, cTop }, { rx + rightW - pad, cTop + cH }, F.u32.midnight_alt, 5)
-            dl:AddRect({ rx + pad, cTop }, { rx + rightW - pad, cTop + cH }, F.u32.soul_gold, 5, 0, 1.5)
-            F.drawShadowText(imgui, dl, rx + pad + 8 * s, cTop + 7 * s,
-                F.fitText(imgui, 'Socket ' .. self.confirm_entry.name .. '?', innerW - 16 * s, 0.80 * s),
-                F.u32.soul_gold_bright, 0.80 * s, 'l')
-            local halfW = math.floor((innerW - 22 * s) * 0.5)
-            local bY = cTop + cH - math.floor(30 * s) - 6 * s
-            local bH = math.floor(28 * s)
-            if F.drawActionButton(imgui, dl, '##ch_cf_ok', rx + pad + 6 * s, bY, halfW, bH,
-                (self.confirm_btn == 1 and '> ' or '') .. 'CONFIRM', 'gold', { fontScale = 0.78 * s }) then
+            local cH = math.floor(76 * s)
+            local cTop = bodyY + bodyH - pad - cH
+            F.drawOrnatePanel(dl, rx + pad, cTop, innerW, cH, {
+                fillTop = F.u32.midnight_alt, fillBot = F.u32.abyss_solid,
+                border = F.u32.soul_gold_bright, corners = false, shadow = false,
+            })
+            F.drawShadowText(imgui, dl, rx + pad + 10 * s, cTop + 9 * s,
+                F.fitText(imgui, 'Socket ' .. self.confirm_entry.name .. '?', innerW - 20 * s, 0.88 * s),
+                F.u32.soul_gold_bright, 0.88 * s, 'l')
+            local halfW = math.floor((innerW - 24 * s) * 0.5)
+            local bY = cTop + cH - math.floor(34 * s) - 7 * s
+            local bH = math.floor(32 * s)
+            if F.drawBeveledCtaButton(imgui, dl, '##ch_cf_ok', rx + pad + 8 * s, bY, halfW, bH,
+                'CONFIRM', 'gold', { focused = (self.confirm_btn == 1), fontScale = 0.84 * s }) then
                 local target = self.confirm_entry
                 self.region = 'crystals'
                 self.confirm_entry = nil
                 self:select_branch(target.branch)
             end
-            if F.drawActionButton(imgui, dl, '##ch_cf_no', rx + pad + 12 * s + halfW, bY, halfW, bH,
-                (self.confirm_btn == 2 and '> ' or '') .. 'CANCEL', 'neutral', { fontScale = 0.78 * s }) then
+            if F.drawActionButton(imgui, dl, '##ch_cf_no', rx + pad + 16 * s + halfW, bY, halfW, bH,
+                (self.confirm_btn == 2 and '> ' or '') .. 'CANCEL', 'neutral', { fontScale = 0.84 * s }) then
                 self.region = 'crystals'
                 self.confirm_entry = nil
             end
         elseif snap.pending then
-            F.drawActionButton(imgui, dl, '##ch_pend', rx + pad, actY, innerW, actBtnH,
-                'CONFIRMING WITH SERVER...', 'cyan', { disabled = true, fontScale = 0.80 * s })
+            F.drawBeveledCtaButton(imgui, dl, '##ch_pend', rx + pad, actY, innerW, actBtnH,
+                'Confirming with Server...', 'cyan', { disabled = true, fontScale = 0.90 * s })
         elseif focused.active then
-            F.drawActionButton(imgui, dl, '##ch_actv', rx + pad, actY, innerW, actBtnH,
-                'CURRENTLY SOCKETED', 'neutral', { disabled = true, fontScale = 0.80 * s })
+            F.drawBeveledCtaButton(imgui, dl, '##ch_actv', rx + pad, actY, innerW, actBtnH,
+                'Currently Socketed', 'gold', { disabled = true, fontScale = 0.90 * s })
         elseif focused.owned and self:_can_socket(snap) then
-            if F.drawActionButton(imgui, dl, '##ch_sock', rx + pad, actY, innerW, actBtnH,
-                'SOCKET SOUL CRYSTAL [A]', 'gold', { fontScale = 0.82 * s }) then
+            if F.drawBeveledCtaButton(imgui, dl, '##ch_sock', rx + pad, actY, innerW, actBtnH,
+                'Socket Soul Crystal [A]', 'gold', { fontScale = 0.94 * s }) then
                 self.confirm_entry = focused
                 self.region = 'confirm_socket'
                 self.confirm_btn = 1
             end
         else
-            F.drawActionButton(imgui, dl, '##ch_lock', rx + pad, actY, innerW, actBtnH,
-                snap.loaded and 'LOCKED BY PROGRESSION' or (self.last_sync_err and 'SYNC FAILED — PRESS [X]' or 'WAITING FOR SERVER SYNC'),
-                'neutral', { disabled = true, fontScale = 0.78 * s })
+            F.drawBeveledCtaButton(imgui, dl, '##ch_lock', rx + pad, actY, innerW, actBtnH,
+                snap.loaded and 'Locked by Progression' or (self.last_sync_err and 'Sync Failed - Press [X]' or 'Waiting for Server Sync'),
+                'gold', { disabled = true, fontScale = 0.86 * s })
         end
     end
 end

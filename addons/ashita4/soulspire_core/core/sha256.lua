@@ -1,6 +1,7 @@
 -- SoulspireXI Core: Pure-LuaJIT SHA-256 Digest (FIPS 180-4)
--- Used strictly ONCE per session at cache load time to verify local JSON cache
--- integrity against manifest.json. Never called per-frame.
+-- Supports both one-shot digest(msg) and incremental streaming hasher (new():update():final())
+-- so large static cache packages (e.g. talents.json) can be verified cooperatively across
+-- idle frames without stalling the Ashita v4 D3D render thread.
 
 local M = {}
 
@@ -19,7 +20,6 @@ if bit then
     lshift = bit.lshift
     ror    = bit.ror or function(x, n) return bor(rshift(x, n), lshift(x, 32 - n)) end
 else
-    -- Pure-Lua 32-bit fallback for non-LuaJIT environments
     local MOD32 = 4294967296
     local function u32(x) return x % MOD32 end
     band = function(a, b)
@@ -66,31 +66,124 @@ local K = {
     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 }
 
-local byte = string.byte
-local char = string.char
+local byte   = string.byte
+local char   = string.char
 local format = string.format
-local floor = math.floor
+local floor  = math.floor
+local sub    = string.sub
 
 local function hex32(x)
-    if x < 0 then
-        x = x + 4294967296
-    end
+    if x < 0 then x = x + 4294967296 end
     return format('%08x', x % 4294967296)
 end
 
-function M.digest(msg)
-    if type(msg) ~= 'string' then
-        return nil, 'SHA-256 input must be a string'
+local function process_blocks(st, data, start_pos, end_pos)
+    local h0, h1, h2, h3 = st.h0, st.h1, st.h2, st.h3
+    local h4, h5, h6, h7 = st.h4, st.h5, st.h6, st.h7
+    local w = st.w
+
+    for offset = start_pos, end_pos, 64 do
+        for i = 0, 15 do
+            local j = offset + i * 4
+            local b1, b2, b3, b4 = byte(data, j, j + 3)
+            w[i + 1] = b1 * 16777216 + b2 * 65536 + b3 * 256 + b4
+        end
+        for i = 17, 64 do
+            local v1 = w[i - 15]
+            local s0 = bxor(ror(v1, 7), ror(v1, 18), rshift(v1, 3))
+            local v2 = w[i - 2]
+            local s1 = bxor(ror(v2, 17), ror(v2, 19), rshift(v2, 10))
+            w[i] = band(w[i - 16] + s0 + w[i - 7] + s1, 0xffffffff)
+        end
+
+        local a, b, c, d = h0, h1, h2, h3
+        local e, f, g, h = h4, h5, h6, h7
+
+        for i = 1, 64 do
+            local S1 = bxor(ror(e, 6), ror(e, 11), ror(e, 25))
+            local ch = bxor(band(e, f), band(bnot(e), g))
+            local temp1 = band(h + S1 + ch + K[i] + w[i], 0xffffffff)
+            local S0 = bxor(ror(a, 2), ror(a, 13), ror(a, 22))
+            local maj = bxor(band(a, b), band(a, c), band(b, c))
+            local temp2 = band(S0 + maj, 0xffffffff)
+
+            h = g; g = f; f = e
+            e = band(d + temp1, 0xffffffff)
+            d = c; c = b; b = a
+            a = band(temp1 + temp2, 0xffffffff)
+        end
+
+        h0 = band(h0 + a, 0xffffffff)
+        h1 = band(h1 + b, 0xffffffff)
+        h2 = band(h2 + c, 0xffffffff)
+        h3 = band(h3 + d, 0xffffffff)
+        h4 = band(h4 + e, 0xffffffff)
+        h5 = band(h5 + f, 0xffffffff)
+        h6 = band(h6 + g, 0xffffffff)
+        h7 = band(h7 + h, 0xffffffff)
     end
 
-    local len = #msg
+    st.h0, st.h1, st.h2, st.h3 = h0, h1, h2, h3
+    st.h4, st.h5, st.h6, st.h7 = h4, h5, h6, h7
+end
+
+local Hasher = {}
+Hasher.__index = Hasher
+
+function M.new()
+    return setmetatable({
+        h0 = 0x6a09e667, h1 = 0xbb67ae85, h2 = 0x3c6ef372, h3 = 0xa54ff53a,
+        h4 = 0x510e527f, h5 = 0x9b05688c, h6 = 0x1f83d9ab, h7 = 0x5be0cd19,
+        w = {},
+        rem = '',
+        total_len = 0,
+    }, Hasher)
+end
+
+-- Update incrementally over either a whole chunk string or a slice (start_idx, end_idx)
+-- with zero intermediate substring copies for aligned 64-byte runs!
+function Hasher:update(data, start_idx, end_idx)
+    if type(data) ~= 'string' then return self end
+    local s = start_idx or 1
+    local e = end_idx or #data
+    if s > e then return self end
+    local chunk_len = e - s + 1
+    self.total_len = self.total_len + chunk_len
+
+    if #self.rem > 0 then
+        local need = 64 - #self.rem
+        if chunk_len < need then
+            self.rem = self.rem .. sub(data, s, e)
+            return self
+        end
+        local blk = self.rem .. sub(data, s, s + need - 1)
+        process_blocks(self, blk, 1, 1)
+        self.rem = ''
+        s = s + need
+    end
+
+    local avail = e - s + 1
+    local full_blocks = floor(avail / 64)
+    if full_blocks > 0 then
+        local last_block_start = s + (full_blocks - 1) * 64
+        process_blocks(self, data, s, last_block_start)
+        s = s + full_blocks * 64
+    end
+    if s <= e then
+        self.rem = sub(data, s, e)
+    end
+    return self
+end
+
+function Hasher:final()
+    local len = self.total_len
     local bit_len_hi = floor(len / 0x20000000)
     local bit_len_lo = (len * 8) % 4294967296
-
-    -- Pad message: 0x80, zero bytes to 56 mod 64, then 64-bit big-endian bit length
-    local rem = (len + 1) % 64
-    local pad_zeros = (rem <= 56) and (56 - rem) or (120 - rem)
-    local padded = msg .. '\128' .. string.rep('\0', pad_zeros)
+    local rem_len = #self.rem
+    local pad_zeros = ((rem_len + 1) % 64 <= 56)
+        and (56 - ((rem_len + 1) % 64))
+        or (120 - ((rem_len + 1) % 64))
+    local tail = self.rem .. '\128' .. string.rep('\0', pad_zeros)
         .. char(
             floor(bit_len_hi / 0x1000000) % 256,
             floor(bit_len_hi / 0x10000) % 256,
@@ -101,64 +194,19 @@ function M.digest(msg)
             floor(bit_len_lo / 0x100) % 256,
             bit_len_lo % 256
         )
+    process_blocks(self, tail, 1, #tail - 63)
+    self.rem = ''
+    return hex32(self.h0) .. hex32(self.h1) .. hex32(self.h2) .. hex32(self.h3)
+        .. hex32(self.h4) .. hex32(self.h5) .. hex32(self.h6) .. hex32(self.h7)
+end
 
-    local h0 = 0x6a09e667
-    local h1 = 0xbb67ae85
-    local h2 = 0x3c6ef372
-    local h3 = 0xa54ff53a
-    local h4 = 0x510e527f
-    local h5 = 0x9b05688c
-    local h6 = 0x1f83d9ab
-    local h7 = 0x5be0cd19
-
-    local w = {}
-    local total = #padded
-
-    for offset = 1, total, 64 do
-        for i = 0, 15 do
-            local j = offset + i * 4
-            local b1, b2, b3, b4 = byte(padded, j, j + 3)
-            w[i + 1] = bor(lshift(b1, 24), lshift(b2, 16), lshift(b3, 8), b4)
-        end
-        for i = 17, 64 do
-            local v15 = w[i - 15]
-            local s0 = bxor(ror(v15, 7), ror(v15, 18), rshift(v15, 3))
-            local v2 = w[i - 2]
-            local s1 = bxor(ror(v2, 17), ror(v2, 19), rshift(v2, 10))
-            w[i] = band(w[i - 16] + s0 + w[i - 7] + s1, 0xFFFFFFFF)
-        end
-
-        local a, b, c, d, e, f, g, h = h0, h1, h2, h3, h4, h5, h6, h7
-        for i = 1, 64 do
-            local S1 = bxor(ror(e, 6), ror(e, 11), ror(e, 25))
-            local ch = bxor(band(e, f), band(bnot(e), g))
-            local temp1 = band(h + S1 + ch + K[i] + w[i], 0xFFFFFFFF)
-            local S0 = bxor(ror(a, 2), ror(a, 13), ror(a, 22))
-            local maj = bxor(band(a, b), band(a, c), band(b, c))
-            local temp2 = band(S0 + maj, 0xFFFFFFFF)
-
-            h = g
-            g = f
-            f = e
-            e = band(d + temp1, 0xFFFFFFFF)
-            d = c
-            c = b
-            b = a
-            a = band(temp1 + temp2, 0xFFFFFFFF)
-        end
-
-        h0 = band(h0 + a, 0xFFFFFFFF)
-        h1 = band(h1 + b, 0xFFFFFFFF)
-        h2 = band(h2 + c, 0xFFFFFFFF)
-        h3 = band(h3 + d, 0xFFFFFFFF)
-        h4 = band(h4 + e, 0xFFFFFFFF)
-        h5 = band(h5 + f, 0xFFFFFFFF)
-        h6 = band(h6 + g, 0xFFFFFFFF)
-        h7 = band(h7 + h, 0xFFFFFFFF)
+function M.digest(msg)
+    if type(msg) ~= 'string' then
+        return nil, 'SHA-256 input must be a string'
     end
-
-    return hex32(h0) .. hex32(h1) .. hex32(h2) .. hex32(h3)
-        .. hex32(h4) .. hex32(h5) .. hex32(h6) .. hex32(h7)
+    local h = M.new()
+    h:update(msg, 1, #msg)
+    return h:final()
 end
 
 return M

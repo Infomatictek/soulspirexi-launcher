@@ -96,6 +96,8 @@ function DataService.new(opts)
 
         listeners        = {},
         diag_events      = {},
+        sync_log         = {}, -- timestamped per-request sync telemetry (max 32 entries)
+        warmup_state     = nil, -- cooperative background warmup for large talents.json
         metrics          = {
             packets_in_oxtl    = 0,
             packets_out_oxtl   = 0,
@@ -109,6 +111,8 @@ function DataService.new(opts)
             cache_hits_catalog = 0,
             cache_hits_ws      = 0,
             cache_hits_souls   = 0,
+            stale_dropped      = 0,
+            deduped_requests   = 0,
         },
     }, DataService)
 
@@ -151,6 +155,64 @@ function DataService:record_metric(key, delta)
     if self.metrics[key] ~= nil then
         self.metrics[key] = self.metrics[key] + (tonumber(delta) or 1)
     end
+end
+
+function DataService:record_sync_attempt(entry)
+    if type(entry) ~= 'table' then return end
+    local rec = {
+        reqId           = entry.reqId or 0,
+        op              = tostring(entry.op or 'unknown'),
+        wsId            = tonumber(entry.wsId) or 0,
+        startedAt       = tonumber(entry.startedAt) or 0,
+        completedAt     = tonumber(entry.completedAt) or self.clock(),
+        latencyMs       = tonumber(entry.latencyMs) or 0,
+        packetsIn       = tonumber(entry.packetsIn) or 0,
+        bytesIn         = tonumber(entry.bytesIn) or 0,
+        retries         = tonumber(entry.retries) or 0,
+        outcome         = tostring(entry.outcome or 'ok'),
+        timeoutReason   = entry.timeoutReason,
+        cacheHit        = entry.cacheHit == true,
+        protocolVersion = tonumber(entry.protocolVersion) or DataService.PROTOCOL_VERSION,
+        waitingOn       = tostring(entry.waitingOn or 'idle'),
+    }
+    local list = self.sync_log
+    if #list >= 32 then
+        table.remove(list, 1)
+    end
+    list[#list + 1] = rec
+end
+
+function DataService:get_sync_stats()
+    local latencies = {}
+    local total_ms, max_ms, ok_count, fail_count = 0, 0, 0, 0
+    for _, rec in ipairs(self.sync_log or {}) do
+        if rec.outcome == 'ok' then
+            ok_count = ok_count + 1
+            local ms = tonumber(rec.latencyMs) or 0
+            latencies[#latencies + 1] = ms
+            total_ms = total_ms + ms
+            if ms > max_ms then max_ms = ms end
+        elseif rec.outcome == 'timeout' or rec.outcome == 'error' then
+            fail_count = fail_count + 1
+        end
+    end
+    table.sort(latencies)
+    local p95 = 0
+    if #latencies > 0 then
+        local idx = math.max(1, math.min(#latencies, math.ceil(#latencies * 0.95)))
+        p95 = latencies[idx]
+    end
+    return {
+        completedCount    = ok_count,
+        failureCount      = fail_count,
+        avgLatencyMs      = ok_count > 0 and (total_ms / ok_count) or 0,
+        p95LatencyMs      = p95,
+        maxLatencyMs      = max_ms,
+        retries           = self.metrics.sync_retries or 0,
+        timeouts          = self.metrics.timeouts or 0,
+        staleDropped      = self.metrics.stale_dropped or 0,
+        dedupedRequests   = self.metrics.deduped_requests or 0,
+    }
 end
 
 function DataService:_fail_cache(status_kind, reason)
@@ -602,8 +664,183 @@ end
 function DataService:_ensure_talents_loaded()
     if not self:is_cache_usable() then return false end
     if self.talent_trees ~= nil then return true end
+    -- If cooperative warmup already read & partially hashed talents.json, finish cleanly
+    if self.warmup_state and self.warmup_state.pkg_name == 'talents' then
+        while self.warmup_state and not self.warmup_state.done do
+            self:step_warmup(1000.0)
+        end
+        if self.talent_trees ~= nil then return true end
+    end
     local pkg = self:load_package('talents')
     return pkg ~= nil
+end
+
+-- Cooperative background warmup for talents.json (6.8MB) so SHA-256 verification runs in
+-- small chunks across idle d3d_present frames (never blocking the render/packet thread).
+function DataService:step_warmup(budget_ms)
+    if not self:is_cache_usable() or self.talent_trees ~= nil then
+        return true
+    end
+    local info = self.manifest and self.manifest.packages and self.manifest.packages.talents
+    if type(info) ~= 'table' or type(info.file) ~= 'string' then
+        return true
+    end
+    local budget = math.max(1.0, tonumber(budget_ms) or 4.0) / 1000.0
+    local start_t = self.clock()
+
+    local ws = self.warmup_state
+    if not ws then
+        if info.file:find('..', 1, true) or info.file:find('/', 1, true) or info.file:find('\\', 1, true) then
+            self:_fail_cache('corrupt', 'Unsafe package filename in manifest: ' .. tostring(info.file))
+            return true
+        end
+        local full_path = self.cache_dir .. '/' .. info.file
+        local raw, read_err = read_file_bytes(full_path)
+        if not raw then
+            self.package_status.talents = { verified = false, error = 'missing: ' .. tostring(read_err) }
+            self:_fail_cache('missing', string.format('Missing cache package %s (%s). Run SoulspireLauncher to update.', info.file, tostring(read_err)))
+            return true
+        end
+        if type(info.size) == 'number' and #raw ~= info.size then
+            self.package_status.talents = { verified = false, size = #raw, error = 'size mismatch' }
+            self:_fail_cache('corrupt', string.format('Cache integrity failed for %s (size %d != %d). Run SoulspireLauncher to repair.', info.file, #raw, info.size))
+            return true
+        end
+        self.warmup_state = {
+            pkg_name   = 'talents',
+            file       = info.file,
+            expected   = string.lower(tostring(info.sha256 or '')),
+            raw        = raw,
+            total      = #raw,
+            pos        = 1,
+            hasher     = sha256.new(),
+            phase      = 'hash',
+            elapsed_ms = (self.clock() - start_t) * 1000,
+            done       = false,
+        }
+        return false
+    end
+
+    if ws.phase == 'hash' then
+        local chunk = 524288 -- 512 KB per slice (~4ms in LuaJIT)
+        while ws.pos <= ws.total do
+            local e = math.min(ws.total, ws.pos + chunk - 1)
+            ws.hasher:update(ws.raw, ws.pos, e)
+            ws.pos = e + 1
+            if (self.clock() - start_t) >= budget and ws.pos <= ws.total then
+                ws.elapsed_ms = ws.elapsed_ms + (self.clock() - start_t) * 1000
+                return false
+            end
+        end
+        local actual_sha = ws.hasher:final()
+        if actual_sha ~= ws.expected then
+            self.warmup_state = nil
+            self.package_status.talents = { verified = false, size = ws.total, sha256 = actual_sha, error = 'sha256 mismatch' }
+            self:_fail_cache('corrupt', string.format('Cache SHA-256 mismatch for %s. Run SoulspireLauncher to repair.', ws.file))
+            return true
+        end
+        ws.sha256 = actual_sha
+        ws.phase  = 'parse'
+        ws.elapsed_ms = ws.elapsed_ms + (self.clock() - start_t) * 1000
+        if (self.clock() - start_t) >= budget then
+            return false
+        end
+    end
+
+    if ws.phase == 'parse' then
+        local p0 = self.clock()
+        local parsed, dec_err = json.decode(ws.raw)
+        ws.raw = nil -- release raw 6.8MB buffer immediately
+        if not parsed or type(parsed) ~= 'table' then
+            self.warmup_state = nil
+            self.package_status.talents = { verified = false, size = ws.total, sha256 = ws.sha256, error = 'json parse error' }
+            self:_fail_cache('corrupt', string.format('Malformed JSON in %s: %s', ws.file, tostring(dec_err)))
+            return true
+        end
+        if tonumber(parsed.schemaVersion) ~= tonumber(self.manifest.schemaVersion) then
+            self.warmup_state = nil
+            self.package_status.talents = { verified = false, error = 'schema mismatch' }
+            self:_fail_cache('incompatible', string.format('Schema mismatch in %s.', ws.file))
+            return true
+        end
+        local ok_idx, idx_err = self:_index_talents(parsed)
+        if not ok_idx then
+            self.warmup_state = nil
+            self.package_status.talents = { verified = false, error = idx_err }
+            self:_fail_cache('corrupt', string.format('Invalid cache structure in %s: %s', ws.file, tostring(idx_err)))
+            return true
+        end
+        local total_ms = ws.elapsed_ms + (self.clock() - p0) * 1000
+        self.load_ms_total = self.load_ms_total + total_ms
+        self.packages.talents = parsed
+        self.package_status.talents = {
+            verified = true,
+            size     = ws.total,
+            sha256   = ws.sha256,
+            loadMs   = total_ms,
+        }
+        ws.done = true
+        self.warmup_state = nil
+        self:record_event('cache', 'talents_warmed', string.format('size=%dB total=%.1fms', ws.total, total_ms))
+        return true
+    end
+    return true
+end
+
+function DataService:is_talents_warm()
+    return self.talent_trees ~= nil
+end
+
+-- Build an immediate non-authoritative static preview tree from verified local cache
+-- so the UI displays the full circular Soulforge tree instantaneously without freezing
+-- while live character ranks/eligibility sync from the server (all mutations gated).
+function DataService:build_static_ws_preview(ws_id, spec_key)
+    if not self:is_cache_usable() then return nil end
+    local wsMeta = self:get_weapon_skill(ws_id)
+    local tree   = self:get_ws_tree(ws_id, spec_key)
+    if not wsMeta or not tree then return nil end
+
+    local nodes = {}
+    local byKey = {}
+    for i, staticNode in ipairs(tree.nodes or {}) do
+        local node = {
+            idx         = tonumber(staticNode.idx) or i,
+            slot        = tonumber(staticNode.slot) or i,
+            key         = staticNode.key,
+            tier        = tonumber(staticNode.tier) or 1,
+            col         = tonumber(staticNode.col) or 1,
+            rank        = 0,
+            maxRank     = tonumber(staticNode.maxRank) or 1,
+            canLearn    = false, -- Strictly disabled until server confirms live state!
+            reqWsPoints = tonumber(staticNode.reqWsPoints) or 0,
+            reqKey      = staticNode.reqKey,
+            reqRank     = tonumber(staticNode.reqRank) or 0,
+            name        = staticNode.name or staticNode.key,
+            desc        = DataService.get_node_desc(staticNode, 0),
+            nextDesc    = DataService.get_node_desc(staticNode, 1),
+            reqLevel    = DataService.get_node_next_req_level(staticNode, 0),
+            scTier      = tonumber(staticNode.scTier) or 0,
+            scId        = 0,
+            scName      = '',
+            cost        = tonumber(staticNode.cost) or 1,
+        }
+        nodes[i] = node
+        byKey[node.key] = node
+    end
+
+    return {
+        id            = wsMeta.wsId or wsMeta.id,
+        name          = wsMeta.name,
+        skillName     = wsMeta.skillName or '',
+        wsType        = wsMeta.wsType or 'physical',
+        spent         = 0,
+        orig          = 'Syncing live mastery state...',
+        nodes         = nodes,
+        byKey         = byKey,
+        source        = 'cache_preview',
+        syncStatus    = 'preview_cached',
+        authoritative = false,
+    }
 end
 
 function DataService:get_talent_rules()
@@ -749,6 +986,8 @@ function DataService:get_diagnostics()
         serverCompat = self.server_compat,
         packages     = loaded_pkgs,
         metrics      = self.metrics,
+        syncStats    = self:get_sync_stats(),
+        syncLog      = self.sync_log,
         recentEvents = self.diag_events,
     }
 end

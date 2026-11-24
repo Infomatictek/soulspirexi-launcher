@@ -310,13 +310,13 @@ class TestingChannelPublishTests(unittest.TestCase):
         self.assertEqual(stable["repo"]["branch"], "main")
         self.assertEqual(core["channel"], "testing")
         self.assertEqual(core["candidateId"], "core-ui-24hook")
-        self.assertEqual(core["repo"]["branch"], "feat/client-data-cache-overhaul")
+        self.assertEqual(core["repo"]["branch"], "feat/soulforge-visual-target-ui")
         self.assertEqual(
             core["repo"]["rawBaseUrl"],
-            "https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/feat/client-data-cache-overhaul",
+            "https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/feat/soulforge-visual-target-ui",
         )
 
-        # Verify all required Core, Cache, Soulforge, and native DLL files are included
+        # Verify all required Core, Cache, Soulforge, bespoke art, and native DLL files are included
         targets = {f["targetPath"]: f for f in core["files"]}
         for required_target in (
             "soulspire_core/soulspire_core.lua",
@@ -342,6 +342,11 @@ class TestingChannelPublishTests(unittest.TestCase):
             "soulspire_core/modules/weapon_mastery.lua",
             "soulspire_core/modules/soul_talents.lua",
             "soulspire_core/assets/soulspire_crest.png",
+            "soulspire_core/assets/soulforge_backdrop.png",
+            "soulspire_core/assets/soulforge_banner_bg.png",
+            "soulspire_core/assets/soulforge_chamber_center.png",
+            "soulspire_core/assets/character_chamber_bg.png",
+            "soulspire_core/ASSET_SPECIFICATION.md",
             "soulspire_talents/soulforge_state.lua",
             "soulspire_talents/soulforge_ui.lua",
             "soulspire_talents/soulspire_talents.lua",
