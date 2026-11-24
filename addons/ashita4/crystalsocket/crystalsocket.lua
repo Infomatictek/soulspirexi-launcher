@@ -302,7 +302,12 @@ ashita.events.register('load', 'crystalsocket_load', function()
         native_weapon_rules = WeaponConfig.native_rules()
         labels:set_dll_path(addon.path:gsub('[/\\]+$', '') .. '\\..\\..\\plugins\\soulspire_native.dll')
         labels:ensure_loaded()
-        labels:sync_weapon_rules(native_weapon_rules)
+        local wc_st = WeaponConfig.status()
+        if wc_st.loaded and #native_weapon_rules > 0 then
+            labels:sync_weapon_rules(native_weapon_rules)
+        elseif not wc_st.loaded then
+            print('[crystalsocket] WeaponConfig not loaded (' .. tostring(wc_st.error) .. '); preserving native DLL weapon rules.')
+        end
     end
     local ok, scaling = pcall(require, 'scaling')
     if not ok or scaling.scaled.w <= 0 or scaling.scaled.h <= 0 then
@@ -456,7 +461,10 @@ ashita.events.register('d3d_present', 'crystalsocket_present', function()
     labels:sync(state:snapshot(), character_id, ts)
     sync_appearance()
     if not labels.weapon_rules_synced and not labels.weapon_rules_missing and labels.native then
-        labels:sync_weapon_rules(native_weapon_rules)
+        local wc_st = WeaponConfig.status()
+        if wc_st.loaded and #native_weapon_rules > 0 then
+            labels:sync_weapon_rules(native_weapon_rules)
+        end
     end
 end)
 

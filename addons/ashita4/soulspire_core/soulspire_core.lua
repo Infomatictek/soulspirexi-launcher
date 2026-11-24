@@ -24,6 +24,7 @@ local UI           = require('core.ui')
 local NativeBridge = require('core.native_bridge')
 local WeaponPres   = require('core.weapon_presentation')
 local WeaponProbe  = require('core.weapon_render_probe')
+local WeaponEquipDiag = require('core.weapon_equip_diag')
 
 local registry = Registry.new()
 local focus    = Focus.new(registry)
@@ -61,6 +62,7 @@ ashita.events.register('load', 'soulspire_core_load', function()
         weapon_pres.config_path = data_dir .. 'soul-weapon-config.json'
         weapon_pres.calibration_path = data_dir .. 'soul-weapon-calibration.local.json'
         weapon_pres.probe_output_path = data_dir .. 'soul-weapon-render-probe.local.json'
+        weapon_pres.equip_diag_output_path = data_dir .. 'soul-weapon-equip-diag.local.json'
         weapon_pres:load_file()
     end
     local ok, scaling = pcall(require, 'scaling')
@@ -167,6 +169,41 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
             weapon_pres:reset_transforms()
             if weapon_pres.calibration_path then weapon_pres:save_calibration_and_sync_native() end
             log('Reset weapon presentation transforms to authoritative registry baseline.')
+        elseif action == 'equip' then
+            local ok_wc, WC = pcall(require, 'weapon_config')
+            if not (ok_wc and WC) and type(addon.path) == 'string' and addon.path ~= '' then
+                local cs_wc = addon.path:gsub('[/\\]+$', '') .. '\\..\\crystalsocket\\weapon_config.lua'
+                ok_wc, WC = pcall(dofile, cs_wc)
+            end
+            local wc_rules, wc_reg_hash = {}, ''
+            if ok_wc and WC then
+                if not WC.status().loaded and type(addon.path) == 'string' then
+                    WC.load_default(addon.path)
+                end
+                wc_rules = WC.native_rules()
+                wc_reg_hash = WC.status().registry_hash or ''
+            end
+            local st = weapon_pres:status()
+            local ok, rep, out_path = WeaponEquipDiag.run_diagnostic({
+                diagnostics_enabled = weapon_pres:is_diagnostics_enabled(),
+                rules_override = wc_rules,
+                config_registry_hash = wc_reg_hash,
+                weapon_config_hash = st.weapon_config_hash or '',
+                output_path = weapon_pres.equip_diag_output_path,
+            })
+            if ok and type(rep) == 'table' then
+                local n = rep.native
+                log(('Equip diag: dll=%s enabled=%s hooks=%d/%d equip_hooks=%s soul=%s(job=%d,br=%d,known=%s,lvl=%d) native_rules=%d hits=+%d/-%d'):format(
+                    tostring(n.dllLoaded), tostring(n.enabled), n.installedHooks, n.expectedHooks,
+                    tostring(n.equipHooksOk), tostring(n.resolvedSoulId or 'none'),
+                    n.activeJob, n.activeBranch, tostring(n.soulKnown), n.effectiveLevel,
+                    n.weaponRulesCount, n.weaponAllowHits, n.weaponDenyHits))
+                log(('Equip diag candidates: total=%d dual_2h=%d vanilla_sub=%d rejected=%d output=%s'):format(
+                    rep.summary.candidateCount, rep.summary.allowedDual2h,
+                    rep.summary.allowedVanillaSub, rep.summary.rejected, tostring(out_path or 'memory')))
+            else
+                log('Weapon equip diag refused/failed: ' .. tostring(rep))
+            end
         elseif action == 'probe' then
             local ok, res, out_path = WeaponProbe.run_live_probe({
                 diagnostics_enabled = weapon_pres:is_diagnostics_enabled(),
@@ -182,7 +219,7 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
             end
         else
             local st = weapon_pres:status()
-            log(('weapondiag loaded=%s enabled=%s bindings=%d profiles=%d peers=%d hash=%s (usage: /soulspire weapondiag on|off|save|export|reset|probe)'):format(
+            log(('weapondiag loaded=%s enabled=%s bindings=%d profiles=%d peers=%d hash=%s (usage: /soulspire weapondiag on|off|save|export|reset|equip|probe)'):format(
                 tostring(st.loaded),
                 tostring(st.diagnostics_enabled),
                 st.binding_count,

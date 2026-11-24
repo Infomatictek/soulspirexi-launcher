@@ -272,8 +272,12 @@ function Labels:status()
     return info
 end
 
-function Labels:sync_weapon_rules(rules, override_replace)
+function Labels:sync_weapon_rules(rules, override_replace, opts)
     if type(rules) ~= 'table' then return false, 'invalid rules table' end
+    if #rules == 0 and not (type(opts) == 'table' and opts.allow_empty == true) then
+        self.weapon_rules_error = 'refusing empty weapon rules sync to preserve native-loaded rules'
+        return false, self.weapon_rules_error
+    end
     if override_replace then
         local count = #rules
         local buf = count > 0 and ffi.new(weapon_rule_array_type, count) or nil
