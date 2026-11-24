@@ -250,7 +250,7 @@ function SoulTalents:get_prompt_pills(last_device)
             { 'B',     'Cancel' },
         }
     end
-    if last_device == 'keyboard' then
+    if last_device == 'keyboard' or last_device == 'mouse' then
         return {
             { 'Arrows', 'Select' },
             { 'Enter',  'Open Soulforge' },

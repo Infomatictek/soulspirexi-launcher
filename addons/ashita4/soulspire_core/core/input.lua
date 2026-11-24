@@ -212,6 +212,13 @@ function Input:reset()
     self.confirm_guard_until = 0
 end
 
+-- Record intentional mouse movement/clicks while Core is open so gamepad -> mouse
+-- transitions update prompt hints cleanly and stop any stale directional repeat.
+function Input:on_mouse_activity(_now)
+    self.last_device = 'mouse'
+    self.repeat_state = {}
+end
+
 -- Suppress accidental double-confirm inside Core immediately after opening from
 -- FFXI's native Commands menu via Confirm (Enter / Gamepad A).
 function Input:arm_open_guard(seconds)

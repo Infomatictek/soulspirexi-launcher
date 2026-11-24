@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.2.0-testing.core-ui.5",
+  "manifestVersion": "2.2.0-testing.core-ui.6",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
     "version": "client_data_cache_overhaul (761260a / OXTL v2 + O(N) Precomp + Level Sync META)",
@@ -9,7 +9,7 @@
     "commit": "761260a",
     "dockerImage": "soulspirexi/server:stg-core-ui-761260a",
     "crystalJobsHooks": 31,
-    "notes": "Soulforge Approved Visual Target + Centralized Reactive CharacterState (Level Sync/Job/Soul/Zone) + Budgeted Incremental Cache Warmup + OXTL v2 Reliability paired with isolated Core UI staging (56xxx, stg-core-ui-761260a)."
+    "notes": "Soulforge Approved Visual Target + Balanced Mouse/Cursor Input Lifecycle Fix + Centralized Reactive CharacterState + Budgeted Incremental Cache Warmup + OXTL v2 Reliability paired with isolated Core UI staging (56xxx, stg-core-ui-761260a)."
   },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
@@ -6087,8 +6087,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/focus.lua",
       "targetPath": "soulspire_core/core/focus.lua",
-      "sha256": "5639dc207661750985b5d45ef8387df953707f1bc1190a82261f4e586234c647",
-      "size": 9329
+      "sha256": "6cde70f962120b82ee5de1bcc2d1a6c41914cd06ca433a1057a73c8ff8ce9a53",
+      "size": 10129
     },
     {
       "category": "addon",
@@ -6101,8 +6101,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/input.lua",
       "targetPath": "soulspire_core/core/input.lua",
-      "sha256": "884c498c9c8192332096218630ba7ff85502765d28682c97c540cfa5beb47c52",
-      "size": 18778
+      "sha256": "1aac2b1eb7b85ff84db6c3f8b620ba2e1da7394bea9ee975cd792f2f1f0246d1",
+      "size": 19045
     },
     {
       "category": "addon",
@@ -6124,6 +6124,13 @@
       "targetPath": "soulspire_core/core/menu_bridge.lua",
       "sha256": "3177e99dd1b9f4f33bca96ffa954fc570861e0d988249020a9eaa849a3d43e39",
       "size": 8948
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/ashita4/soulspire_core/core/mouse_lifecycle.lua",
+      "targetPath": "soulspire_core/core/mouse_lifecycle.lua",
+      "sha256": "d53666d6b5f787b8901628fe8908668e524db8f66642f947aab519f989bcf816",
+      "size": 25271
     },
     {
       "category": "addon",
@@ -6164,36 +6171,36 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/ui.lua",
       "targetPath": "soulspire_core/core/ui.lua",
-      "sha256": "4fb728ba7bddbd6e44284df0bb0e663d2ab799fc958223e2a630c52cef951939",
-      "size": 29493
+      "sha256": "922777bc5b403abf62c7efaf41c538675f3bf627244bbfd3dae72b369f5c62b8",
+      "size": 29784
     },
     {
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/modules/character.lua",
       "targetPath": "soulspire_core/modules/character.lua",
-      "sha256": "ca0ba54efee52383854df7d4ec5814d467bf999e78374dacc210bcb79bc4ef84",
-      "size": 46457
+      "sha256": "976d36c9405d6baabb0049f38f5358c55bd41f2d9de1a7f5cb73d2b653213366",
+      "size": 46483
     },
     {
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/modules/soul_talents.lua",
       "targetPath": "soulspire_core/modules/soul_talents.lua",
-      "sha256": "01d0c5a7dda1c573e64b17f2d0fe4465a3cfb4a48b1076f9a6f505837cfe0a7e",
-      "size": 26261
+      "sha256": "c8cac65645cab5d05c47670851b2988a3cd546ef1c62229fe82ac76b67bc0993",
+      "size": 26287
     },
     {
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/modules/weapon_mastery.lua",
       "targetPath": "soulspire_core/modules/weapon_mastery.lua",
-      "sha256": "289c1ec6620158fb8cb8054d58693f0e948ccd70565d2cf239f42e6f29e71348",
-      "size": 22011
+      "sha256": "5d5f67b9fa6a0da3826ff5edbc3237e9d72ad0690f5797d552cd4219a315d91c",
+      "size": 22037
     },
     {
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/soulspire_core.lua",
       "targetPath": "soulspire_core/soulspire_core.lua",
-      "sha256": "c62326b2332ce7137a3eeeead4653d8995c8b42b768a48fbf8bce235393c6926",
-      "size": 37165
+      "sha256": "949d0b2ee23df260149eb79ce593ac8798fec082ef58fc7fb17448b7b680899b",
+      "size": 39338
     },
     {
       "category": "addon",
@@ -6215,6 +6222,13 @@
       "targetPath": "soulspire_core/tests/foundations_test.lua",
       "sha256": "c2dc15c737807065cbbbb6dd91261b862e2bea9219369064e152e1c39befb899",
       "size": 5751
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/ashita4/soulspire_core/tests/mouse_lifecycle_test.lua",
+      "targetPath": "soulspire_core/tests/mouse_lifecycle_test.lua",
+      "sha256": "f7f6ae92b43ebea6befa9c61750c1211f1e264add9769c87294e04b99d9d3b1a",
+      "size": 30266
     },
     {
       "category": "addon",

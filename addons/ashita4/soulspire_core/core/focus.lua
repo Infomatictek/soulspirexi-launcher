@@ -25,9 +25,17 @@ function Focus.new(registry)
         focus_window         = nil,
         focus_cursor         = nil,
         last_action          = 'idle',
+        on_hub_open          = nil,
+        on_hub_close         = nil,
     }, Focus)
     self:clamp_selection()
     return self
+end
+
+function Focus:set_lifecycle_hooks(hooks)
+    hooks = hooks or {}
+    self.on_hub_open  = (type(hooks.on_hub_open) == 'function') and hooks.on_hub_open or nil
+    self.on_hub_close = (type(hooks.on_hub_close) == 'function') and hooks.on_hub_close or nil
 end
 
 function Focus:count()
@@ -98,6 +106,9 @@ function Focus:open_hub(index, from_native_menu)
     self.last_action = from_native_menu and 'open_from_native_menu' or 'open_direct'
     local active = self:active_module()
     if not prev_open then
+        if type(self.on_hub_open) == 'function' then
+            self.on_hub_open(self, self.last_action)
+        end
         notify_module(active, 'on_open', self)
     end
     notify_module(active, 'on_activate', self, { from_open = (not prev_open) })
@@ -108,8 +119,11 @@ function Focus:open_from_native_menu(index)
 end
 
 function Focus:close_hub(_native)
+    local was_open = (self.hub_open == true)
     local active = self:active_module()
-    notify_module(active, 'on_close', self)
+    if was_open then
+        notify_module(active, 'on_close', self)
+    end
 
     self.hub_open = false
     self.help_open = false
@@ -118,6 +132,9 @@ function Focus:close_hub(_native)
     self.focus_window = nil
     self.focus_cursor = nil
     self.last_action = 'close'
+    if was_open and type(self.on_hub_close) == 'function' then
+        self.on_hub_close(self, 'close', false)
+    end
 end
 
 function Focus:toggle_hub(index)
@@ -129,7 +146,8 @@ function Focus:toggle_hub(index)
 end
 
 function Focus:blur_all(reason)
-    if self.hub_open then
+    local was_open = (self.hub_open == true)
+    if was_open then
         local active = self:active_module()
         notify_module(active, 'on_close', self)
     end
@@ -140,6 +158,9 @@ function Focus:blur_all(reason)
     self.focus_window = nil
     self.focus_cursor = nil
     self.last_action = reason or 'blur'
+    if type(self.on_hub_close) == 'function' then
+        self.on_hub_close(self, reason or 'blur', true)
+    end
 end
 
 function Focus:select_index(index)

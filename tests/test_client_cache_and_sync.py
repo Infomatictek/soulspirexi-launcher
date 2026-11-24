@@ -73,6 +73,13 @@ class TestClientCacheAndSync(unittest.TestCase):
             "CHARACTER_STATE_TEST_OK",
         )
 
+    def test_mouse_lifecycle_luajit_suite(self) -> None:
+        _run_lua_suite(
+            LAUNCHER_ROOT / "addons" / "ashita4" / "soulspire_core",
+            "tests/mouse_lifecycle_test.lua",
+            "PASS: all 12 SoulspireXI Core mouse/cursor lifecycle regression scenarios passed!",
+        )
+
     def test_existing_soulspire_core_suite_passes(self) -> None:
         _run_lua_suite(
             LAUNCHER_ROOT / "addons" / "ashita4" / "soulspire_core",

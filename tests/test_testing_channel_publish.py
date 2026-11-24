@@ -330,6 +330,7 @@ class TestingChannelPublishTests(unittest.TestCase):
             "soulspire_core/core/native_bridge.lua",
             "soulspire_core/core/menu_bridge.lua",
             "soulspire_core/core/input.lua",
+            "soulspire_core/core/mouse_lifecycle.lua",
             "soulspire_core/core/focus.lua",
             "soulspire_core/core/ui.lua",
             "soulspire_core/cache/manifest.json",

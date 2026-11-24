@@ -28,6 +28,7 @@ local MenuBridge    = require('core.menu_bridge')
 local NativeBridge  = require('core.native_bridge')
 local Focus         = require('core.focus')
 local Input         = require('core.input')
+local MouseLifecycle = require('core.mouse_lifecycle')
 local Assets        = require('core.assets')
 local UI            = require('core.ui')
 local WeaponMastery = require('modules.weapon_mastery')
@@ -41,6 +42,27 @@ local data_service = nil
 local character_state = nil
 local oxtl_ipc_token, oxhud_ipc_token = nil, nil
 local menu, assets, ui
+local mouse_lifecycle = MouseLifecycle.new({
+    on_mouse_activity = function(now)
+        input:on_mouse_activity(now)
+    end,
+    on_focus_regain = function()
+        if ui and ui.request_window_focus then
+            ui:request_window_focus()
+        end
+    end,
+    on_focus_lost = function()
+        input:reset()
+    end,
+})
+focus:set_lifecycle_hooks({
+    on_hub_open = function(_f, reason)
+        mouse_lifecycle:acquire(imgui, reason, os.clock())
+    end,
+    on_hub_close = function(_f, reason, clear_buttons)
+        mouse_lifecycle:release(imgui, reason, os.clock(), clear_buttons == true)
+    end,
+})
 local sf_state, sf_actions, sf_ui, sf_art
 local weapon_mastery_mod, soul_talents_mod, character_mod, cs_soul_identity
 local ui_font = nil
@@ -417,6 +439,7 @@ ashita.events.register('unload', 'soulspire_core_unload', function()
     end
     save_settings()
     focus:blur_all('unload')
+    mouse_lifecycle:release(imgui, 'unload', os.clock(), true)
     input:reset()
     if sf_art and sf_art.clear then pcall(sf_art.clear) end
     if assets then
@@ -545,14 +568,28 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
             )
             log(line5)
         end
+        local line6 = mouse_lifecycle:format_status_line()
+        log(line6)
         if type(addon.path) == 'string' and addon.path ~= '' then
             pcall(function()
                 local f = io.open(addon.path:gsub('[/\\]+$', '') .. '/soulspire_core-status.log', 'w')
                 if f then
-                    f:write('[soulspire_core] ' .. line1 .. '\n[soulspire_core] ' .. line2 .. '\n[soulspire_core] ' .. line3 .. '\n[soulspire_core] ' .. line4 .. '\n[soulspire_core] ' .. line5 .. '\n')
+                    f:write('[soulspire_core] ' .. line1 .. '\n[soulspire_core] ' .. line2 .. '\n[soulspire_core] ' .. line3 .. '\n[soulspire_core] ' .. line4 .. '\n[soulspire_core] ' .. line5 .. '\n[soulspire_core] ' .. line6 .. '\n')
                     f:close()
                 end
             end)
+        end
+    elseif sub == 'inputdiag' then
+        local d = mouse_lifecycle:diagnostics()
+        log(mouse_lifecycle:format_status_line())
+        log(('input_counters last_device=%s blocked_mouse=%d absorbed_releases=%d held_core_buttons=%s'):format(
+            tostring(input.last_device),
+            d.blocked_mouse_events,
+            d.absorbed_release_events,
+            tostring(mouse_lifecycle:has_held_core_buttons())
+        ))
+        for _, tr in ipairs(d.transitions or {}) do
+            log(('  [%.2fs] %s -> %s (%s)'):format(tr.at or 0, tr.from_owner, tr.to_owner, tr.reason))
         end
     elseif sub == 'cache' then
         if not data_service then
@@ -632,7 +669,16 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
         last_watched_form = nil
         log('Menu form watch ' .. (watch_menus and 'ENABLED (open FFXI Main Menu to log its exact form name)' or 'DISABLED'))
     else
-        log('Commands: /soulspire [open [module] | close | scale <n> | bind | bindings | status | debug | watch] (alias: /ss)')
+        log('Commands: /soulspire [open [module] | close | scale <n> | bind | bindings | status | inputdiag | syncdiag | cache | debug | watch] (alias: /ss)')
+    end
+end)
+
+-- Mouse events: balanced input ownership so clicks/drags/wheel never leak into
+-- FFXI behind Core, trailing close-button releases are absorbed cleanly, and
+-- gamepad -> mouse transitions immediately restore mouse responsiveness.
+ashita.events.register('mouse', 'soulspire_core_mouse', function(e)
+    if mouse_lifecycle:on_mouse_event(e, focus:is_hub_open(), imgui, os.clock()) then
+        e.blocked = true
     end
 end)
 
@@ -813,6 +859,10 @@ ashita.events.register('d3d_present', 'soulspire_core_present', function()
         input:arm_open_guard(0.20)
     end
 
+    -- Reconcile mouse/cursor ownership and Windows focus (Alt+Tab suspend/resume)
+    -- on every frame without ever calling Win32 ShowCursor per-frame.
+    mouse_lifecycle:tick_present(imgui, focus:is_hub_open(), now)
+
     -- Cooperative background warmup for talents.json (<=4ms/frame across read, SHA-256, and JSON parse)
     -- so opening Weapon Mastery displays cached trees instantaneously with zero main-thread stutter.
     if data_service and data_service.step_warmup and data_service:is_cache_usable() and not data_service:is_talents_warm() then
@@ -842,8 +892,8 @@ ashita.events.register('d3d_present', 'soulspire_core_present', function()
         end
     end
 
-    -- Pump hold-to-repeat for D-Pad / Left Stick / Arrow keys while Core Hub is open
-    input:tick(now, dispatch_action, focus:is_hub_open())
+    -- Pump hold-to-repeat for D-Pad / Left Stick / Arrow keys while Core Hub is open and focused
+    input:tick(now, dispatch_action, focus:is_hub_open() and mouse_lifecycle.window_focused)
 
     local native = current_native_menu()
     if watch_menus and menu and menu:is_available() then

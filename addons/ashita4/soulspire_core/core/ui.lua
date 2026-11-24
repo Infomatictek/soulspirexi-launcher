@@ -113,11 +113,16 @@ function UI.new(imgui, registry, focus, assets, opts)
         get_identity     = opts.get_identity,
         get_last_device  = opts.get_last_device,
         scale_panel_open = false,
-        last_viewport_w  = 0,
-        last_viewport_h  = 0,
-        last_dock        = { visible = false, hovered = false, clicks = 0 },
-        last_layout      = nil,
+        last_viewport_w   = 0,
+        last_viewport_h   = 0,
+        last_dock         = { visible = false, hovered = false, clicks = 0 },
+        last_layout       = nil,
+        focus_window_once = false,
     }, UI)
+end
+
+function UI:request_window_focus()
+    self.focus_window_once = true
 end
 
 function UI:set_scale(scale)
@@ -341,9 +346,15 @@ function UI:draw_hub(native, bridge_mode)
     if imgui.SetNextWindowPos then
         imgui.SetNextWindowPos({ L.posX, L.posY }, ImGuiCond_Always or 1)
     end
+    if self.focus_window_once then
+        self.focus_window_once = false
+        if imgui.SetNextWindowFocus then
+            pcall(imgui.SetNextWindowFocus)
+        end
+    end
     if imgui.PushStyleVar then imgui.PushStyleVar(ImGuiStyleVar_WindowPadding or 2, { 0, 0 }) end
 
-    local opened = imgui.Begin('SoulspireXI Core###soulspire_core_hub', true, win_flags)
+    local opened = imgui.Begin('SoulspireXI Core###soulspire_core_hub', nil, win_flags)
     if opened then
         local wx, wy = 0, 0
         if imgui.GetWindowPos then
