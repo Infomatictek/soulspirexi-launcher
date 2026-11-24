@@ -17,6 +17,7 @@ function WeaponMastery.new(sf_state, sf_actions, sf_ui)
         actions       = sf_actions,
         ui            = sf_ui,
         region        = 'arsenal', -- 'arsenal' | 'skillchains' | 'tree' | 'inspector' | 'confirm'
+        arsenal_focus = 'list',    -- 'filter' | 'list'
         arsenal_index = 1,
         sc_slot       = 1,
         node_key      = nil,
@@ -34,7 +35,13 @@ function WeaponMastery:_ensure_valid_focus()
     local rows = self.actions.filtered()
     if #rows == 0 then
         self.arsenal_index = 1
+        if self.region == 'arsenal' then
+            self.arsenal_focus = 'filter'
+        end
     else
+        if self.arsenal_focus ~= 'filter' then
+            self.arsenal_focus = 'list'
+        end
         self.arsenal_index = clamp(self.arsenal_index, 1, #rows)
         -- Keep arsenal cursor aligned with selectedWsId if nothing explicit was moved
         if self.state.selectedWsId ~= nil then
@@ -130,7 +137,7 @@ function WeaponMastery:focus_ws_and_node(ws_id, node_key)
 end
 
 function WeaponMastery:on_open()
-    if not self.state.synced then
+    if not self.state.synced or #(self.state.catalog or {}) == 0 then
         self.actions.sync()
     else
         self.actions.refreshState()
@@ -141,8 +148,12 @@ function WeaponMastery:on_open()
     self:_ensure_valid_focus()
 end
 
-function WeaponMastery:on_activate()
-    self:on_open()
+function WeaponMastery:on_activate(_focus, opts)
+    if not (opts and opts.from_open) then
+        self:on_open()
+    else
+        self:_ensure_valid_focus()
+    end
 end
 
 function WeaponMastery:on_deactivate()
@@ -210,17 +221,74 @@ function WeaponMastery:on_action(action)
         return true
     end
 
-    -- 2. Arsenal Region (left rail WS browser)
+    -- 2. Arsenal Region (left rail weapon filter bar + WS browser)
     if self.region == 'arsenal' then
         local rows = self.actions.filtered()
+
+        if self.arsenal_focus == 'filter' then
+            if action == 'left' or action == 'right' then
+                local dir = (action == 'left') and -1 or 1
+                local sk = self.actions.cycleSkillFilter(dir)
+                self.arsenal_index = 1
+                if sk and self.actions.setStatus then
+                    self.actions.setStatus('Arsenal Filter: ' .. tostring(sk.name))
+                end
+                return true
+            elseif action == 'context' then
+                local sk = self.actions.cycleSkillFilter(1)
+                self.arsenal_index = 1
+                if sk and self.actions.setStatus then
+                    self.actions.setStatus('Arsenal Filter: ' .. tostring(sk.name))
+                end
+                return true
+            elseif action == 'down' then
+                if #rows > 0 then
+                    self.arsenal_focus = 'list'
+                    self.arsenal_index = 1
+                end
+                return true
+            elseif action == 'up' then
+                if #rows > 0 then
+                    self.arsenal_focus = 'list'
+                    self.arsenal_index = #rows
+                end
+                return true
+            elseif action == 'confirm' then
+                if #rows == 0 then
+                    local status = self.actions.getArsenalStatus and self.actions.getArsenalStatus(rows) or nil
+                    if status and status.action and self.actions.applyFilterAction then
+                        self.actions.applyFilterAction(status.action)
+                    elseif st.selectedSkill == -1 then
+                        st.selectedSkill = 0
+                    end
+                    local nextRows = self.actions.filtered()
+                    if #nextRows > 0 then
+                        self.arsenal_focus = 'list'
+                        self.arsenal_index = 1
+                    end
+                else
+                    self.arsenal_focus = 'list'
+                    self.arsenal_index = 1
+                end
+                return true
+            elseif action == 'cancel' then
+                return false -- let Core close cleanly
+            end
+            return false
+        end
+
         if action == 'up' then
-            if #rows > 0 then
-                self.arsenal_index = ((self.arsenal_index - 2) % #rows) + 1
+            if #rows > 0 and self.arsenal_index > 1 then
+                self.arsenal_index = self.arsenal_index - 1
+            else
+                self.arsenal_focus = 'filter'
             end
             return true
         elseif action == 'down' then
-            if #rows > 0 then
-                self.arsenal_index = (self.arsenal_index % #rows) + 1
+            if #rows > 0 and self.arsenal_index < #rows then
+                self.arsenal_index = self.arsenal_index + 1
+            else
+                self.arsenal_focus = 'filter'
             end
             return true
         elseif action == 'confirm' or action == 'right' then
@@ -242,11 +310,14 @@ function WeaponMastery:on_action(action)
         elseif action == 'context' then
             local sk = self.actions.cycleSkillFilter(1)
             self.arsenal_index = 1
+            local nextRows = self.actions.filtered()
+            self.arsenal_focus = (#nextRows > 0) and 'list' or 'filter'
             if sk and self.actions.setStatus then
                 self.actions.setStatus('Arsenal Filter: ' .. tostring(sk.name))
             end
             return true
         elseif action == 'left' then
+            self.arsenal_focus = 'filter'
             return true
         elseif action == 'cancel' then
             return false -- let Core close cleanly
@@ -423,7 +494,10 @@ function WeaponMastery:get_hints()
     if self:has_modal() then
         return '[D-Pad] Confirm/Cancel   [A] Execute   [B] Cancel'
     elseif self.region == 'arsenal' then
-        return '[D-Pad] Select WS   [A] Open Tree   [X] Filter Weapon   [LB/RB] Switch Module   [Y] Help   [B] Close'
+        if self.arsenal_focus == 'filter' then
+            return '[D-Pad Left/Right] Weapon Filter   [Down] Arsenal List   [A] Apply/Browse   [X] Next Filter   [LB/RB] Modules   [B] Close'
+        end
+        return '[D-Pad] Select WS / Up-Left Filter   [A] Open Tree   [X] Filter Weapon   [LB/RB] Switch Module   [Y] Help   [B] Close'
     elseif self.region == 'skillchains' then
         return '[D-Pad] Select Slot/Tree   [A] Next SC   [X] Prev SC   [B] Back to Tree   [LB/RB] Switch Module'
     elseif self.region == 'inspector' then
@@ -437,6 +511,7 @@ function WeaponMastery:draw(_imgui, _dl, _F, L, x, y, w, h)
     self:_ensure_valid_focus()
     local nav = {
         region        = self.region,
+        arsenal_focus = self.arsenal_focus,
         arsenal_index = self.arsenal_index,
         sc_slot       = self.sc_slot,
         node_key      = self.node_key,
@@ -445,6 +520,8 @@ function WeaponMastery:draw(_imgui, _dl, _F, L, x, y, w, h)
         on_focus      = function(reg, arg1)
             self.region = reg
             if reg == 'arsenal' and type(arg1) == 'number' then
+                local rows = self.actions.filtered()
+                self.arsenal_focus = (#rows > 0) and 'list' or 'filter'
                 self.arsenal_index = arg1
             elseif reg == 'tree' and type(arg1) == 'string' then
                 self.node_key = arg1

@@ -104,15 +104,17 @@ function SoulTalents:get_invested_nodes()
 end
 
 function SoulTalents:on_open()
-    if not self.state.synced then
+    if not self.state.synced or #(self.state.catalog or {}) == 0 then
         self.actions.sync()
     else
         self.actions.refreshState()
     end
 end
 
-function SoulTalents:on_activate()
-    self:on_open()
+function SoulTalents:on_activate(_focus, opts)
+    if not (opts and opts.from_open) then
+        self:on_open()
+    end
     if self.region == 'confirm_reset' then
         self.region = 'slots'
     end

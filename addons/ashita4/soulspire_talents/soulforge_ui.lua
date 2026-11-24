@@ -440,6 +440,59 @@ local function drawHeader(state, action, L, x, y, w, h)
     end
 end
 
+local function resolveArsenalStatus(state, action, rows)
+    if action and type(action.getArsenalStatus) == 'function' then
+        return action.getArsenalStatus(rows)
+    end
+    local count = type(rows) == 'table' and #rows or 0
+    if count > 0 then
+        return { kind = 'ready', count = count }
+    end
+    if not state.synced then
+        return {
+            kind        = 'loading',
+            title       = 'SYNCING ARSENAL...',
+            body        = 'Requesting weapon skill catalog and mastery state from server...',
+            action      = 'sync',
+            actionLabel = 'RETRY SYNC',
+        }
+    end
+    if (state.selectedSkill == -1) and (tonumber(state.mainSkill) or 0) == 0 and (tonumber(state.rangedSkill) or 0) == 0 then
+        return {
+            kind        = 'no_weapon_equipped',
+            title       = 'NO WEAPON EQUIPPED',
+            body        = 'No Main or Ranged weapon is equipped for the Equipped filter. Equip a weapon or switch to All Weapons.',
+            action      = 'all_weapons',
+            actionLabel = 'SHOW ALL WEAPONS',
+        }
+    end
+    return {
+        kind        = 'filter_empty',
+        title       = 'NO ELIGIBLE SKILLS',
+        body        = 'No weapon skills match the active filter.',
+        action      = 'all_weapons',
+        actionLabel = 'SHOW ALL WEAPONS',
+    }
+end
+
+local function triggerArsenalRecovery(state, action, status, nav)
+    if not status or not status.action then return end
+    if action and type(action.applyFilterAction) == 'function' then
+        action.applyFilterAction(status.action)
+    elseif status.action == 'all_weapons' then
+        state.selectedSkill = 0
+    elseif status.action == 'clear_invested' and state.investedOnly then
+        state.investedOnly[1] = false
+    elseif status.action == 'clear_search' and state.searchBuf then
+        state.searchBuf[1] = ''
+    elseif status.action == 'sync' and action and action.sync then
+        action.sync()
+    end
+    if nav and nav.on_focus then
+        nav.on_focus('arsenal', 1)
+    end
+end
+
 -- ---------------------------------------------------------------------------
 -- 2. Left Rail: Arsenal Navigation
 -- ---------------------------------------------------------------------------
@@ -448,6 +501,7 @@ local function drawArsenal(state, action, L, x, y, w, h, nav)
     local s  = L.uiScale
     local ui = ensureUiState(state)
     local regionFocused = (nav ~= nil and nav.region == 'arsenal')
+    local filterFocused = regionFocused and (nav.arsenal_focus == 'filter')
 
     F.drawPanelFrame(dl, x, y, w, h, {
         fillTop  = F.u32.midnight,
@@ -464,27 +518,64 @@ local function drawArsenal(state, action, L, x, y, w, h, nav)
         regionFocused and '> ARSENAL' or 'ARSENAL',
         regionFocused and F.u32.aether_cyan or F.u32.soul_gold, 0.94 * s, 'l')
     local rows = action.filtered()
-    F.drawShadowText(imgui, dl, x + w - pad, y + 12 * s, string.format('%d WS', #rows), F.u32.text_muted, 0.78 * s, 'r')
+    local status = resolveArsenalStatus(state, action, rows)
+    local countText = (status.kind == 'loading') and 'SYNCING...' or string.format('%d WS', #rows)
+    local countCol  = (status.kind == 'loading') and F.u32.aether_cyan
+        or (#rows > 0 and F.u32.text_muted or F.u32.soul_gold_dim)
+    F.drawShadowText(imgui, dl, x + w - pad, y + 12 * s, countText, countCol, 0.78 * s, 'r')
     F.drawDivider(dl, x + pad, y + 32 * s, w - pad * 2, regionFocused and F.u32.aether_cyan or F.u32.soul_gold_dim)
 
-    -- Weapon family filter combo
+    -- Weapon family filter bar: [<] [Combo] [>] for mouse + gamepad filter navigation
     local ctrlW = w - pad * 2
-    imgui.SetCursorScreenPos({ x + pad, y + 40 * s })
-    imgui.PushItemWidth(ctrlW)
+    local filtY = y + 40 * s
+    local filtH = math.floor(22 * s)
+    local arrW  = math.floor(20 * s)
+    local arrGap = math.floor(3 * s)
+    local comboW = math.max(80, ctrlW - (arrW + arrGap) * 2)
+
+    if filterFocused and dl and dl.AddRect then
+        dl:AddRect({ x + pad - 2, filtY - 2 }, { x + pad + ctrlW + 2, filtY + filtH + 2 }, F.u32.aether_cyan, 4, 0, 1.8)
+    end
+
+    if F.drawActionButton(imgui, dl, '##sf_filter_prev', x + pad, filtY, arrW, filtH, '<',
+        filterFocused and 'cyan' or 'neutral', { fontScale = 0.76 * s }) then
+        if action.cycleSkillFilter then action.cycleSkillFilter(-1) end
+        if nav and nav.on_focus then nav.on_focus('arsenal', 1) end
+    end
+
     local skillName = 'Equipped'
     for _, sk in ipairs(action.skills or {}) do
         if sk.id == state.selectedSkill then skillName = sk.name; break end
     end
+    if state.selectedSkill == -1 then
+        local eqSum = action.getEquippedSummary and action.getEquippedSummary() or nil
+        if eqSum then
+            skillName = 'Equipped (' .. eqSum .. ')'
+        elseif state.synced then
+            skillName = 'Equipped (None)'
+        end
+    end
+    imgui.SetCursorScreenPos({ x + pad + arrW + arrGap, filtY })
+    imgui.PushItemWidth(comboW)
     if imgui.BeginCombo('##sf_skill_filter', skillName) then
         for _, sk in ipairs(action.skills or {}) do
             if imgui.Selectable(sk.name, sk.id == state.selectedSkill) then
                 state.selectedSkill = sk.id
+                if nav and nav.on_focus then nav.on_focus('arsenal', 1) end
             end
         end
         imgui.EndCombo()
     end
+    imgui.PopItemWidth()
+
+    if F.drawActionButton(imgui, dl, '##sf_filter_next', x + pad + arrW + arrGap + comboW + arrGap, filtY, arrW, filtH, '>',
+        filterFocused and 'cyan' or 'neutral', { fontScale = 0.76 * s }) then
+        if action.cycleSkillFilter then action.cycleSkillFilter(1) end
+        if nav and nav.on_focus then nav.on_focus('arsenal', 1) end
+    end
 
     imgui.SetCursorScreenPos({ x + pad, y + 70 * s })
+    imgui.PushItemWidth(ctrlW)
     imgui.InputText('##sf_ws_search', state.searchBuf, 64)
     imgui.PopItemWidth()
 
@@ -504,7 +595,7 @@ local function drawArsenal(state, action, L, x, y, w, h, nav)
         for idx, ws in ipairs(rows) do
             local rx, ry = F.toXY(imgui.GetCursorScreenPos())
             local selected = (state.selectedWsId == ws.id)
-            local padFocused = regionFocused and (nav.arsenal_index == idx)
+            local padFocused = regionFocused and (not filterFocused) and (nav.arsenal_index == idx)
             local pts      = tonumber(state.spentByWs[ws.id]) or 0
             local unlocked = state.unlockedByWs[ws.id] == true
             local isEvoWs  = (ws.id == 1 or ws.id == 47)
@@ -574,7 +665,53 @@ local function drawArsenal(state, action, L, x, y, w, h, nav)
         end
 
         if #rows == 0 then
-            F.drawShadowText(imgui, cdl, 8, 12, 'No weapon skills match filter.', F.u32.text_muted, 0.84 * s, 'l')
+            local ex, ey = F.toXY(imgui.GetCursorScreenPos())
+            local cardW  = math.max(120, ctrlW - 6 * s)
+            local isLoading = (status.kind == 'loading')
+            local accentCol = isLoading and F.u32.aether_cyan or F.u32.soul_gold_dim
+            local titleCol  = isLoading and F.u32.aether_cyan or F.u32.soul_gold_bright
+            local fillCol   = isLoading and F.u32.midnight_selected or F.u32.midnight_deep
+            local chars     = math.max(18, math.floor((cardW - 20 * s) / (6.6 * s)))
+            local bodyLines = F.wrapLines(status.body or 'No eligible weapon skills.', chars, 6)
+            local btnH      = math.floor(24 * s)
+            local hintH     = (nav ~= nil) and math.floor(18 * s) or 0
+            local cardH     = math.floor(42 * s + #bodyLines * 15 * s + (status.action and (btnH + 14 * s) or 8 * s) + hintH)
+
+            if cdl and cdl.AddRectFilled then
+                cdl:AddRectFilled({ ex, ey + 2 }, { ex + cardW, ey + 2 + cardH }, fillCol, 5)
+                cdl:AddRect({ ex, ey + 2 }, { ex + cardW, ey + 2 + cardH }, accentCol, 5, 0, isLoading and 1.5 or 1.1)
+            end
+
+            local dots = isLoading and string.rep('.', (math.floor((os.clock() or 0) * 2) % 3) + 1) or ''
+            local badge = isLoading and ('[~] ' .. tostring(status.title or 'SYNCING ARSENAL') .. dots)
+                or ('[!] ' .. tostring(status.title or 'NO ELIGIBLE SKILLS'))
+            F.drawShadowText(imgui, cdl, ex + 10 * s, ey + 10 * s,
+                F.fitText(imgui, badge, cardW - 20 * s, 0.78 * s), titleCol, 0.78 * s, 'l')
+
+            local ty = ey + 30 * s
+            for _, ln in ipairs(bodyLines) do
+                F.drawShadowText(imgui, cdl, ex + 10 * s, ty, ln, F.u32.text_secondary, 0.74 * s, 'l')
+                ty = ty + math.floor(15 * s)
+            end
+
+            if status.action and status.actionLabel then
+                ty = ty + math.floor(6 * s)
+                local bW = math.max(96, cardW - 20 * s)
+                if F.drawActionButton(imgui, cdl, '##sf_ars_empty_act', ex + 10 * s, ty, bW, btnH,
+                    status.actionLabel, isLoading and 'cyan' or 'gold', { fontScale = 0.72 * s }) then
+                    triggerArsenalRecovery(state, action, status, nav)
+                end
+                ty = ty + btnH + math.floor(6 * s)
+            end
+
+            if nav ~= nil then
+                local cue = isLoading and '[A] Retry Sync' or '[Left/Right] Filter  |  [A] ' .. tostring(status.actionLabel or 'Switch')
+                F.drawShadowText(imgui, cdl, ex + 10 * s, ty,
+                    F.fitText(imgui, cue, cardW - 20 * s, 0.68 * s), F.u32.aether_cyan, 0.68 * s, 'l')
+            end
+            if imgui.Dummy then
+                imgui.Dummy({ cardW, cardH + 6 })
+            end
         end
     end
     imgui.EndChild()
@@ -639,13 +776,58 @@ local function drawSoulforgeCanvas(state, action, L, x, y, w, h, nav)
     })
 
     if not d then
-        local cx, cy = x + w * 0.5, y + h * 0.45
-        F.drawCrystalMedallion(dl, cx, cy - 36 * s, 34 * s, {
-            rim  = F.u32.soul_gold,
-            core = F.rgba.crystal_violet,
-        })
-        F.drawShadowText(imgui, dl, cx, cy + 12 * s, 'SELECT A WEAPON SKILL FROM YOUR ARSENAL', F.u32.soul_gold_bright, 0.96 * s, 'c')
-        F.drawShadowText(imgui, dl, cx, cy + 36 * s, 'Choose a technique to awaken its Soulforge progression map.', F.u32.text_secondary, 0.84 * s, 'c')
+        local rows   = action.filtered()
+        local status = resolveArsenalStatus(state, action, rows)
+        local cx, cy = x + w * 0.5, y + h * 0.42
+
+        if status.kind == 'loading' then
+            F.drawCrystalMedallion(dl, cx, cy - 38 * s, 34 * s, {
+                rim  = F.u32.aether_cyan,
+                core = F.rgba.aether_cyan,
+            })
+            local dots = string.rep('.', (math.floor((now or 0) * 2) % 3) + 1)
+            F.drawShadowText(imgui, dl, cx, cy + 10 * s, 'SYNCING SOULFORGE DATA' .. dots, F.u32.aether_cyan, 0.98 * s, 'c')
+            F.drawShadowText(imgui, dl, cx, cy + 36 * s, 'Retrieving server-authoritative weapon skills and talent progression.', F.u32.text_secondary, 0.82 * s, 'c')
+            local bW, bH = math.floor(136 * s), math.floor(28 * s)
+            if F.drawActionButton(imgui, dl, '##sf_canvas_sync', cx - bW * 0.5, cy + 68 * s, bW, bH, 'RETRY SYNC', 'cyan', { fontScale = 0.78 * s }) then
+                triggerArsenalRecovery(state, action, status, nav)
+            end
+        elseif state.selectedWsId ~= nil then
+            local wsEntry = state.catalogById and state.catalogById[state.selectedWsId]
+            local wsLabel = wsEntry and wsEntry.name or ('Weapon Skill #' .. tostring(state.selectedWsId))
+            F.drawCrystalMedallion(dl, cx, cy - 38 * s, 34 * s, {
+                rim  = F.u32.aether_cyan,
+                core = F.rgba.crystal_violet,
+            })
+            F.drawShadowText(imgui, dl, cx, cy + 10 * s, 'LOADING ' .. string.upper(wsLabel) .. '...', F.u32.aether_cyan, 0.96 * s, 'c')
+            F.drawShadowText(imgui, dl, cx, cy + 36 * s, 'Waiting for server talent tree response.', F.u32.text_secondary, 0.82 * s, 'c')
+        elseif #rows == 0 then
+            F.drawCrystalMedallion(dl, cx, cy - 42 * s, 34 * s, {
+                rim  = F.u32.soul_gold_dim,
+                core = F.rgba.midnight_alt,
+            })
+            F.drawShadowText(imgui, dl, cx, cy + 6 * s, tostring(status.title or 'NO ELIGIBLE WEAPON SKILLS'), F.u32.soul_gold_bright, 0.98 * s, 'c')
+            local maxChars = math.max(30, math.floor((w - 80 * s) / (7.6 * s)))
+            local ly = cy + 32 * s
+            for _, ln in ipairs(F.wrapLines(status.body or 'No weapon skills match the current Arsenal filter.', maxChars, 3)) do
+                F.drawShadowText(imgui, dl, cx, ly, ln, F.u32.text_secondary, 0.82 * s, 'c')
+                ly = ly + math.floor(18 * s)
+            end
+            if status.action and status.actionLabel then
+                local bW, bH = math.floor(172 * s), math.floor(28 * s)
+                if F.drawActionButton(imgui, dl, '##sf_canvas_recover', cx - bW * 0.5, ly + 14 * s, bW, bH,
+                    status.actionLabel, 'gold', { fontScale = 0.78 * s }) then
+                    triggerArsenalRecovery(state, action, status, nav)
+                end
+            end
+        else
+            F.drawCrystalMedallion(dl, cx, cy - 36 * s, 34 * s, {
+                rim  = F.u32.soul_gold,
+                core = F.rgba.crystal_violet,
+            })
+            F.drawShadowText(imgui, dl, cx, cy + 12 * s, 'SELECT A WEAPON SKILL FROM YOUR ARSENAL', F.u32.soul_gold_bright, 0.96 * s, 'c')
+            F.drawShadowText(imgui, dl, cx, cy + 36 * s, 'Choose a technique to awaken its Soulforge progression map.', F.u32.text_secondary, 0.84 * s, 'c')
+        end
         return
     end
 

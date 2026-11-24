@@ -100,7 +100,7 @@ function Focus:open_hub(index, from_native_menu)
     if not prev_open then
         notify_module(active, 'on_open', self)
     end
-    notify_module(active, 'on_activate', self)
+    notify_module(active, 'on_activate', self, { from_open = (not prev_open) })
 end
 
 function Focus:open_from_native_menu(index)

@@ -42,6 +42,8 @@ local last_session_active = false
 local watch_menus = false
 local last_watched_form = nil
 local last_native_probe_at = 0
+local sf_last_auto_check = 0
+local sf_last_context_sig = nil
 
 local function log(msg)
     print('[soulspire_core] ' .. tostring(msg))
@@ -195,6 +197,41 @@ local function is_imgui_text_active()
         return io_obj ~= nil and io_obj.WantTextInput == true
     end)
     return ok and want == true
+end
+
+local function read_sf_context_signature()
+    local ok, sig = pcall(function()
+        local mem    = AshitaCore:GetMemoryManager()
+        local player = mem and mem:GetPlayer()
+        if not player then return nil end
+        local j = player:GetMainJob() or 0
+        if j <= 0 then return nil end
+        local getLvl = player.GetMainJobLevel or player.GetMainLevel
+        local l = getLvl and getLvl(player) or 1
+        local mainEq, rngEq = '0:0', '0:0'
+        local inv = mem.GetInventory and mem:GetInventory()
+        if inv and inv.GetEquippedItem then
+            local function eqSig(slot)
+                local eq = inv:GetEquippedItem(slot)
+                if eq and (eq.Index or 0) > 0 then
+                    local idx = eq.Index
+                    local bag = math.floor(idx / 256)
+                    local slotIdx = idx % 256
+                    local itemId = 0
+                    if inv.GetContainerItem then
+                        local it = inv:GetContainerItem(bag, slotIdx)
+                        if it and it.Id then itemId = it.Id end
+                    end
+                    return string.format('%d:%d', idx, itemId)
+                end
+                return '0:0'
+            end
+            mainEq = eqSig(0)
+            rngEq  = eqSig(2)
+        end
+        return string.format('%d|%d|%s|%s', j, l, mainEq, rngEq)
+    end)
+    return ok and sig or nil
 end
 
 local function is_player_in_session()
@@ -419,12 +456,16 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
             tostring(active and active.id or 'none'),
             tostring(native and native.name or 'none')
         )
-        local line2 = ('native_hook_reason=%s last_action=%s last_device=%s ui_scale=%.2f sf_synced=%s'):format(
+        local line2 = ('native_hook_reason=%s last_action=%s last_device=%s ui_scale=%.2f sf_synced=%s sf_cat=%d sf_eq=%d/%d sf_filt=%d'):format(
             tostring(diag.native_hook_reason),
             tostring(focus.last_action),
             tostring(input.last_device),
             tonumber(ui and ui.ui_scale or 1.0),
-            tostring(sf_state ~= nil and sf_state.synced == true)
+            tostring(sf_state ~= nil and sf_state.synced == true),
+            sf_state and #(sf_state.catalog or {}) or 0,
+            sf_state and (tonumber(sf_state.mainSkill) or 0) or 0,
+            sf_state and (tonumber(sf_state.rangedSkill) or 0) or 0,
+            sf_state and (tonumber(sf_state.selectedSkill) or -1) or -1
         )
         log(line1)
         log(line2)
@@ -559,6 +600,10 @@ ashita.events.register('packet_in', 'soulspire_core_packet_in', function(e)
     if e.id == 0x00A or e.id == 0x00B then
         focus:blur_all('zone_change')
         input:reset()
+        if sf_state then
+            sf_state.needsRefresh = true
+        end
+        sf_last_context_sig = nil
         return
     end
 
@@ -625,6 +670,35 @@ ashita.events.register('d3d_present', 'soulspire_core_present', function()
         end
         focus:open_from_native_menu(focus.active_index)
         input:arm_open_guard(0.20)
+    end
+
+    -- Keep shared Soulforge state lifecycle in sync with Core Weapon Mastery / Soul Talents
+    if sf_state and sf_actions then
+        local active_mod = focus:active_module()
+        local sf_active = focus:is_hub_open() and active_mod ~= nil
+            and (active_mod.id == 'weapon_mastery' or active_mod.id == 'soul_talents')
+        sf_state.open[1] = sf_active
+
+        if in_session and sf_active then
+            if (not sf_state.synced or #(sf_state.catalog or {}) == 0)
+                and (now - (sf_state.syncRequestedAt or 0)) >= 4.0 then
+                sf_actions.sync()
+            end
+            if (now - sf_last_auto_check) >= 1.0 then
+                sf_last_auto_check = now
+                local ctx_sig = read_sf_context_signature()
+                if ctx_sig ~= nil then
+                    if sf_last_context_sig ~= nil and ctx_sig ~= sf_last_context_sig then
+                        if not sf_state.synced or #(sf_state.catalog or {}) == 0 then
+                            sf_actions.sync()
+                        else
+                            sf_actions.refreshState()
+                        end
+                    end
+                    sf_last_context_sig = ctx_sig
+                end
+            end
+        end
     end
 
     -- Pump hold-to-repeat for D-Pad / Left Stick / Arrow keys while Core Hub is open

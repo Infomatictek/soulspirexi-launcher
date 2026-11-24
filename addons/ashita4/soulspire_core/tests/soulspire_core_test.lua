@@ -578,6 +578,162 @@ local mm_info, mm_err = NativeBridge.main_menu_status()
 assert_true(mm_info == nil and type(mm_err) == 'string', 'Headless main_menu_status fails closed cleanly')
 assert_eq(NativeBridge.consume_core_open_request(), 0, 'Headless consume_core_open_request returns 0')
 
+-- =========================================================================
+-- 7. Empty Arsenal Investigation Regression Suite:
+--    Loading vs Unavailable Distinction, Unarmed/Armed Eligibility,
+--    Different Weapons/Souls/Levels, Reopen After Sync & Gamepad Filters
+-- =========================================================================
+do
+    local s_ops = {}
+    local s_clock = 500.0
+    local st2, act2 = soulforgeState.new({
+        soulRegistry = Registry.souls,
+        clock        = function() return s_clock end,
+        sendPacket   = function(pktId, bytes, op, wsId, arg1, arg2)
+            s_ops[#s_ops + 1] = { pktId = pktId, len = #bytes, op = op, wsId = wsId, arg1 = arg1, arg2 = arg2 }
+            return true
+        end,
+    })
+    local wm2 = WeaponMastery.new(st2, act2, soulforgeUI)
+    local reg2 = Registry.new()
+    reg2:attach_controller('weapon_mastery', wm2, true)
+    local foc2 = Focus.new(reg2)
+    local ui2 = UI.new(mock_imgui, reg2, foc2, nil)
+
+    -- 7a. Opening Core directly on Weapon Mastery sends exactly ONE OP_SYNC (no duplicate burst)
+    foc2:open_from_native_menu(reg2:find_index('weapon_mastery'))
+    assert_eq(#s_ops, 1, 'Opening Weapon Mastery unsynced sends exactly one OP_SYNC (no duplicate on_open+on_activate burst)')
+    assert_eq(s_ops[1].op, soulforgeState.OP_SYNC, 'Initial op is OP_SYNC')
+    assert_eq(st2.syncState, 'loading', 'Sync state is loading before CAT_END')
+
+    -- 7b. Loading state is visually & structurally distinct from empty/unavailable state
+    local loadStatus = act2.getArsenalStatus()
+    assert_eq(loadStatus.kind, 'loading', 'Unsynced Arsenal reports loading state')
+    local drawn_pos = {}
+    local origAddText = mock_dl.AddText
+    mock_dl.AddText = function(self_dl, pos, col, txt)
+        drawn_pos[#drawn_pos + 1] = { x = pos[1], y = pos[2], col = col, text = tostring(txt or '') }
+        return origAddText(self_dl, pos, col, txt)
+    end
+
+    drawn_texts = {}
+    drawn_pos = {}
+    mockDisplay.x, mockDisplay.y = 1920, 1080
+    ui2:draw(ctx1, bridge_native:get_mode())
+    local loadJoined = table.concat(drawn_texts, '\n')
+    assert_true(loadJoined:find('SYNCING', 1, true) ~= nil, 'Loading state displays SYNCING banner')
+    assert_true(loadJoined:find('NO WEAPON EQUIPPED', 1, true) == nil, 'Loading state must NOT claim NO WEAPON EQUIPPED')
+
+    -- 7c. Reproduce exact SCH Lv.20 Heliarch unarmed scenario (server internalKey='sage' -> displayName='Heliarch', mainSkill=0, rangedSkill=0, Talent Points=60)
+    act2.handleProtoLine('META|SCH|20|60|0|60|0|0|sage')
+    act2.handleProtoLine('SPENT_BEGIN')
+    act2.handleProtoLine('SPENT_END')
+    act2.handleProtoLine('CAT_BEGIN')
+    act2.handleProtoLine('CAT|176:12:Heavy Swing:physical,177:12:Rock Crusher:magical,160:11:Shining Strike:magical,161:11:Seraph Strike:magical,1:1:Combo:physical,42:3:Savage Blade:physical,80:6:Shield Break:physical,192:25:Flaming Arrow:physical,208:26:Hot Shot:physical')
+    act2.handleProtoLine('CAT_END')
+
+    assert_eq(st2.synced, true, 'SCH Heliarch state synced')
+    assert_eq(st2.syncState, 'synced', 'Sync state transitioned to synced')
+    assert_eq(st2.jobKey, 'SCH', 'SCH job applied')
+    assert_eq(st2.jobLevel, 20, 'Lv.20 applied')
+    assert_eq(st2.avail, 60, '60 talent points preserved from server')
+    assert_eq(st2.specName, 'Heliarch', 'Heliarch Soul display name resolved')
+    assert_eq(#act2.filtered(), 0, 'Unarmed Equipped filter honestly returns 0 matching weapon skills')
+    assert_eq(act2.getArsenalStatus().kind, 'no_weapon_equipped', 'Unarmed Equipped filter reports no_weapon_equipped')
+
+    -- Verify empty-state explanation is rendered at valid in-panel screen coordinates (NOT clipped at (8,12)!)
+    drawn_texts = {}
+    drawn_pos = {}
+    ui2:draw(ctx1, bridge_native:get_mode())
+    local unarmedJoined = table.concat(drawn_texts, '\n')
+    assert_true(unarmedJoined:find('NO WEAPON EQUIPPED', 1, true) ~= nil, 'Unarmed empty state renders meaningful NO WEAPON EQUIPPED explanation')
+    assert_true(unarmedJoined:find('SHOW ALL WEAPONS', 1, true) ~= nil, 'Unarmed empty state renders SHOW ALL WEAPONS recovery button')
+    assert_true(unarmedJoined:find('SYNCING ARSENAL', 1, true) == nil, 'Unarmed empty state is distinct from loading state')
+    local foundInBounds = false
+    for _, dp in ipairs(drawn_pos) do
+        if dp.text:find('NO WEAPON EQUIPPED', 1, true) and dp.x > 20 and dp.y > 40 then
+            foundInBounds = true
+            break
+        end
+    end
+    assert_true(foundInBounds, 'Empty-state text must render at real panel coordinates (regression guard for old (8,12) bug)')
+    mock_dl.AddText = origAddText
+
+    -- 7d. Gamepad weapon filter navigation when Arsenal is empty & when populated
+    assert_eq(wm2.region, 'arsenal', 'Unarmed Arsenal stays in arsenal region')
+    assert_eq(wm2.arsenal_focus, 'filter', 'Empty Arsenal automatically focuses weapon filter bar for gamepad')
+    -- D-Pad Right cycles filter from Equipped (-1) -> All Weapons (0)
+    assert_eq(foc2:handle_action('right', ctx1), true, 'Gamepad Right cycles weapon filter forward')
+    assert_eq(st2.selectedSkill, 0, 'Right moved filter to All Weapons (0)')
+    assert_eq(#act2.filtered(), 9, 'All Weapons shows all 9 catalog WSs')
+    -- D-Pad Left cycles back to Equipped (-1), then Left again wraps to Throwing (27)
+    assert_eq(foc2:handle_action('left', ctx1), true, 'Gamepad Left cycles weapon filter backward')
+    assert_eq(st2.selectedSkill, -1, 'Left returned filter to Equipped (-1)')
+    -- Press A (confirm) on empty Equipped filter triggers smart recovery -> All Weapons & enters list!
+    assert_eq(foc2:handle_action('confirm', ctx1), true, 'Gamepad A recovers empty Equipped filter to All Weapons')
+    assert_eq(st2.selectedSkill, 0, 'Smart recovery switched filter to All Weapons')
+    assert_eq(wm2.arsenal_focus, 'list', 'Focus moved into populated Arsenal list')
+    assert_eq(wm2.arsenal_index, 1, 'Focused on first WS row')
+    -- Press Up from row 1 returns focus to filter bar; Left/Right selects specific weapon types (Staff, Club, Archery)
+    assert_eq(foc2:handle_action('up', ctx1), true, 'Gamepad Up from row 1 focuses filter bar')
+    assert_eq(wm2.arsenal_focus, 'filter', 'Filter bar focused')
+    assert_eq(foc2:handle_action('right', ctx1), true) -- H2H (1)
+    assert_eq(st2.selectedSkill, 1, 'Filter moved to Hand-to-Hand (1)')
+    assert_eq(#act2.filtered(), 1, 'Hand-to-Hand filter shows 1 WS (Combo)')
+    assert_eq(foc2:handle_action('down', ctx1), true, 'Down from filter enters WS list')
+    assert_eq(wm2.arsenal_focus, 'list', 'Back in WS list')
+    assert_eq(foc2:handle_action('left', ctx1), true, 'Left from WS list focuses filter bar')
+    assert_eq(wm2.arsenal_focus, 'filter', 'Left returned to filter bar')
+
+    -- 7e. Equipping a Staff (skill=12) + reopening Core after sync auto-populates Equipped filter & auto-selects Heavy Swing!
+    st2.selectedSkill = -1
+    st2.selectedWsId = nil
+    st2.wsDetail = nil
+    foc2:close_hub(ctx1)
+    local opsBeforeReopen = #s_ops
+    foc2:open_from_native_menu()
+    assert_eq(#s_ops, opsBeforeReopen + 1, 'Reopening after sync sends single OP_STATE refresh')
+    assert_eq(s_ops[#s_ops].op, soulforgeState.OP_STATE, 'Reopen after sync uses OP_STATE')
+    -- Server replies with META reflecting newly equipped Staff (mainSkill=12)
+    act2.handleProtoLine('META|SCH|20|60|0|60|12|0|Heliarch')
+    assert_eq(act2.getEquippedSummary(), 'Staff', 'Equipped summary reports Staff')
+    assert_eq(#act2.filtered(), 2, 'Equipped filter shows 2 Staff WSs')
+    assert_eq(st2.selectedWsId, 176, 'Equipping Staff auto-selected first eligible Staff WS (Heavy Swing)')
+    assert_eq(s_ops[#s_ops].op, soulforgeState.OP_WS, 'Auto-selection requested WS detail from server')
+    assert_eq(s_ops[#s_ops].wsId, 176, 'Requested Heavy Swing (176) detail')
+
+    -- 7f. Different weapon types (Melee + Ranged dual eligibility), different Souls & character levels
+    act2.handleProtoLine('META|RNG|50|150|10|160|2|25|Sharpshooter')
+    assert_eq(st2.jobKey, 'RNG', 'Job switched to RNG')
+    assert_eq(st2.jobLevel, 50, 'Level updated to 50')
+    assert_eq(st2.avail, 150, 'Talent points updated to 150')
+    assert_eq(act2.getEquippedSummary(), 'Dagger / Archery', 'Dual Melee + Ranged equipped summary')
+    assert_eq(#act2.filtered(), 1, 'Equipped filter matches Archery WS (Flaming Arrow)')
+
+    act2.handleProtoLine('META|WAR|75|225|0|225|6|0|Berserker')
+    assert_eq(st2.jobKey, 'WAR', 'Job switched to WAR')
+    assert_eq(st2.jobLevel, 75, 'Level updated to 75')
+    assert_eq(st2.specName, 'Berserker', 'Soul switched to Berserker')
+    assert_eq(#act2.filtered(), 1, 'Equipped Great Axe filter matches Shield Break')
+
+    act2.handleProtoLine('META|WAR|1|3|0|3|11|0|Base')
+    assert_eq(st2.jobLevel, 1, 'Lv.1 character applied cleanly')
+    assert_eq(st2.specName, 'Base', 'Base Soul applied cleanly')
+    assert_eq(#act2.filtered(), 2, 'Equipped Club filter matches 2 Club WSs')
+
+    -- 7g. Standalone /talents UI (soulforgeUI.draw) remains 100% functional in both empty & populated states
+    st2.open[1] = true
+    st2.mainSkill, st2.rangedSkill, st2.selectedSkill = 0, 0, -1
+    st2.selectedWsId, st2.wsDetail = nil, nil
+    drawn_texts = {}
+    soulforgeUI.draw(st2, act2)
+    assert_true(table.concat(drawn_texts, '\n'):find('NO WEAPON EQUIPPED', 1, true) ~= nil, 'Standalone /talents renders empty explanation cleanly')
+    st2.mainSkill = 12
+    drawn_texts = {}
+    soulforgeUI.draw(st2, act2)
+    assert_true(table.concat(drawn_texts, '\n'):find('Heavy Swing', 1, true) ~= nil, 'Standalone /talents renders populated Arsenal cleanly')
+end
+
 -- Micro-benchmark: 200 headless frames of unified Core + Weapon Mastery at 2560x1440
 mockDisplay.x, mockDisplay.y = 2560, 1440
 local t0 = os.clock()

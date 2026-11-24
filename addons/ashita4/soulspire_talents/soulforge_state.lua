@@ -40,6 +40,126 @@ M.SKILL_LIST = {
     { id = 27, name = 'Throwing' },
 }
 
+M.SKILL_NAMES = {}
+for _, sk in ipairs(M.SKILL_LIST) do
+    M.SKILL_NAMES[sk.id] = sk.name
+end
+
+function M.getSkillName(skillId)
+    local id = tonumber(skillId) or 0
+    if id == 0 then return 'None' end
+    return M.SKILL_NAMES[id] or ('Skill #' .. tostring(id))
+end
+
+function M.getEquippedSummary(state)
+    if type(state) ~= 'table' then return nil end
+    local mainSk   = tonumber(state.mainSkill) or 0
+    local rangedSk = tonumber(state.rangedSkill) or 0
+    local parts = {}
+    if mainSk > 0 then
+        parts[#parts + 1] = M.getSkillName(mainSk)
+    end
+    if rangedSk > 0 and rangedSk ~= mainSk then
+        parts[#parts + 1] = M.getSkillName(rangedSk)
+    end
+    if #parts == 0 then return nil end
+    return table.concat(parts, ' / ')
+end
+
+function M.getArsenalStatus(state, rows)
+    if type(state) ~= 'table' then
+        return {
+            kind        = 'loading',
+            title       = 'SYNCING ARSENAL...',
+            body        = 'Waiting for server weapon skill catalog and mastery state.',
+            action      = 'sync',
+            actionLabel = 'SYNC NOW',
+        }
+    end
+    local count = type(rows) == 'table' and #rows or 0
+    if count > 0 then
+        return {
+            kind  = 'ready',
+            count = count,
+        }
+    end
+
+    if not state.synced then
+        return {
+            kind        = 'loading',
+            title       = 'SYNCING ARSENAL...',
+            body        = 'Requesting server-authoritative weapon skill catalog and mastery state...',
+            action      = 'sync',
+            actionLabel = 'RETRY SYNC',
+        }
+    end
+
+    if #(state.catalog or {}) == 0 then
+        return {
+            kind        = 'catalog_empty',
+            title       = 'ARSENAL UNAVAILABLE',
+            body        = 'No weapon skills were received from the server catalog. Click SYNC or press [A] to retry.',
+            action      = 'sync',
+            actionLabel = 'SYNC NOW',
+        }
+    end
+
+    local rawQuery = ((state.searchBuf and state.searchBuf[1]) or ''):gsub('%z.*$', '')
+    local query    = string.lower(rawQuery)
+    local invOnly  = state.investedOnly and state.investedOnly[1] == true
+    local sk       = tonumber(state.selectedSkill) or -1
+    local mainSk   = tonumber(state.mainSkill) or 0
+    local rangedSk = tonumber(state.rangedSkill) or 0
+
+    if query ~= '' then
+        return {
+            kind        = 'search_empty',
+            title       = 'NO MATCHING SKILLS',
+            body        = string.format('No weapon skills match "%s" in the active filter.', rawQuery),
+            action      = 'clear_search',
+            actionLabel = 'CLEAR SEARCH',
+        }
+    end
+
+    if invOnly then
+        return {
+            kind        = 'invested_empty',
+            title       = 'NO INVESTED SKILLS',
+            body        = 'No weapon skills in this filter have invested talent points yet. Disable "Invested only" to browse eligible skills.',
+            action      = 'clear_invested',
+            actionLabel = 'SHOW ALL ELIGIBLE',
+        }
+    end
+
+    if sk == -1 then
+        if mainSk == 0 and rangedSk == 0 then
+            return {
+                kind        = 'no_weapon_equipped',
+                title       = 'NO WEAPON EQUIPPED',
+                body        = 'No Main or Ranged weapon is currently equipped for the Equipped filter. Equip a weapon or switch to All Weapons to browse your Arsenal.',
+                action      = 'all_weapons',
+                actionLabel = 'SHOW ALL WEAPONS',
+            }
+        end
+        local eqLabel = M.getEquippedSummary(state) or 'Equipped weapon'
+        return {
+            kind        = 'equipped_no_ws',
+            title       = 'NO ELIGIBLE SKILLS',
+            body        = string.format('Equipped %s has no matching weapon skills in the catalog. Switch to All Weapons to browse other families.', eqLabel),
+            action      = 'all_weapons',
+            actionLabel = 'SHOW ALL WEAPONS',
+        }
+    end
+
+    return {
+        kind        = 'filter_empty',
+        title       = 'NO ELIGIBLE SKILLS',
+        body        = string.format('No weapon skills matched %s. Switch to All Weapons to browse your full Arsenal.', M.getSkillName(sk)),
+        action      = 'all_weapons',
+        actionLabel = 'SHOW ALL WEAPONS',
+    }
+end
+
 local function splitPipe(str)
     local out = {}
     local start = 1
@@ -90,10 +210,13 @@ function M.new(opts)
     end
 
     local state = {
-        open             = { false },
-        synced           = false,
-        syncRequestedAt  = 0,
-        jobKey           = '---',
+        open                = { false },
+        synced              = false,
+        syncState           = 'idle', -- 'idle' | 'loading' | 'synced'
+        syncRequestedAt     = 0,
+        lastSyncCompletedAt = 0,
+        needsRefresh        = false,
+        jobKey              = '---',
         specName         = 'Base',
         rawSpecKey       = 'Base',
         jobLevel         = 1,
@@ -185,10 +308,15 @@ function M.new(opts)
 
     local function requestFullSync()
         state.syncRequestedAt = clockFn()
+        if not state.synced or #(state.catalog or {}) == 0 then
+            state.syncState = 'loading'
+        end
+        state.needsRefresh = false
         sendTalentPacket(M.OP_SYNC, 0, 0, 0)
     end
 
     local function requestStateRefresh()
+        state.needsRefresh = false
         sendTalentPacket(M.OP_STATE, 0, 0, 0)
     end
 
@@ -263,14 +391,72 @@ function M.new(opts)
         end
     end
 
+    local function getFilteredCatalog()
+        local list = {}
+        local rawQuery = (state.searchBuf[1] or ''):gsub('%z.*$', '')
+        local query = string.lower(rawQuery)
+        local sk = state.selectedSkill
+
+        for _, ws in ipairs(state.catalog) do
+            local matchSkill = false
+            if sk == 0 then
+                matchSkill = true
+            elseif sk == -1 then
+                matchSkill = (state.mainSkill ~= 0 and ws.skill == state.mainSkill)
+                    or (state.rangedSkill ~= 0 and ws.skill == state.rangedSkill)
+            else
+                matchSkill = (ws.skill == sk)
+            end
+
+            if matchSkill then
+                local spent = state.spentByWs[ws.id] or 0
+                local matchInvested = (not state.investedOnly[1]) or (spent > 0)
+                local matchQuery = (query == '') or (string.find(string.lower(ws.name), query, 1, true) ~= nil)
+                if matchInvested and matchQuery then
+                    table.insert(list, ws)
+                end
+            end
+        end
+
+        return list
+    end
+
+    local function autoSelectEligibleWS()
+        if not state.synced or #(state.catalog or {}) == 0 then
+            return false
+        end
+        if state.selectedWsId ~= nil then
+            if state.wsDetail == nil or state.wsDetail.id ~= state.selectedWsId then
+                requestWS(state.selectedWsId)
+                return true
+            end
+            return false
+        end
+        local rows = getFilteredCatalog()
+        if #rows > 0 then
+            requestWS(rows[1].id)
+            return true
+        end
+        for _, ws in ipairs(state.catalog) do
+            if (state.mainSkill ~= 0 and ws.skill == state.mainSkill)
+                or (state.rangedSkill ~= 0 and ws.skill == state.rangedSkill) then
+                requestWS(ws.id)
+                return true
+            end
+        end
+        return false
+    end
+
     local function handleProtoLine(payload)
         if type(payload) ~= 'string' or payload == '' then return false end
         local parts = splitPipe(payload)
         local kind = parts[1]
 
         if kind == 'META' then
-            local prevJob  = state.jobKey
-            local prevSpec = state.specName
+            local prevJob    = state.jobKey
+            local prevSpec   = state.specName
+            local prevMain   = state.mainSkill
+            local prevRanged = state.rangedSkill
             state.jobKey      = parts[2] or '---'
             state.jobLevel    = tonumber(parts[3]) or 1
             state.avail       = tonumber(parts[4]) or 0
@@ -300,6 +486,9 @@ function M.new(opts)
                 if state.open[1] then
                     requestFullSync()
                 end
+            elseif (prevMain ~= state.mainSkill or prevRanged ~= state.rangedSkill) and state.selectedWsId == nil then
+                -- Character equipped an eligible weapon after initial sync: auto-open its first eligible WS
+                autoSelectEligibleWS()
             end
             return true
         elseif kind == 'SPENT_BEGIN' then
@@ -361,16 +550,10 @@ function M.new(opts)
                 end
                 state.tempCatalog = nil
                 state.synced = true
-                if state.selectedWsId == nil then
-                    for _, ws in ipairs(state.catalog) do
-                        if ws.skill == state.mainSkill or ws.skill == state.rangedSkill then
-                            requestWS(ws.id)
-                            break
-                        end
-                    end
-                elseif state.wsDetail == nil or state.wsDetail.id ~= state.selectedWsId then
-                    requestWS(state.selectedWsId)
-                end
+                state.syncState = 'synced'
+                state.lastSyncCompletedAt = clockFn()
+                state.needsRefresh = false
+                autoSelectEligibleWS()
             end
             return true
         elseif kind == 'WS' then
@@ -494,35 +677,6 @@ function M.new(opts)
         return false
     end
 
-    local function getFilteredCatalog()
-        local list = {}
-        local rawQuery = (state.searchBuf[1] or ''):gsub('%z.*$', '')
-        local query = string.lower(rawQuery)
-        local sk = state.selectedSkill
-
-        for _, ws in ipairs(state.catalog) do
-            local matchSkill = false
-            if sk == 0 then
-                matchSkill = true
-            elseif sk == -1 then
-                matchSkill = (ws.skill == state.mainSkill) or (state.rangedSkill ~= 0 and ws.skill == state.rangedSkill)
-            else
-                matchSkill = (ws.skill == sk)
-            end
-
-            if matchSkill then
-                local spent = state.spentByWs[ws.id] or 0
-                local matchInvested = (not state.investedOnly[1]) or (spent > 0)
-                local matchQuery = (query == '') or (string.find(string.lower(ws.name), query, 1, true) ~= nil)
-                if matchInvested and matchQuery then
-                    table.insert(list, ws)
-                end
-            end
-        end
-
-        return list
-    end
-
     local function cycleSkillFilter(dir)
         local curIdx = 1
         for i, sk in ipairs(M.SKILL_LIST) do
@@ -537,25 +691,57 @@ function M.new(opts)
         return M.SKILL_LIST[nextIdx]
     end
 
+    local function getEquippedSummary()
+        return M.getEquippedSummary(state)
+    end
+
+    local function getArsenalStatus(rows)
+        return M.getArsenalStatus(state, rows or getFilteredCatalog())
+    end
+
+    local function applyFilterAction(kind)
+        if kind == 'all_weapons' then
+            state.selectedSkill = 0
+            setStatus('Arsenal Filter: All Weapons')
+            return true
+        elseif kind == 'clear_invested' then
+            state.investedOnly[1] = false
+            setStatus('Showing all eligible weapon skills.')
+            return true
+        elseif kind == 'clear_search' then
+            state.searchBuf[1] = ''
+            setStatus('Cleared weapon skill search filter.')
+            return true
+        elseif kind == 'sync' then
+            setStatus('Syncing weapon skill Arsenal from server...')
+            requestFullSync()
+            return true
+        end
+        return false
+    end
+
     local actions = {
-        send             = sendTalentPacket,
-        requestWS        = requestWS,
-        sync             = requestFullSync,
-        refreshState     = requestStateRefresh,
-        filtered         = getFilteredCatalog,
-        skills           = M.SKILL_LIST,
-        cycleSkillFilter = cycleSkillFilter,
-        investNode       = investNode,
-        refundNode       = refundNode,
-        cycleSkillchain  = cycleSkillchain,
-        resetWS          = resetWS,
-        resetAll         = resetAll,
-        setStatus        = setStatus,
-        isPendingActive  = isPendingActive,
-        handleProtoLine  = handleProtoLine,
-        handlePacketIn   = handlePacketIn,
-        resetTransient   = resetTransient,
-        savePrefs        = onSavePrefs,
+        send               = sendTalentPacket,
+        requestWS          = requestWS,
+        sync               = requestFullSync,
+        refreshState       = requestStateRefresh,
+        filtered           = getFilteredCatalog,
+        skills             = M.SKILL_LIST,
+        cycleSkillFilter   = cycleSkillFilter,
+        getEquippedSummary = getEquippedSummary,
+        getArsenalStatus   = getArsenalStatus,
+        applyFilterAction  = applyFilterAction,
+        investNode         = investNode,
+        refundNode         = refundNode,
+        cycleSkillchain    = cycleSkillchain,
+        resetWS            = resetWS,
+        resetAll           = resetAll,
+        setStatus          = setStatus,
+        isPendingActive    = isPendingActive,
+        handleProtoLine    = handleProtoLine,
+        handlePacketIn     = handlePacketIn,
+        resetTransient     = resetTransient,
+        savePrefs          = onSavePrefs,
     }
 
     return state, actions
