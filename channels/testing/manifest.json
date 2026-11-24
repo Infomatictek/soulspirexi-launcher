@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.2.0-testing.berserker.1",
+  "manifestVersion": "2.2.0-testing.1",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
-    "version": "berserker_dual_great_axe (533c5db / cert-ws3-weap-002-127d340)",
-    "branch": "berserker_dual_great_axe",
-    "commit": "533c5dbbb5ff44f1fd5d0f28d762478b2f245b70",
-    "dockerImage": "soulspirexi/server:cert-ws3-weap-002-127d340",
+    "version": "main (WS3-WEAP-002 integrated)",
+    "branch": "main",
+    "commit": "main",
+    "dockerImage": "soulspirexi/server:main",
     "crystalJobsHooks": 27,
-    "notes": "WS3-WEAP-002 Berserker Dual Great Axe Testing Channel: 27-hook registry-driven soulspire_native.dll (ec898519...), soul-weapon-config.json (weaponConfigHash=85de194dbb914f94), and opt-in /soulspire weapondiag probe (disabled by default)."
+    "notes": "Aligned with main after WS3-WEAP-002 integration (27-hook registry-driven soulspire_native.dll, weaponConfigHash=85de194dbb914f94, opt-in /soulspire weapondiag probe disabled by default)."
   },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
@@ -23,8 +23,8 @@
   "repo": {
     "owner": "Infomatictek",
     "name": "soulspirexi-launcher",
-    "branch": "feat/berserker-dual-great-axe",
-    "rawBaseUrl": "https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/feat/berserker-dual-great-axe"
+    "branch": "main",
+    "rawBaseUrl": "https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/main"
   },
   "bootstrap": {
     "ashitaZipUrl": "https://github.com/AshitaXI/Ashita-v4beta/archive/refs/heads/main.zip",
@@ -116,7 +116,7 @@
       "category": "plugin",
       "sourcePath": "channels/testing/payload/plugins/ashita4/soulspire_native.dll",
       "targetPath": "soulspire_native.dll",
-      "sha256": "ec8985192bdbb4561912959560afea8c51b569b3ee64b5b7fdc45271181466a2",
+      "sha256": "6be862419bdf12d6b2c9ff22e3b4d26cc79881f8545b5113cb5d5286d006f464",
       "size": 215552
     },
     {
@@ -10015,7 +10015,7 @@
     "hash": "cf86aa59ff8d16c6",
     "idLockStatus": "locked",
     "nativeDllCompiledHash": "cf86aa59ff8d16c6",
-    "nativeDllSha256": "ec8985192bdbb4561912959560afea8c51b569b3ee64b5b7fdc45271181466a2",
+    "nativeDllSha256": "6be862419bdf12d6b2c9ff22e3b4d26cc79881f8545b5113cb5d5286d006f464",
     "nativeDllClientVerified": false,
     "nativeHooks": 27,
     "crystalJobsHooks": 27
