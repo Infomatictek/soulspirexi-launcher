@@ -632,6 +632,7 @@ function M.new(config_path, calibration_path, native_reload_fn)
         }
         return true
     end
+    self.observe_oxsi = self.observe_oxsi_packet
 
     function self:get_peer(actor_id, now_sec)
         local rec = self.peers_by_actor[actor_id]
