@@ -577,6 +577,30 @@
                 <!-- TAB 3: SETUP & DIAGNOSTICS -->
                 <ScrollViewer Visibility="{Binding IsSetupTab, Converter={StaticResource BoolToVis}}" VerticalScrollBarVisibility="Auto">
                     <StackPanel>
+                        <Border Background="{StaticResource BgCard}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="8" Padding="18" Margin="0,0,0,16">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="12" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="LAUNCHER INSTALLATION &amp; AUTOMATIC SELF-UPDATE" FontSize="13.5" FontWeight="Bold" Foreground="{StaticResource GoldAccent}" />
+                                    <TextBlock Text="{Binding LauncherInstallLocationText}" FontSize="12" Foreground="{StaticResource TextPrimary}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding LauncherUpdateStatusText}" FontSize="11.5" Foreground="{StaticResource CyanAccent}" Margin="0,2,0,0" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Content="Check Launcher Update" Style="{StaticResource SecondaryButton}" Command="{Binding CheckLauncherUpdateCommand}" Margin="0,0,8,0" />
+                                    <Button Content="Install Per-User" Style="{StaticResource SecondaryButton}" Command="{Binding InstallPerUserLauncherCommand}"
+                                            Visibility="{Binding CanInstallPerUser, Converter={StaticResource BoolToVis}}"
+                                            ToolTip="Install SoulspireLauncher.exe &amp; SoulspireUpdater.exe into %LOCALAPPDATA%\SoulspireXI\Launcher with Start Menu and Desktop shortcuts (no admin required)"
+                                            Margin="0,0,8,0" />
+                                    <Button Content="{Binding RollbackLauncherButtonText}" Style="{StaticResource SecondaryButton}" Command="{Binding RollbackLauncherCommand}"
+                                            Visibility="{Binding CanRollbackLauncher, Converter={StaticResource BoolToVis}}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+
                         <Border Background="{StaticResource BgCard}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="8" Padding="20" Margin="0,0,0,16">
                             <StackPanel>
                                 <Grid Margin="0,0,0,14">

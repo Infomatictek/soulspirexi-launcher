@@ -38,6 +38,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private int _pendingUpdatesCount;
     private string _plainPassword = string.Empty;
     private string? _manifestUnavailableError;
+    private LauncherUpdateStage _launcherUpdateStage = LauncherUpdateStage.Idle;
+    private string _launcherUpdateStatusText = "Up to date (auto-check enabled)";
+    private LauncherInstallState? _installState;
 
     public MainViewModel()
     {
@@ -92,6 +95,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         SelectProductionServerCommand = new RelayCommand(() => SelectedServerTarget = ServerTargetMode.Production);
         StopStagingRelayCommand = new RelayCommand(StopStagingRelay, () => IsStagingRelayActive);
         ResetStagingDefaultsCommand = new RelayCommand(ResetStagingDefaults);
+        InstallPerUserLauncherCommand = new RelayCommand(InstallPerUserLauncher, () => !IsBusy && CanInstallPerUser);
+        RollbackLauncherCommand = new AsyncRelayCommand(RollbackLauncherAsync, () => !IsBusy && CanRollbackLauncher);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -124,6 +129,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public ICommand SelectProductionServerCommand { get; }
     public ICommand StopStagingRelayCommand { get; }
     public ICommand ResetStagingDefaultsCommand { get; }
+    public ICommand InstallPerUserLauncherCommand { get; }
+    public ICommand RollbackLauncherCommand { get; }
 
     public IReadOnlyList<ServerTargetMode> ServerTargetOptions { get; } =
     [
@@ -885,6 +892,66 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     public bool IsLauncherUpdateAvailable => _availableLauncherUpdate?.UpdateAvailable == true;
 
+    public LauncherUpdateStage LauncherUpdateStage
+    {
+        get => _launcherUpdateStage;
+        private set
+        {
+            if (SetField(ref _launcherUpdateStage, value))
+            {
+                OnPropertyChanged(nameof(LauncherUpdateStatusText));
+            }
+        }
+    }
+
+    public string LauncherUpdateStatusText
+    {
+        get => _launcherUpdateStatusText;
+        private set => SetField(ref _launcherUpdateStatusText, value);
+    }
+
+    public bool CanInstallPerUser
+    {
+        get
+        {
+            var exePath = LauncherSelfUpdateService.GetCurrentExecutablePath();
+            return !string.IsNullOrWhiteSpace(exePath) &&
+                   !LauncherInstallationService.IsRunningFromPerUserInstall(exePath);
+        }
+    }
+
+    public bool CanRollbackLauncher
+    {
+        get
+        {
+            var exePath = LauncherSelfUpdateService.GetCurrentExecutablePath();
+            var dir = !string.IsNullOrWhiteSpace(exePath) ? Path.GetDirectoryName(exePath) : null;
+            return !string.IsNullOrWhiteSpace(dir) && LauncherInstallationService.CanRollback(dir, out _);
+        }
+    }
+
+    public string RollbackLauncherButtonText =>
+        !string.IsNullOrWhiteSpace(_installState?.PreviousVersion)
+            ? $"Rollback to {_installState.PreviousVersion}"
+            : "Rollback Previous Launcher";
+
+    public string LauncherInstallLocationText
+    {
+        get
+        {
+            var exePath = LauncherSelfUpdateService.GetCurrentExecutablePath();
+            if (string.IsNullOrWhiteSpace(exePath))
+            {
+                return "Development / unpacked build";
+            }
+
+            var mode = LauncherInstallationService.IsRunningFromPerUserInstall(exePath)
+                ? "Per-user install"
+                : "Portable location";
+            return $"{mode}: {Path.GetDirectoryName(exePath)}";
+        }
+    }
+
     public string LauncherUpdateButtonText => IsLauncherUpdateAvailable
         ? $"Update Launcher ({_availableLauncherUpdate!.LatestTag})"
         : "Check Launcher Update";
@@ -954,12 +1021,27 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     public async Task InitializeAsync()
     {
-        var justUpdated = Environment.GetCommandLineArgs()
-            .Any(arg => arg.Equals(LauncherSelfUpdateService.JustUpdatedArg, StringComparison.OrdinalIgnoreCase));
+        var cmdArgs = Environment.GetCommandLineArgs();
+        var justUpdated = cmdArgs.Any(arg => arg.Equals(LauncherSelfUpdateService.JustUpdatedArg, StringComparison.OrdinalIgnoreCase));
+        var rolledBack = cmdArgs.Any(arg => arg.Equals(LauncherSelfUpdateService.RolledBackArg, StringComparison.OrdinalIgnoreCase));
+        var updateFailed = cmdArgs.Any(arg => arg.Equals(LauncherSelfUpdateService.UpdateFailedArg, StringComparison.OrdinalIgnoreCase));
+        var updatedTo = ReadArgValue(cmdArgs, LauncherSelfUpdateService.UpdatedToArg);
         LauncherSelfUpdateService.CleanupStagingDirectory();
 
         // Only remove obsolete OverlordsLauncher.exe once SoulspireLauncher.exe itself is verified running.
         var currentExePath = LauncherSelfUpdateService.GetCurrentExecutablePath();
+        var currentInstallDir = !string.IsNullOrWhiteSpace(currentExePath) ? Path.GetDirectoryName(currentExePath) : null;
+        if (!string.IsNullOrWhiteSpace(currentInstallDir))
+        {
+            var recovery = LauncherInstallationService.RecoverFromInterruptedUpdate(currentInstallDir);
+            if (recovery.RecoveredCorruptOrMissingExe || recovery.CleanedTempFilesCount > 0 || recovery.ClearedPendingVerification)
+            {
+                Log($"Launcher recovery: {recovery.Summary}");
+            }
+
+            RefreshInstallState();
+        }
+
         if (LauncherSelfUpdateService.CleanupObsoleteLegacyLauncherBinary(currentExePath))
         {
             Log("Removed obsolete OverlordsLauncher.exe after verifying SoulspireLauncher.exe.");
@@ -1012,10 +1094,29 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             }
         }
 
-        Log($"Launcher {LauncherVersionText} initialized. Ashita path: {AshitaPath}");
+        Log($"Launcher {LauncherVersionText} initialized ({_settings.UpdateChannel} • {_settings.ServerTarget}). Ashita path: {AshitaPath}");
         if (justUpdated)
         {
-            StatusMessage = $"Launcher updated to {LauncherVersionText}.";
+            LauncherUpdateStage = LauncherUpdateStage.Completed;
+            var targetLabel = string.IsNullOrWhiteSpace(updatedTo) ? LauncherVersionText : updatedTo;
+            LauncherUpdateStatusText = $"Update completed ({targetLabel})";
+            StatusMessage = $"Launcher updated to {targetLabel}. Settings and {_settings.ServerTarget} environment preserved.";
+            Log(StatusMessage);
+        }
+        else if (rolledBack)
+        {
+            LauncherUpdateStage = LauncherUpdateStage.Completed;
+            var targetLabel = string.IsNullOrWhiteSpace(updatedTo) ? LauncherVersionText : updatedTo;
+            LauncherUpdateStatusText = $"Rolled back to {targetLabel}";
+            StatusMessage = $"Launcher rolled back to {targetLabel}.";
+            Log(StatusMessage);
+        }
+        else if (updateFailed)
+        {
+            LauncherUpdateStage = LauncherUpdateStage.Failed;
+            var detail = _installState?.LastUpdateError ?? "Previous launcher update failed and rolled back safely.";
+            LauncherUpdateStatusText = $"Previous update rolled back: {detail}";
+            StatusMessage = LauncherUpdateStatusText;
             Log(StatusMessage);
         }
 
@@ -1026,7 +1127,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             await CheckUpdatesOnlyAsync();
         }
 
-        if (!justUpdated && (_settings.AutoUpdateLauncher || _settings.AutoCheckUpdatesOnStartup))
+        if (!justUpdated && !rolledBack && (_settings.AutoUpdateLauncher || _settings.AutoCheckUpdatesOnStartup))
         {
             await CheckAndApplyLauncherUpdateAsync(autoApply: _settings.AutoUpdateLauncher, showUpToDateDialog: false);
         }
@@ -1095,6 +1196,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         try
         {
+            LauncherUpdateStage = LauncherUpdateStage.Checking;
+            LauncherUpdateStatusText = $"Checking {ChannelBadgeText} launcher updates...";
             var result = await _selfUpdateService.CheckForUpdateAsync(_manifest, _settings.UpdateChannel);
             _availableLauncherUpdate = result;
             OnPropertyChanged(nameof(IsLauncherUpdateAvailable));
@@ -1103,10 +1206,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
             if (!result.UpdateAvailable)
             {
+                LauncherUpdateStage = LauncherUpdateStage.UpToDate;
+                LauncherUpdateStatusText = $"Up to date ({LauncherVersionText} • {ChannelBadgeText})";
                 if (showUpToDateDialog)
                 {
                     MessageBox.Show(
-                        $"SoulspireXI Launcher {LauncherVersionText} ({_settings.UpdateChannel}) is already up to date.",
+                        $"SoulspireXI Launcher {LauncherVersionText} ({ChannelBadgeText}) is already up to date.",
                         "SoulspireXI Launcher — Up to Date",
                         MessageBoxButton.OK,
                         MessageBoxImage.Information);
@@ -1115,17 +1220,28 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 return false;
             }
 
-            Log($"Launcher update available ({_settings.UpdateChannel}): {result.LatestTag} (current {LauncherVersionText})");
+            LauncherUpdateStage = LauncherUpdateStage.UpdateAvailable;
+            LauncherUpdateStatusText = $"Update available: {result.LatestTag} ({ChannelBadgeText})";
+            Log($"Launcher update available ({ChannelBadgeText}, source={result.Source}): {result.LatestTag} (current {LauncherVersionText})");
 
             if (autoApply)
             {
+                if (_stagingRelay.IsRunning)
+                {
+                    LauncherUpdateStage = LauncherUpdateStage.DeferredActiveRelay;
+                    LauncherUpdateStatusText = $"Update {result.LatestTag} ready — deferred while Staging relay is active";
+                    StatusMessage = LauncherUpdateStatusText;
+                    Log("Deferred automatic launcher update because the Staging TCP relay is currently active.");
+                    return false;
+                }
+
                 if (LauncherSelfUpdateService.CanSelfUpdateInPlace(out _, out var reason))
                 {
-                    return await ApplyAvailableLauncherUpdateAsync();
+                    return await ApplyAvailableLauncherUpdateAsync(isAutoApply: true);
                 }
 
                 Log($"Automatic launcher update skipped: {reason}");
-                StatusMessage = $"Launcher {result.LatestTag} available (click Update Launcher).";
+                StatusMessage = $"Launcher {result.LatestTag} available (click Update Launcher or Install Per-User).";
                 return false;
             }
 
@@ -1133,8 +1249,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             if (showUpToDateDialog || promptOnUpdateIfManual)
             {
                 var prompt = promptOnUpdateIfManual
-                    ? $"A new SoulspireXI Launcher release ({result.LatestTag}) is available.\nCurrent version: {LauncherVersionText}\n\nDownload and restart before playing?"
-                    : $"A new SoulspireXI Launcher release ({result.LatestTag}) is available.\nCurrent version: {LauncherVersionText}\n\nDownload and restart now?";
+                    ? $"A verified SoulspireXI Launcher release ({result.LatestTag}) is available.\nCurrent version: {LauncherVersionText}\n\nDownload, verify, and restart before playing?"
+                    : $"A verified SoulspireXI Launcher release ({result.LatestTag}) is available.\nCurrent version: {LauncherVersionText}\n\nDownload, verify, and restart now?";
                 var choice = MessageBox.Show(
                     prompt,
                     "SoulspireXI Launcher — Update Available",
@@ -1142,17 +1258,19 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                     MessageBoxImage.Information);
                 if (choice == MessageBoxResult.Yes)
                 {
-                    return await ApplyAvailableLauncherUpdateAsync();
+                    return await ApplyAvailableLauncherUpdateAsync(isAutoApply: false);
                 }
             }
         }
         catch (Exception ex)
         {
-            Log($"Launcher update check skipped: {ex.Message}");
+            LauncherUpdateStage = LauncherUpdateStage.Failed;
+            LauncherUpdateStatusText = $"Update check failed: {ex.Message}";
+            Log($"Launcher update check failed: {ex.Message}");
             if (showUpToDateDialog)
             {
                 MessageBox.Show(
-                    $"Could not check GitHub Releases for SoulspireXI Launcher updates:\n{ex.Message}",
+                    $"Could not check for SoulspireXI Launcher updates:\n{ex.Message}",
                     "SoulspireXI Launcher — Update Check Failed",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
@@ -1162,16 +1280,48 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         return false;
     }
 
-    private async Task<bool> ApplyAvailableLauncherUpdateAsync()
+    private async Task<bool> ApplyAvailableLauncherUpdateAsync(bool isAutoApply = false)
     {
         if (_availableLauncherUpdate is null || !_availableLauncherUpdate.UpdateAvailable)
         {
             return false;
         }
 
+        // Coordinate with active Staging TCP relay so gameplay connections are never unexpectedly severed
+        if (_stagingRelay.IsRunning)
+        {
+            if (isAutoApply)
+            {
+                LauncherUpdateStage = LauncherUpdateStage.DeferredActiveRelay;
+                LauncherUpdateStatusText = $"Update {_availableLauncherUpdate.LatestTag} deferred while Staging relay is active";
+                StatusMessage = LauncherUpdateStatusText;
+                Log("Deferred automatic launcher update because Staging TCP relay is active.");
+                return false;
+            }
+
+            var activeClients = _stagingRelay.ActiveClientConnections;
+            var relayChoice = MessageBox.Show(
+                $"The Staging TCP relay is currently active ({activeClients} active connection(s)).\n\n" +
+                $"Installing SoulspireXI Launcher {_availableLauncherUpdate.LatestTag} requires stopping the Staging relay and restarting the launcher.\n\n" +
+                "Stop the Staging relay and install the update now? (Choose No to defer until you finish playing.)",
+                "SoulspireXI Launcher — Staging Relay Active",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (relayChoice != MessageBoxResult.Yes)
+            {
+                LauncherUpdateStage = LauncherUpdateStage.DeferredActiveRelay;
+                LauncherUpdateStatusText = $"Update {_availableLauncherUpdate.LatestTag} deferred by user while Staging relay is active";
+                StatusMessage = LauncherUpdateStatusText;
+                Log("Deferred launcher update so active Staging connections remain uninterrupted.");
+                return false;
+            }
+        }
+
         if (!LauncherSelfUpdateService.CanSelfUpdateInPlace(out var targetExePath, out var reason) ||
             string.IsNullOrEmpty(targetExePath))
         {
+            LauncherUpdateStage = LauncherUpdateStage.Failed;
+            LauncherUpdateStatusText = reason;
             Log(reason);
             if (!string.IsNullOrWhiteSpace(_availableLauncherUpdate.ReleaseUrl))
             {
@@ -1202,27 +1352,52 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         ProgressPercent = 0;
         try
         {
+            LauncherUpdateStage = LauncherUpdateStage.Downloading;
+            LauncherUpdateStatusText = $"Downloading {_availableLauncherUpdate.LatestTag}...";
             var progress = new Progress<SyncProgress>(p =>
             {
                 StatusMessage = p.Message;
+                LauncherUpdateStatusText = p.Message;
                 ProgressPercent = p.Percent;
+                if (p.Percent >= 85 && p.Percent < 100)
+                {
+                    LauncherUpdateStage = LauncherUpdateStage.Verifying;
+                }
             });
 
-            Log($"Downloading launcher update {_availableLauncherUpdate.LatestTag}...");
-            var stagedExe = await _selfUpdateService.DownloadUpdateAsync(_availableLauncherUpdate, progress);
-            StatusMessage = $"Installing {_availableLauncherUpdate.LatestTag} and restarting...";
+            Log($"Downloading and verifying launcher update {_availableLauncherUpdate.LatestTag}...");
+            var staged = await _selfUpdateService.DownloadAndVerifyUpdateAsync(_availableLauncherUpdate, progress);
+
+            // Persist all player settings (channel, Staging/Production target, paths, credentials) before restart
+            _settingsService.Save(_settings, PlainPassword);
+            _stagingRelay.Stop();
+
+            LauncherUpdateStage = LauncherUpdateStage.Installing;
+            LauncherUpdateStatusText = $"Installing {_availableLauncherUpdate.LatestTag} via SoulspireUpdater...";
+            StatusMessage = $"Installing {_availableLauncherUpdate.LatestTag} and restarting launcher...";
             Log(StatusMessage);
 
-            _selfUpdateService.LaunchUpdaterAndPrepareRestart(stagedExe, targetExePath);
+            var usedStandalone = _selfUpdateService.LaunchStandaloneUpdaterAndPrepareRestart(
+                staged,
+                targetExePath,
+                LauncherSelfUpdateService.GetCurrentInformationalVersion());
+            Log(usedStandalone
+                ? "Launched standalone SoulspireUpdater.exe outside active install directory."
+                : "Launched backup-and-swap updater fallback.");
+
+            LauncherUpdateStage = LauncherUpdateStage.Restarting;
+            LauncherUpdateStatusText = $"Restarting into {_availableLauncherUpdate.LatestTag}...";
             Application.Current?.Shutdown();
             return true;
         }
         catch (Exception ex)
         {
+            LauncherUpdateStage = LauncherUpdateStage.Failed;
+            LauncherUpdateStatusText = $"Update failed: {ex.Message}";
             StatusMessage = $"Launcher self-update failed: {ex.Message}";
             Log(StatusMessage);
             MessageBox.Show(
-                $"Could not update SoulspireLauncher.exe:\n{ex.Message}",
+                $"Could not update SoulspireLauncher.exe (existing installation was preserved untouched):\n\n{ex.Message}",
                 "SoulspireXI Launcher — Update Error",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
@@ -1235,6 +1410,146 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 IsBusy = false;
             }
         }
+    }
+
+    private void InstallPerUserLauncher()
+    {
+        var currentExe = LauncherSelfUpdateService.GetCurrentExecutablePath();
+        if (string.IsNullOrWhiteSpace(currentExe))
+        {
+            MessageBox.Show(
+                "Per-user installation is available when running the packaged SoulspireLauncher.exe.",
+                "SoulspireXI Launcher — Install",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        try
+        {
+            var currentDir = Path.GetDirectoryName(currentExe) ?? string.Empty;
+            var siblingUpdater = Path.Combine(currentDir, LauncherInstallationService.CanonicalUpdaterExeName);
+            var result = LauncherInstallationService.InstallPerUser(
+                currentExe,
+                File.Exists(siblingUpdater) ? siblingUpdater : null,
+                LauncherSelfUpdateService.GetCurrentInformationalVersion(),
+                _settings.UpdateChannel,
+                _settingsService,
+                _settings,
+                PlainPassword,
+                _shortcutMigrationService);
+
+            if (!result.Success)
+            {
+                MessageBox.Show(result.Message, "SoulspireXI Launcher — Install Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            RefreshInstallState();
+            StatusMessage = result.Message;
+            Log(result.Message);
+
+            var relaunch = MessageBox.Show(
+                $"{result.Message}\n\nStart Menu shortcut: {(result.StartMenuShortcutCreated ? "Created" : "Skipped")}\nDesktop shortcut: {(result.DesktopShortcutCreated ? "Created" : "Skipped")}\n\nSwitch to the installed launcher now?",
+                "SoulspireXI Launcher — Installed",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Information);
+            if (relaunch == MessageBoxResult.Yes)
+            {
+                _settingsService.Save(_settings, PlainPassword);
+                _stagingRelay.Stop();
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = result.InstalledExePath,
+                    WorkingDirectory = result.InstallRoot,
+                    UseShellExecute = true
+                });
+                Application.Current?.Shutdown();
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Installation failed: {ex.Message}";
+            Log(StatusMessage);
+            MessageBox.Show($"Could not install SoulspireXI Launcher:\n{ex.Message}", "SoulspireXI Launcher — Install Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private Task RollbackLauncherAsync()
+    {
+        var currentExe = LauncherSelfUpdateService.GetCurrentExecutablePath();
+        if (string.IsNullOrWhiteSpace(currentExe))
+        {
+            return Task.CompletedTask;
+        }
+
+        if (_stagingRelay.IsRunning)
+        {
+            var relayChoice = MessageBox.Show(
+                $"The Staging TCP relay is currently active ({_stagingRelay.ActiveClientConnections} active connection(s)).\n\nStop the Staging relay and roll back the launcher now?",
+                "SoulspireXI Launcher — Staging Relay Active",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (relayChoice != MessageBoxResult.Yes)
+            {
+                return Task.CompletedTask;
+            }
+        }
+
+        var prevLabel = _installState?.PreviousVersion ?? "the previous version";
+        var confirm = MessageBox.Show(
+            $"Roll back SoulspireXI Launcher to {prevLabel}?\n\nYour settings, Update Channel, Server Environment, and installed game files will be preserved.",
+            "SoulspireXI Launcher — Confirm Rollback",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        if (confirm != MessageBoxResult.Yes)
+        {
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            LauncherUpdateStage = LauncherUpdateStage.RollingBack;
+            LauncherUpdateStatusText = $"Rolling back to {prevLabel}...";
+            _settingsService.Save(_settings, PlainPassword);
+            _stagingRelay.Stop();
+            _selfUpdateService.LaunchRollbackAndPrepareRestart(currentExe);
+            Application.Current?.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            LauncherUpdateStage = LauncherUpdateStage.Failed;
+            LauncherUpdateStatusText = $"Rollback failed: {ex.Message}";
+            Log(LauncherUpdateStatusText);
+            MessageBox.Show($"Could not roll back SoulspireXI Launcher:\n{ex.Message}", "SoulspireXI Launcher — Rollback Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void RefreshInstallState()
+    {
+        var exePath = LauncherSelfUpdateService.GetCurrentExecutablePath();
+        var dir = !string.IsNullOrWhiteSpace(exePath) ? Path.GetDirectoryName(exePath) : null;
+        _installState = !string.IsNullOrWhiteSpace(dir) ? LauncherInstallationService.LoadInstallState(dir) : null;
+        OnPropertyChanged(nameof(CanInstallPerUser));
+        OnPropertyChanged(nameof(CanRollbackLauncher));
+        OnPropertyChanged(nameof(RollbackLauncherButtonText));
+        OnPropertyChanged(nameof(LauncherInstallLocationText));
+        RelayCommand.RaiseCanExecuteChanged();
+    }
+
+    private static string? ReadArgValue(string[] args, string flag)
+    {
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i].Equals(flag, StringComparison.OrdinalIgnoreCase))
+            {
+                return args[i + 1];
+            }
+        }
+
+        return null;
     }
 
     private async Task SyncUpdatesAsync(bool forceAll)
