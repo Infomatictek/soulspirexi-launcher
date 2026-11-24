@@ -219,7 +219,7 @@ public sealed class StagingConnectionTests
                 settings,
                 stagingPlan.BootServerHost,
                 stagingPlan.BootUseHairpin,
-                plainPassword: null,
+                password: null,
                 xiloaderPath: xiloaderPath);
 
             var bootIniPath = Path.Combine(bootDir, AshitaConfigGenerator.BootConfigFileName);
