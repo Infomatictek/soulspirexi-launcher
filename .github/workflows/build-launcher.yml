@@ -204,12 +204,12 @@ jobs:
           & cmd.exe /c "soulspire_native\build.cmd 2>&1" | Tee-Object -FilePath "soulspire_native-build.log"
           $rc = $LASTEXITCODE
           $ErrorActionPreference = 'Stop'
-          if ($rc -ne 0) {
-            foreach ($line in (Get-Content "soulspire_native-build.log" | Select-String -Pattern '(error |ERROR:|Assertion failed|fatal error)' | Select-Object -First 20)) {
-              Write-Host "::error::$($line.Line)"
+          if ($rc -ne 0 -or -not (Test-Path "soulspire_native/selftest.exe")) {
+            Write-Host "::error::build.cmd rc=$rc selftest_exists=$(Test-Path 'soulspire_native/selftest.exe')"
+            foreach ($line in (Get-Content "soulspire_native-build.log" -Tail 25)) {
+              Write-Host "::error::BUILDLOG: $line"
             }
-            Get-Content "soulspire_native-build.log" -Tail 50
-            exit $rc
+            exit 1
           }
 
       - name: Verify built 32-bit soulspire_native.dll and write build metadata
