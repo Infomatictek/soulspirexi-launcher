@@ -12,7 +12,7 @@ using SoulspireLauncher.Services;
 
 namespace SoulspireLauncher.ViewModels;
 
-public sealed class MainViewModel : INotifyPropertyChanged
+public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly SettingsService _settingsService;
     private readonly SettingsImportService _importService;
@@ -23,6 +23,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly ServerStatusService _statusService;
     private readonly GameLaunchService _launchService;
     private readonly ShortcutMigrationService _shortcutMigrationService;
+    private readonly StagingRelayService _stagingRelay;
 
     private LauncherSettings _settings;
     private LauncherManifest _manifest;
@@ -49,6 +50,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _statusService = new ServerStatusService();
         _launchService = new GameLaunchService();
         _shortcutMigrationService = new ShortcutMigrationService();
+        _stagingRelay = new StagingRelayService();
+        _stagingRelay.DiagnosticMessage += Log;
+        _stagingRelay.StateChanged += OnStagingRelayStateChanged;
 
         _manifest = _manifestService.LoadEmbeddedManifest();
         ManifestUpdateService.ApplyLocalOverride(_manifest, _settingsService.LoadLocalServerOverride());
@@ -85,9 +89,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ImportAshitaIniCommand = new RelayCommand(ImportFromAshitaIniDialog);
         LaunchFfxiConfigCommand = new RelayCommand(LaunchFfxiConfigTool);
         CreateDesktopShortcutCommand = new RelayCommand(CreateDesktopShortcut);
+        SelectProductionServerCommand = new RelayCommand(() => SelectedServerTarget = ServerTargetMode.Production);
+        StopStagingRelayCommand = new RelayCommand(StopStagingRelay, () => IsStagingRelayActive);
+        ResetStagingDefaultsCommand = new RelayCommand(ResetStagingDefaults);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+    public event Action? RequestMinimizeWindow;
 
     public ObservableCollection<ManifestNewsItem> NewsItems { get; }
     public ObservableCollection<string> ActivityLog { get; }
@@ -113,6 +121,16 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public ICommand ImportAshitaIniCommand { get; }
     public ICommand LaunchFfxiConfigCommand { get; }
     public ICommand CreateDesktopShortcutCommand { get; }
+    public ICommand SelectProductionServerCommand { get; }
+    public ICommand StopStagingRelayCommand { get; }
+    public ICommand ResetStagingDefaultsCommand { get; }
+
+    public IReadOnlyList<ServerTargetMode> ServerTargetOptions { get; } =
+    [
+        ServerTargetMode.Production,
+        ServerTargetMode.Staging,
+        ServerTargetMode.Custom
+    ];
 
     public string SelectedTab
     {
@@ -137,13 +155,84 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public string ServerName => _manifest.ServerName;
     public string Tagline => _manifest.Tagline;
 
-    public string EffectiveHost => _settings.UseCustomServer && !string.IsNullOrWhiteSpace(_settings.CustomServerHost)
-        ? _settings.CustomServerHost.Trim()
-        : _manifest.DefaultHost;
+    private ResolvedServerConnectionPlan CurrentConnectionPlan =>
+        StagingRelayService.ResolveConnectionPlan(_settings, _manifest);
 
-    public bool EffectiveUseHairpin => _settings.UseCustomServer ? _settings.CustomUseHairpin : _manifest.UseHairpin;
-    public int EffectiveLobbyPort => _settings.UseCustomServer ? _settings.CustomLobbyPort : _manifest.Ports.Lobby;
-    public int EffectiveSearchPort => _settings.UseCustomServer ? _settings.CustomSearchPort : _manifest.Ports.Search;
+    public ServerTargetMode SelectedServerTarget
+    {
+        get => _settings.ServerTarget;
+        set
+        {
+            if (_settings.ServerTarget == value)
+            {
+                return;
+            }
+
+            var previous = _settings.ServerTarget;
+            _settings.ServerTarget = value;
+            _settings.UseCustomServer = value == ServerTargetMode.Custom;
+
+            if (previous == ServerTargetMode.Staging && value != ServerTargetMode.Staging)
+            {
+                _stagingRelay.Stop();
+                _settingsService.Save(_settings, PlainPassword);
+                var restoredIni = StagingRelayService.TryRestoreOrdinaryBootConfig(
+                    _configGenerator,
+                    _settings,
+                    _manifest,
+                    PlainPassword);
+                var plan = CurrentConnectionPlan;
+                StatusMessage = $"Switched to {value} ({plan.DisplayHost}). Staging relay stopped.";
+                Log(restoredIni
+                    ? $"Switched from Staging to {value} ({plan.DisplayHost}); stopped Staging TCP relay and restored soulspirexi.ini."
+                    : $"Switched from Staging to {value} ({plan.DisplayHost}); stopped Staging TCP relay.");
+            }
+            else if (value == ServerTargetMode.Staging)
+            {
+                _settingsService.Save(_settings, PlainPassword);
+                var plan = CurrentConnectionPlan;
+                StatusMessage = $"Staging Server selected ({plan.DisplayHost}). Managed TCP relay starts automatically on Play.";
+                Log($"Selected Staging Server ({plan.DisplayHost}, ports {StagingAuthPort}/{StagingDataPort}/{StagingViewPort}/{StagingSearchPort}, map UDP {plan.MapUdpPort}). No admin privileges or Windows portproxy changes required.");
+            }
+            else
+            {
+                _stagingRelay.Stop();
+                _settingsService.Save(_settings, PlainPassword);
+            }
+
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(UseCustomServer));
+            NotifyEffectiveServerChanged();
+            _ = RefreshServerStatusAsync();
+        }
+    }
+
+    public bool IsProductionMode => _settings.ServerTarget == ServerTargetMode.Production;
+    public bool IsStagingMode => _settings.ServerTarget == ServerTargetMode.Staging;
+    public bool IsCustomServerMode => _settings.ServerTarget == ServerTargetMode.Custom;
+    public bool IsStagingRelayActive => _stagingRelay.IsRunning;
+
+    public string EffectiveHost => CurrentConnectionPlan.StatusProbeHost;
+    public bool EffectiveUseHairpin => CurrentConnectionPlan.BootUseHairpin;
+    public int EffectiveLobbyPort => CurrentConnectionPlan.StatusProbeLobbyPort;
+    public int EffectiveSearchPort => CurrentConnectionPlan.StatusProbeSearchPort;
+
+    public string ServerStatusDisplayHost => IsStagingMode
+        ? $"STAGING • {CurrentConnectionPlan.DisplayHost}"
+        : CurrentConnectionPlan.DisplayHost;
+
+    public string StagingTargetSummaryText
+    {
+        get
+        {
+            var plan = CurrentConnectionPlan;
+            return $"Target: {plan.StatusProbeHost} (TCP {StagingAuthPort}/{StagingDataPort}/{StagingViewPort}/{StagingSearchPort} • Map UDP {plan.MapUdpPort})";
+        }
+    }
+
+    public string StagingRelayStatusText => IsStagingRelayActive
+        ? $"Managed loopback TCP relay ACTIVE on 127.0.0.1 (54231/54230/54001/54002) • No admin required"
+        : "Managed loopback TCP relay ready (starts automatically on Play • No admin or netsh changes)";
 
     public bool IsBusy
     {
@@ -160,9 +249,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public string PlayButtonText => IsBusy
         ? "PREPARING..."
-        : PendingUpdatesCount > 0
-            ? $"UPDATE & PLAY ({PendingUpdatesCount})"
-            : "PLAY SOULSPIREXI";
+        : IsStagingMode
+            ? (PendingUpdatesCount > 0 ? $"UPDATE & PLAY STAGING ({PendingUpdatesCount})" : "PLAY STAGING SERVER")
+            : (PendingUpdatesCount > 0 ? $"UPDATE & PLAY ({PendingUpdatesCount})" : "PLAY SOULSPIREXI");
 
     public string StatusMessage
     {
@@ -219,7 +308,102 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             if (_settings.UseCustomServer != value)
             {
-                _settings.UseCustomServer = value;
+                SelectedServerTarget = value
+                    ? ServerTargetMode.Custom
+                    : ServerTargetMode.Production;
+            }
+        }
+    }
+
+    public string StagingServerHost
+    {
+        get => _settings.StagingServerHost;
+        set
+        {
+            if (_settings.StagingServerHost != value)
+            {
+                _settings.StagingServerHost = value;
+                if (IsStagingRelayActive)
+                {
+                    _stagingRelay.Stop();
+                }
+
+                OnPropertyChanged();
+                NotifyEffectiveServerChanged();
+            }
+        }
+    }
+
+    public int StagingAuthPort
+    {
+        get => _settings.StagingAuthPort;
+        set
+        {
+            if (_settings.StagingAuthPort != value)
+            {
+                _settings.StagingAuthPort = value;
+                if (IsStagingRelayActive)
+                {
+                    _stagingRelay.Stop();
+                }
+
+                OnPropertyChanged();
+                NotifyEffectiveServerChanged();
+            }
+        }
+    }
+
+    public int StagingDataPort
+    {
+        get => _settings.StagingDataPort;
+        set
+        {
+            if (_settings.StagingDataPort != value)
+            {
+                _settings.StagingDataPort = value;
+                if (IsStagingRelayActive)
+                {
+                    _stagingRelay.Stop();
+                }
+
+                OnPropertyChanged();
+                NotifyEffectiveServerChanged();
+            }
+        }
+    }
+
+    public int StagingViewPort
+    {
+        get => _settings.StagingViewPort;
+        set
+        {
+            if (_settings.StagingViewPort != value)
+            {
+                _settings.StagingViewPort = value;
+                if (IsStagingRelayActive)
+                {
+                    _stagingRelay.Stop();
+                }
+
+                OnPropertyChanged();
+                NotifyEffectiveServerChanged();
+            }
+        }
+    }
+
+    public int StagingSearchPort
+    {
+        get => _settings.StagingSearchPort;
+        set
+        {
+            if (_settings.StagingSearchPort != value)
+            {
+                _settings.StagingSearchPort = value;
+                if (IsStagingRelayActive)
+                {
+                    _stagingRelay.Stop();
+                }
+
                 OnPropertyChanged();
                 NotifyEffectiveServerChanged();
             }
@@ -1193,24 +1377,67 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 throw new FileNotFoundException("xiloader.exe could not be located or downloaded.");
             }
 
+            var plan = StagingRelayService.ResolveConnectionPlan(_settings, _manifest);
+            if (plan.RequiresLoopbackRelay && plan.RelayConfig is not null)
+            {
+                StatusMessage = $"Checking Staging server reachability ({plan.StatusProbeHost}:{plan.StatusProbeLobbyPort})...";
+                var stagingProbe = await _statusService.CheckAsync(
+                    plan.StatusProbeHost,
+                    plan.StatusProbeLobbyPort,
+                    plan.StatusProbeSearchPort);
+                ServerStatus = stagingProbe;
+
+                if (!stagingProbe.LobbyReachable)
+                {
+                    _stagingRelay.Stop();
+                    throw new InvalidOperationException(
+                        $"Staging server {plan.StatusProbeHost}:{plan.StatusProbeLobbyPort} is unreachable ({stagingProbe.SummaryText}).\n\n" +
+                        "Launch cancelled before starting the loopback relay or modifying soulspirexi.ini. " +
+                        "Verify the Staging server is running and reachable from this PC, or switch back to Production.");
+                }
+
+                StatusMessage = $"Starting managed Staging TCP relay -> {plan.StatusProbeHost}...";
+                var relayResult = _stagingRelay.Start(plan.RelayConfig);
+                if (!relayResult.Success)
+                {
+                    throw new InvalidOperationException(relayResult.Message);
+                }
+            }
+            else
+            {
+                // Always guarantee the Staging loopback relay is stopped before launching Production or Custom.
+                _stagingRelay.Stop();
+            }
+
             StatusMessage = "Writing Ashita v4 & Pivot configurations...";
             _configGenerator.WriteAllConfigs(
                 _settings.AshitaPath,
                 _settings,
-                EffectiveHost,
-                EffectiveUseHairpin,
+                plan.BootServerHost,
+                plan.BootUseHairpin,
                 PlainPassword,
                 xiloaderPath);
 
             RefreshDiagnostics();
 
-            StatusMessage = $"Launching Ashita v4 -> {EffectiveHost}...";
+            StatusMessage = plan.RequiresLoopbackRelay
+                ? $"Launching Ashita v4 -> STAGING {plan.DisplayHost} (via local loopback relay)..."
+                : $"Launching Ashita v4 -> {plan.DisplayHost}...";
             Log(StatusMessage);
             _launchService.LaunchAshita(_settings.AshitaPath);
 
             if (_settings.AutoCloseOnLaunch)
             {
-                Application.Current.Shutdown();
+                if (plan.RequiresLoopbackRelay)
+                {
+                    StatusMessage = "Staging TCP relay active — launcher minimized (keep open while playing Staging).";
+                    Log(StatusMessage);
+                    RequestMinimizeWindow?.Invoke();
+                }
+                else
+                {
+                    Application.Current.Shutdown();
+                }
             }
         }
         catch (Exception ex)
@@ -1227,14 +1454,18 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private async Task RefreshServerStatusAsync()
     {
+        var plan = CurrentConnectionPlan;
         ServerStatus = new ServerStatus
         {
-            Host = EffectiveHost,
+            Host = plan.StatusProbeHost,
             IsOnline = false,
-            SummaryText = $"Checking {EffectiveHost}..."
+            SummaryText = $"Checking {plan.DisplayHost}..."
         };
 
-        var result = await _statusService.CheckAsync(EffectiveHost, EffectiveLobbyPort, EffectiveSearchPort);
+        var result = await _statusService.CheckAsync(
+            plan.StatusProbeHost,
+            plan.StatusProbeLobbyPort,
+            plan.StatusProbeSearchPort);
         ServerStatus = result;
     }
 
@@ -1533,12 +1764,89 @@ public sealed class MainViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ImportedSettingsSourceText));
     }
 
+    private void StopStagingRelay()
+    {
+        _stagingRelay.Stop();
+        StatusMessage = "Staging TCP relay stopped.";
+    }
+
+    private void ResetStagingDefaults()
+    {
+        var manifestStaging = _manifest.StagingServer;
+        _settings.StagingServerHost = !string.IsNullOrWhiteSpace(manifestStaging?.Host)
+            ? manifestStaging.Host.Trim()
+            : LauncherSettings.DefaultStagingHost;
+        _settings.StagingAuthPort = manifestStaging?.Ports.Auth is > 0 and <= 65535
+            ? manifestStaging.Ports.Auth
+            : LauncherSettings.DefaultStagingAuthPort;
+        _settings.StagingDataPort = manifestStaging?.Ports.Data is > 0 and <= 65535
+            ? manifestStaging.Ports.Data
+            : LauncherSettings.DefaultStagingDataPort;
+        _settings.StagingViewPort = manifestStaging?.Ports.View is > 0 and <= 65535
+            ? manifestStaging.Ports.View
+            : LauncherSettings.DefaultStagingViewPort;
+        _settings.StagingSearchPort = manifestStaging?.Ports.Search is > 0 and <= 65535
+            ? manifestStaging.Ports.Search
+            : LauncherSettings.DefaultStagingSearchPort;
+
+        _stagingRelay.Stop();
+        _settingsService.Save(_settings, PlainPassword);
+
+        OnPropertyChanged(nameof(StagingServerHost));
+        OnPropertyChanged(nameof(StagingAuthPort));
+        OnPropertyChanged(nameof(StagingDataPort));
+        OnPropertyChanged(nameof(StagingViewPort));
+        OnPropertyChanged(nameof(StagingSearchPort));
+        NotifyEffectiveServerChanged();
+        StatusMessage = $"Restored Staging defaults ({_settings.StagingServerHost}:{_settings.StagingAuthPort}).";
+        Log(StatusMessage);
+        _ = RefreshServerStatusAsync();
+    }
+
+    public void Shutdown()
+    {
+        _stagingRelay.Stop();
+    }
+
+    public void Dispose()
+    {
+        _stagingRelay.DiagnosticMessage -= Log;
+        _stagingRelay.StateChanged -= OnStagingRelayStateChanged;
+        _stagingRelay.Dispose();
+    }
+
+    private void OnStagingRelayStateChanged()
+    {
+        void Raise()
+        {
+            OnPropertyChanged(nameof(IsStagingRelayActive));
+            OnPropertyChanged(nameof(StagingRelayStatusText));
+            RelayCommand.RaiseCanExecuteChanged();
+        }
+
+        if (Application.Current?.Dispatcher is { } dispatcher && !dispatcher.CheckAccess())
+        {
+            dispatcher.Invoke(Raise);
+        }
+        else
+        {
+            Raise();
+        }
+    }
+
     private void NotifyEffectiveServerChanged()
     {
+        OnPropertyChanged(nameof(IsProductionMode));
+        OnPropertyChanged(nameof(IsStagingMode));
+        OnPropertyChanged(nameof(IsCustomServerMode));
         OnPropertyChanged(nameof(EffectiveHost));
         OnPropertyChanged(nameof(EffectiveUseHairpin));
         OnPropertyChanged(nameof(EffectiveLobbyPort));
         OnPropertyChanged(nameof(EffectiveSearchPort));
+        OnPropertyChanged(nameof(ServerStatusDisplayHost));
+        OnPropertyChanged(nameof(StagingTargetSummaryText));
+        OnPropertyChanged(nameof(StagingRelayStatusText));
+        OnPropertyChanged(nameof(PlayButtonText));
     }
 
     private void Log(string message)

@@ -46,6 +46,11 @@
                         <TextBlock Text="{Binding ChannelBadgeText}" FontSize="10.5" FontWeight="Bold"
                                    Foreground="{Binding SelectedUpdateChannel, Converter={StaticResource ChannelToBrush}}" />
                     </Border>
+                    <Border Visibility="{Binding IsStagingMode, Converter={StaticResource BoolToVis}}"
+                            Background="#33220B" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="4"
+                            Padding="7,2" Margin="8,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="STAGING SERVER" FontSize="10.5" FontWeight="Bold" Foreground="#FBBF24" />
+                    </Border>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" WindowChrome.IsHitTestVisibleInChrome="True">
@@ -72,10 +77,12 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Border Background="{StaticResource AbyssBrush}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="14" Padding="12,5" Margin="0,0,8,0">
+                        <Border Background="{StaticResource AbyssBrush}"
+                                BorderBrush="{Binding IsStagingMode, Converter={StaticResource BoolToStagingBorderBrush}}"
+                                BorderThickness="1" CornerRadius="14" Padding="12,5" Margin="0,0,8,0">
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <Ellipse Width="8" Height="8" Fill="{Binding ServerStatus.IsOnline, Converter={StaticResource BoolToStatusBrush}}" Margin="0,0,8,0" />
-                                <TextBlock Text="{Binding EffectiveHost}" FontWeight="SemiBold" FontSize="12" Margin="0,0,8,0" />
+                                <TextBlock Text="{Binding ServerStatusDisplayHost}" FontWeight="SemiBold" FontSize="12" Margin="0,0,8,0" />
                                 <TextBlock Text="{Binding ServerStatus.SummaryText}" Foreground="{StaticResource TextSecondary}" FontSize="12" />
                             </StackPanel>
                         </Border>
@@ -123,6 +130,10 @@
                                         <Border Background="{StaticResource AbyssBrush}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="4" Padding="8,4">
                                             <TextBlock Text="{Binding ManifestVersionText}" FontSize="12" Foreground="{StaticResource TextSecondary}" />
                                         </Border>
+                                        <Border Visibility="{Binding IsStagingMode, Converter={StaticResource BoolToVis}}"
+                                                Background="#33220B" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="4" Padding="8,4" Margin="8,0,0,0">
+                                            <TextBlock Text="TARGET: STAGING SERVER (ISOLATED)" FontSize="12" FontWeight="Bold" Foreground="#FBBF24" />
+                                        </Border>
                                     </StackPanel>
                                 </StackPanel>
                             </StackPanel>
@@ -150,7 +161,33 @@
                         <Border Grid.Column="0" Background="{StaticResource BgCard}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="8" Padding="18">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <StackPanel>
-                                    <TextBlock Text="ACCOUNT &amp; LAUNCH" FontSize="13" FontWeight="Bold" Foreground="{StaticResource GoldAccent}" Margin="0,0,0,12" />
+                                    <TextBlock Text="ACCOUNT &amp; LAUNCH" FontSize="13" FontWeight="Bold" Foreground="{StaticResource GoldAccent}" Margin="0,0,0,10" />
+
+                                    <TextBlock Text="Server Environment" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4" />
+                                    <ComboBox ItemsSource="{Binding ServerTargetOptions}" SelectedItem="{Binding SelectedServerTarget}" Margin="0,0,0,10">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Converter={StaticResource ServerTargetToLabel}}" />
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+
+                                    <Border Visibility="{Binding IsStagingMode, Converter={StaticResource BoolToVis}}"
+                                            Background="#2A1D0A" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,12">
+                                        <StackPanel>
+                                            <TextBlock Text="STAGING SERVER MODE ACTIVE" FontSize="11.5" FontWeight="Bold" Foreground="#FBBF24" />
+                                            <TextBlock Text="{Binding StagingTargetSummaryText}" FontSize="11" Foreground="{StaticResource TextPrimary}" TextWrapping="Wrap" Margin="0,3,0,0" />
+                                            <TextBlock Text="{Binding StagingRelayStatusText}" FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" Margin="0,3,0,8" />
+                                            <StackPanel Orientation="Horizontal">
+                                                <Button Content="Switch Back to Production" Style="{StaticResource SecondaryButton}"
+                                                        Command="{Binding SelectProductionServerCommand}" Padding="10,5" FontSize="11.5" />
+                                                <Button Content="Stop Relay" Style="{StaticResource SecondaryButton}"
+                                                        Command="{Binding StopStagingRelayCommand}"
+                                                        Visibility="{Binding IsStagingRelayActive, Converter={StaticResource BoolToVis}}"
+                                                        Padding="10,5" FontSize="11.5" Margin="6,0,0,0" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
 
                                     <TextBlock Text="Username (optional)" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4" />
                                     <TextBox Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10" />
@@ -245,28 +282,79 @@
                                 <Border Background="{StaticResource BgCard}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="8" Padding="18" Margin="0,0,0,16">
                                     <StackPanel>
                                         <TextBlock Text="SERVER CONNECTION" FontSize="13" FontWeight="Bold" Foreground="{StaticResource GoldAccent}" Margin="0,0,0,10" />
-                                        <CheckBox Content="Override default server host" IsChecked="{Binding UseCustomServer}" Margin="0,0,0,8" />
 
-                                        <TextBlock Text="Server Host / IP" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4" />
-                                        <TextBox Text="{Binding CustomServerHost, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding UseCustomServer}" Margin="0,0,0,8" />
+                                        <TextBlock Text="Server Environment" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4" />
+                                        <ComboBox ItemsSource="{Binding ServerTargetOptions}" SelectedItem="{Binding SelectedServerTarget}" Margin="0,0,0,10">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Converter={StaticResource ServerTargetToLabel}}" />
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
 
-                                        <CheckBox Content="Pass --hairpin to xiloader (for external/NAT connections)" IsChecked="{Binding CustomUseHairpin}" IsEnabled="{Binding UseCustomServer}" Margin="0,0,0,8" />
+                                        <!-- Staging Server Configuration (zero-privilege loopback TCP relay) -->
+                                        <Border Visibility="{Binding IsStagingMode, Converter={StaticResource BoolToVis}}"
+                                                Background="#2A1D0A" BorderBrush="#F59E0B" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,10">
+                                            <StackPanel>
+                                                <TextBlock Text="STAGING SERVER (MANAGED LOCAL TCP RELAY)" FontSize="11.5" FontWeight="Bold" Foreground="#FBBF24" Margin="0,0,0,4" />
+                                                <TextBlock Text="Forwards xiloader's fixed local TCP ports (54231/54230/54001/54002) to Staging's alternate ports in-process. No admin prompt, no netsh portproxy edits, and Production stays isolated."
+                                                           FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" Margin="0,0,0,8" />
 
-                                        <Grid IsEnabled="{Binding UseCustomServer}" Margin="0,0,0,10">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="12" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel Grid.Column="0">
-                                                <TextBlock Text="Lobby TCP Port" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4" />
-                                                <TextBox Text="{Binding CustomLobbyPort}" />
+                                                <TextBlock Text="Staging Host / IP" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4" />
+                                                <TextBox Text="{Binding StagingServerHost, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" />
+
+                                                <UniformGrid Columns="4" Margin="0,0,0,8">
+                                                    <StackPanel Margin="0,0,6,0">
+                                                        <TextBlock Text="Auth TCP" FontSize="11" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,2" />
+                                                        <TextBox Text="{Binding StagingAuthPort}" Padding="6,5" FontSize="12" />
+                                                    </StackPanel>
+                                                    <StackPanel Margin="3,0,3,0">
+                                                        <TextBlock Text="Data TCP" FontSize="11" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,2" />
+                                                        <TextBox Text="{Binding StagingDataPort}" Padding="6,5" FontSize="12" />
+                                                    </StackPanel>
+                                                    <StackPanel Margin="3,0,3,0">
+                                                        <TextBlock Text="View TCP" FontSize="11" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,2" />
+                                                        <TextBox Text="{Binding StagingViewPort}" Padding="6,5" FontSize="12" />
+                                                    </StackPanel>
+                                                    <StackPanel Margin="6,0,0,0">
+                                                        <TextBlock Text="Search TCP" FontSize="11" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,2" />
+                                                        <TextBox Text="{Binding StagingSearchPort}" Padding="6,5" FontSize="12" />
+                                                    </StackPanel>
+                                                </UniformGrid>
+
+                                                <TextBlock Text="{Binding StagingRelayStatusText}" FontSize="11" Foreground="{StaticResource CyanAccent}" TextWrapping="Wrap" Margin="0,0,0,8" />
+
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Button Content="Reset Staging Defaults" Style="{StaticResource SecondaryButton}" Command="{Binding ResetStagingDefaultsCommand}" Padding="10,5" FontSize="11.5" />
+                                                    <Button Content="Stop Relay" Style="{StaticResource SecondaryButton}" Command="{Binding StopStagingRelayCommand}" Padding="10,5" FontSize="11.5" Margin="6,0,0,0" />
+                                                    <Button Content="Back to Production" Style="{StaticResource SecondaryButton}" Command="{Binding SelectProductionServerCommand}" Padding="10,5" FontSize="11.5" Margin="6,0,0,0" />
+                                                </StackPanel>
                                             </StackPanel>
-                                            <StackPanel Grid.Column="2">
-                                                <TextBlock Text="Search TCP Port" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4" />
-                                                <TextBox Text="{Binding CustomSearchPort}" />
-                                            </StackPanel>
-                                        </Grid>
+                                        </Border>
+
+                                        <!-- Custom Server Configuration (Preserved) -->
+                                        <StackPanel Visibility="{Binding IsCustomServerMode, Converter={StaticResource BoolToVis}}">
+                                            <TextBlock Text="Custom Server Host / IP" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4" />
+                                            <TextBox Text="{Binding CustomServerHost, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" />
+
+                                            <CheckBox Content="Pass --hairpin to xiloader (for external/NAT connections)" IsChecked="{Binding CustomUseHairpin}" Margin="0,0,0,8" />
+
+                                            <Grid Margin="0,0,0,10">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="12" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0">
+                                                    <TextBlock Text="Lobby TCP Port" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4" />
+                                                    <TextBox Text="{Binding CustomLobbyPort}" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2">
+                                                    <TextBlock Text="Search TCP Port" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4" />
+                                                    <TextBox Text="{Binding CustomSearchPort}" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </StackPanel>
 
                                         <Button Content="Export Shareable soulspire-server.json" Style="{StaticResource SecondaryButton}"
                                                 Command="{Binding ExportServerOverrideCommand}" HorizontalAlignment="Left" />

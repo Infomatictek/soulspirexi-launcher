@@ -19,12 +19,32 @@ public enum UpdateChannel
     TestingCoreUi = 5
 }
 
+public enum ServerTargetMode
+{
+    Production = 0,
+    Staging = 1,
+    Custom = 2
+}
+
 public sealed class LauncherSettings
 {
     public const string DefaultCustomDatOverlayPath = @"C:\DATs\Soulspire";
     public const string LegacyDefaultCustomDatOverlayPath = @"C:\DATs\Overlords";
+    public const string DefaultStagingHost = "192.168.86.117";
+    public const int DefaultStagingAuthPort = 55231;
+    public const int DefaultStagingDataPort = 55230;
+    public const int DefaultStagingViewPort = 55001;
+    public const int DefaultStagingSearchPort = 55002;
+    public const int DefaultStagingMapPort = 55230;
 
     public UpdateChannel UpdateChannel { get; set; } = UpdateChannel.Stable;
+
+    public ServerTargetMode ServerTarget { get; set; } = ServerTargetMode.Production;
+    public string StagingServerHost { get; set; } = DefaultStagingHost;
+    public int StagingAuthPort { get; set; } = DefaultStagingAuthPort;
+    public int StagingDataPort { get; set; } = DefaultStagingDataPort;
+    public int StagingViewPort { get; set; } = DefaultStagingViewPort;
+    public int StagingSearchPort { get; set; } = DefaultStagingSearchPort;
 
     public bool UseCustomServer { get; set; }
     public string CustomServerHost { get; set; } = "play.soulspirexi.com";

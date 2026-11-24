@@ -125,6 +125,25 @@ def build_testing_manifest(
         "crystalJobsHooks": crystaljobs_hooks,
         "notes": testing_notes,
     }
+    if candidate == "core-ui-24hook":
+        testing_manifest["stagingServer"] = {
+            "name": "SoulspireXI Staging",
+            "host": "192.168.86.117",
+            "useHairpin": False,
+            "localLoopbackHost": "127.0.0.1",
+            "ports": {
+                "auth": 55231,
+                "data": 55230,
+                "view": 55001,
+                "search": 55002,
+                "map": 55230,
+            },
+            "notes": (
+                "Isolated SoulspireXI Staging server (+1000 alternate ports). "
+                "Managed in-process loopback TCP relay requires no administrator privileges "
+                "and never modifies Windows netsh portproxy rules."
+            ),
+        }
 
     if candidate in ("registry-24hook", "search-legacy-text", "search-aligned-text", "core-ui-24hook"):
         reg_sync_path = repo_root / "registry_sync.json"

@@ -43,6 +43,9 @@ public sealed class LauncherManifest
     [JsonPropertyName("ports")]
     public ManifestPorts Ports { get; set; } = new();
 
+    [JsonPropertyName("stagingServer")]
+    public ManifestStagingServer? StagingServer { get; set; }
+
     [JsonPropertyName("repo")]
     public ManifestRepo Repo { get; set; } = new();
 
@@ -72,6 +75,45 @@ public sealed class ManifestPorts
 
     [JsonPropertyName("search")]
     public int Search { get; set; } = 54002;
+}
+
+public sealed class ManifestStagingServer
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "SoulspireXI Staging";
+
+    [JsonPropertyName("host")]
+    public string Host { get; set; } = LauncherSettings.DefaultStagingHost;
+
+    [JsonPropertyName("useHairpin")]
+    public bool UseHairpin { get; set; }
+
+    [JsonPropertyName("localLoopbackHost")]
+    public string LocalLoopbackHost { get; set; } = "127.0.0.1";
+
+    [JsonPropertyName("ports")]
+    public ManifestStagingPorts Ports { get; set; } = new();
+
+    [JsonPropertyName("notes")]
+    public string Notes { get; set; } = string.Empty;
+}
+
+public sealed class ManifestStagingPorts
+{
+    [JsonPropertyName("auth")]
+    public int Auth { get; set; } = LauncherSettings.DefaultStagingAuthPort;
+
+    [JsonPropertyName("data")]
+    public int Data { get; set; } = LauncherSettings.DefaultStagingDataPort;
+
+    [JsonPropertyName("view")]
+    public int View { get; set; } = LauncherSettings.DefaultStagingViewPort;
+
+    [JsonPropertyName("search")]
+    public int Search { get; set; } = LauncherSettings.DefaultStagingSearchPort;
+
+    [JsonPropertyName("map")]
+    public int Map { get; set; } = LauncherSettings.DefaultStagingMapPort;
 }
 
 public sealed class ManifestRepo

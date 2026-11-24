@@ -128,3 +128,30 @@ public sealed class FpsCapLabelConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
+
+public sealed class ServerTargetToLabelConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value switch
+        {
+            ServerTargetMode.Production => "Production (play.soulspirexi.com)",
+            ServerTargetMode.Staging => "Staging Server (Isolated Testing)",
+            ServerTargetMode.Custom => "Custom Server (Manual Host / Ports)",
+            _ => value?.ToString() ?? string.Empty
+        };
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+public sealed class BoolToStagingBorderBrushConverter : IValueConverter
+{
+    private static readonly Brush StagingBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F59E0B"));
+    private static readonly Brush DefaultBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2A314A"));
+
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is true ? StagingBrush : DefaultBrush;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}

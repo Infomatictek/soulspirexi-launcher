@@ -20,6 +20,20 @@
     "auth": 54001,
     "search": 54002
   },
+  "stagingServer": {
+    "name": "SoulspireXI Staging",
+    "host": "192.168.86.117",
+    "useHairpin": false,
+    "localLoopbackHost": "127.0.0.1",
+    "ports": {
+      "auth": 55231,
+      "data": 55230,
+      "view": 55001,
+      "search": 55002,
+      "map": 55230
+    },
+    "notes": "Isolated SoulspireXI Staging server (+1000 alternate ports). Managed in-process loopback TCP relay requires no administrator privileges and never modifies Windows netsh portproxy rules."
+  },
   "repo": {
     "owner": "Infomatictek",
     "name": "soulspirexi-launcher",

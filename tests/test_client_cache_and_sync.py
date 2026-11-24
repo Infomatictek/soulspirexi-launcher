@@ -2,6 +2,7 @@
 sync protocols, packet coexistence, and launcher manifests."""
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -81,6 +82,24 @@ class TestClientCacheAndSync(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(proc.returncode, 0, f"verify-launcher-manifest failed for {mf}:\n{proc.stdout}\n{proc.stderr}")
+
+    def test_testing_core_ui_staging_server_config_and_stable_isolation(self) -> None:
+        testing_manifest = json.loads(
+            (LAUNCHER_ROOT / "channels" / "testing-core-ui" / "manifest.json").read_text(encoding="utf-8")
+        )
+        staging = testing_manifest.get("stagingServer")
+        self.assertIsInstance(staging, dict)
+        self.assertEqual(staging.get("host"), "192.168.86.117")
+        self.assertFalse(staging.get("useHairpin"))
+        self.assertEqual(staging.get("localLoopbackHost"), "127.0.0.1")
+        self.assertEqual(
+            staging.get("ports"),
+            {"auth": 55231, "data": 55230, "view": 55001, "search": 55002, "map": 55230},
+        )
+
+        stable_manifest = json.loads((LAUNCHER_ROOT / "manifest.json").read_text(encoding="utf-8"))
+        self.assertNotIn("stagingServer", stable_manifest)
+        self.assertEqual(stable_manifest.get("defaultHost"), "play.soulspirexi.com")
 
 
 if __name__ == "__main__":
