@@ -4,7 +4,7 @@
   "compiledRegistryHash": "cf86aa59ff8d16c6",
   "runtimeIdentityLoader": true,
   "identitySchemaVersion": 1,
-  "nativeHooks": 27,
+  "nativeHooks": 31,
   "sourceCommit": "44db3c00f13e444e195b556b6d7f48cb9d0ad363",
   "buildTarget": "Win32-x86-MSVC",
   "ciRunId": "45475018833",
