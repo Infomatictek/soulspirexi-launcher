@@ -156,6 +156,14 @@ public sealed class SettingsService
                     {
                         loaded.StagingSearchPort = LauncherSettings.DefaultStagingSearchPort;
                     }
+                    if (loaded.StagingProfilePort is <= 0 or > 65535)
+                    {
+                        loaded.StagingProfilePort = LauncherSettings.DefaultStagingProfilePort;
+                    }
+                    if (loaded.StagingProfileIrcPort is <= 0 or > 65535)
+                    {
+                        loaded.StagingProfileIrcPort = LauncherSettings.DefaultStagingProfileIrcPort;
+                    }
 
                     if (string.IsNullOrWhiteSpace(loaded.AshitaPath))
                     {

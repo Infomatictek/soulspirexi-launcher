@@ -35,6 +35,8 @@ public sealed class LauncherSettings
     public const int DefaultStagingDataPort = 55230;
     public const int DefaultStagingViewPort = 55001;
     public const int DefaultStagingSearchPort = 55002;
+    public const int DefaultStagingProfilePort = 51221;
+    public const int DefaultStagingProfileIrcPort = 51241;
     public const int DefaultStagingMapPort = 55230;
 
     public UpdateChannel UpdateChannel { get; set; } = UpdateChannel.Stable;
@@ -45,6 +47,8 @@ public sealed class LauncherSettings
     public int StagingDataPort { get; set; } = DefaultStagingDataPort;
     public int StagingViewPort { get; set; } = DefaultStagingViewPort;
     public int StagingSearchPort { get; set; } = DefaultStagingSearchPort;
+    public int StagingProfilePort { get; set; } = DefaultStagingProfilePort;
+    public int StagingProfileIrcPort { get; set; } = DefaultStagingProfileIrcPort;
 
     public bool UseCustomServer { get; set; }
     public string CustomServerHost { get; set; } = "play.soulspirexi.com";

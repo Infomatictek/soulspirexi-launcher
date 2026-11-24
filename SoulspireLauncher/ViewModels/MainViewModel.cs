@@ -192,7 +192,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 _settingsService.Save(_settings, PlainPassword);
                 var plan = CurrentConnectionPlan;
                 StatusMessage = $"Staging Server selected ({plan.DisplayHost}). Managed TCP relay starts automatically on Play.";
-                Log($"Selected Staging Server ({plan.DisplayHost}, ports {StagingAuthPort}/{StagingDataPort}/{StagingViewPort}/{StagingSearchPort}, map UDP {plan.MapUdpPort}). No admin privileges or Windows portproxy changes required.");
+                Log($"Selected Staging Server ({plan.DisplayHost}, TCP {StagingAuthPort}/{StagingDataPort}/{StagingViewPort}/{StagingSearchPort}, Profile {StagingProfilePort}/{StagingProfileIrcPort}, Map UDP {plan.MapUdpPort}). No admin privileges or Windows portproxy changes required.");
             }
             else
             {
@@ -226,13 +226,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         get
         {
             var plan = CurrentConnectionPlan;
-            return $"Target: {plan.StatusProbeHost} (TCP {StagingAuthPort}/{StagingDataPort}/{StagingViewPort}/{StagingSearchPort} • Map UDP {plan.MapUdpPort})";
+            return $"Target: {plan.StatusProbeHost} (Lobby/Search {StagingAuthPort}/{StagingDataPort}/{StagingViewPort}/{StagingSearchPort} • Profile {StagingProfilePort}/{StagingProfileIrcPort} • Map UDP {plan.MapUdpPort})";
         }
     }
 
     public string StagingRelayStatusText => IsStagingRelayActive
-        ? $"Managed loopback TCP relay ACTIVE on 127.0.0.1 (54231/54230/54001/54002) • No admin required"
-        : "Managed loopback TCP relay ready (starts automatically on Play • No admin or netsh changes)";
+        ? "Managed loopback TCP relay ACTIVE on 127.0.0.1 (54231/54230/54001/54002/51220/51240) • No admin required"
+        : "Managed loopback TCP relay ready (6 TCP ports incl. Profile 51220/51240 • Starts on Play • No admin required)";
 
     public bool IsBusy
     {
@@ -399,6 +399,44 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             if (_settings.StagingSearchPort != value)
             {
                 _settings.StagingSearchPort = value;
+                if (IsStagingRelayActive)
+                {
+                    _stagingRelay.Stop();
+                }
+
+                OnPropertyChanged();
+                NotifyEffectiveServerChanged();
+            }
+        }
+    }
+
+    public int StagingProfilePort
+    {
+        get => _settings.StagingProfilePort;
+        set
+        {
+            if (_settings.StagingProfilePort != value)
+            {
+                _settings.StagingProfilePort = value;
+                if (IsStagingRelayActive)
+                {
+                    _stagingRelay.Stop();
+                }
+
+                OnPropertyChanged();
+                NotifyEffectiveServerChanged();
+            }
+        }
+    }
+
+    public int StagingProfileIrcPort
+    {
+        get => _settings.StagingProfileIrcPort;
+        set
+        {
+            if (_settings.StagingProfileIrcPort != value)
+            {
+                _settings.StagingProfileIrcPort = value;
                 if (IsStagingRelayActive)
                 {
                     _stagingRelay.Stop();
@@ -1380,11 +1418,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             var plan = StagingRelayService.ResolveConnectionPlan(_settings, _manifest);
             if (plan.RequiresLoopbackRelay && plan.RelayConfig is not null)
             {
-                StatusMessage = $"Checking Staging server reachability ({plan.StatusProbeHost}:{plan.StatusProbeLobbyPort})...";
-                var stagingProbe = await _statusService.CheckAsync(
+                StatusMessage = $"Checking Staging lobby & profile reachability ({plan.StatusProbeHost}:{plan.StatusProbeLobbyPort}, {plan.StatusProbeProfilePort}/{plan.StatusProbeProfileIrcPort})...";
+                var stagingProbe = await _statusService.CheckStagingAsync(
                     plan.StatusProbeHost,
                     plan.StatusProbeLobbyPort,
-                    plan.StatusProbeSearchPort);
+                    plan.StatusProbeSearchPort,
+                    plan.StatusProbeProfilePort,
+                    plan.StatusProbeProfileIrcPort);
                 ServerStatus = stagingProbe;
 
                 if (!stagingProbe.LobbyReachable)
@@ -1394,6 +1434,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                         $"Staging server {plan.StatusProbeHost}:{plan.StatusProbeLobbyPort} is unreachable ({stagingProbe.SummaryText}).\n\n" +
                         "Launch cancelled before starting the loopback relay or modifying soulspirexi.ini. " +
                         "Verify the Staging server is running and reachable from this PC, or switch back to Production.");
+                }
+
+                if (stagingProbe.ProfileReachable == false)
+                {
+                    _stagingRelay.Stop();
+                    var detail = stagingProbe.ProfileFailureDetail
+                        ?? $"Staging profile server unreachable on {plan.StatusProbeHost}:{plan.StatusProbeProfilePort}/{plan.StatusProbeProfileIrcPort}";
+                    throw new InvalidOperationException(
+                        $"{detail}.\n\n" +
+                        "xiloader requires both profile TCP ports (51220->51221 and 51240->51241) to complete login without error 0x21. " +
+                        "Launch cancelled before starting the loopback relay or modifying soulspirexi.ini.");
                 }
 
                 StatusMessage = $"Starting managed Staging TCP relay -> {plan.StatusProbeHost}...";
@@ -1462,10 +1513,17 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             SummaryText = $"Checking {plan.DisplayHost}..."
         };
 
-        var result = await _statusService.CheckAsync(
-            plan.StatusProbeHost,
-            plan.StatusProbeLobbyPort,
-            plan.StatusProbeSearchPort);
+        var result = plan.RequiresLoopbackRelay
+            ? await _statusService.CheckStagingAsync(
+                plan.StatusProbeHost,
+                plan.StatusProbeLobbyPort,
+                plan.StatusProbeSearchPort,
+                plan.StatusProbeProfilePort,
+                plan.StatusProbeProfileIrcPort)
+            : await _statusService.CheckAsync(
+                plan.StatusProbeHost,
+                plan.StatusProbeLobbyPort,
+                plan.StatusProbeSearchPort);
         ServerStatus = result;
     }
 
@@ -1788,6 +1846,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _settings.StagingSearchPort = manifestStaging?.Ports.Search is > 0 and <= 65535
             ? manifestStaging.Ports.Search
             : LauncherSettings.DefaultStagingSearchPort;
+        _settings.StagingProfilePort = manifestStaging?.Ports.Profile is > 0 and <= 65535
+            ? manifestStaging.Ports.Profile
+            : LauncherSettings.DefaultStagingProfilePort;
+        _settings.StagingProfileIrcPort = manifestStaging?.Ports.ProfileIrc is > 0 and <= 65535
+            ? manifestStaging.Ports.ProfileIrc
+            : LauncherSettings.DefaultStagingProfileIrcPort;
 
         _stagingRelay.Stop();
         _settingsService.Save(_settings, PlainPassword);
@@ -1797,6 +1861,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         OnPropertyChanged(nameof(StagingDataPort));
         OnPropertyChanged(nameof(StagingViewPort));
         OnPropertyChanged(nameof(StagingSearchPort));
+        OnPropertyChanged(nameof(StagingProfilePort));
+        OnPropertyChanged(nameof(StagingProfileIrcPort));
         NotifyEffectiveServerChanged();
         StatusMessage = $"Restored Staging defaults ({_settings.StagingServerHost}:{_settings.StagingAuthPort}).";
         Log(StatusMessage);

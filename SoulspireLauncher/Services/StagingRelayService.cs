@@ -21,6 +21,8 @@ public sealed record StagingRelayConfig(
     public const int DefaultLocalDataPort = 54230;
     public const int DefaultLocalViewPort = 54001;
     public const int DefaultLocalSearchPort = 54002;
+    public const int DefaultLocalProfilePort = 51220;
+    public const int DefaultLocalProfileIrcPort = 51240;
 
     public static StagingRelayConfig CreateDefault(
         string remoteHost,
@@ -28,10 +30,14 @@ public sealed record StagingRelayConfig(
         int remoteDataPort = LauncherSettings.DefaultStagingDataPort,
         int remoteViewPort = LauncherSettings.DefaultStagingViewPort,
         int remoteSearchPort = LauncherSettings.DefaultStagingSearchPort,
+        int remoteProfilePort = LauncherSettings.DefaultStagingProfilePort,
+        int remoteProfileIrcPort = LauncherSettings.DefaultStagingProfileIrcPort,
         int localAuthPort = DefaultLocalAuthPort,
         int localDataPort = DefaultLocalDataPort,
         int localViewPort = DefaultLocalViewPort,
         int localSearchPort = DefaultLocalSearchPort,
+        int localProfilePort = DefaultLocalProfilePort,
+        int localProfileIrcPort = DefaultLocalProfileIrcPort,
         int upstreamConnectTimeoutMs = 5000)
     {
         return new StagingRelayConfig(
@@ -41,6 +47,8 @@ public sealed record StagingRelayConfig(
                 new StagingPortRoute("Login Data", localDataPort, remoteDataPort),
                 new StagingPortRoute("Login View", localViewPort, remoteViewPort),
                 new StagingPortRoute("Search / AH", localSearchPort, remoteSearchPort),
+                new StagingPortRoute("Profile", localProfilePort, remoteProfilePort),
+                new StagingPortRoute("Profile IRC", localProfileIrcPort, remoteProfileIrcPort),
             ],
             upstreamConnectTimeoutMs);
     }
@@ -94,6 +102,8 @@ public sealed record ResolvedServerConnectionPlan(
     string StatusProbeHost,
     int StatusProbeLobbyPort,
     int StatusProbeSearchPort,
+    int StatusProbeProfilePort,
+    int StatusProbeProfileIrcPort,
     string BootServerHost,
     bool BootUseHairpin,
     bool RequiresLoopbackRelay,
@@ -102,8 +112,8 @@ public sealed record ResolvedServerConnectionPlan(
 
 /// <summary>
 /// Zero-privilege, in-process loopback TCP relay for SoulspireXI Staging.
-/// Maps xiloader's fixed local TCP ports (127.0.0.1:54231/54230/54001/54002)
-/// to the isolated staging server's alternate TCP ports (55231/55230/55001/55002)
+/// Maps xiloader's fixed local TCP ports (127.0.0.1:54231/54230/54001/54002/51220/51240)
+/// to the isolated staging server's alternate TCP ports (55231/55230/55001/55002/51221/51241)
 /// without UAC elevation, without modifying Windows netsh portproxy rules, and
 /// with OS-guaranteed socket cleanup on Stop, switch to Production, or process exit.
 /// </summary>
@@ -178,6 +188,12 @@ public sealed class StagingRelayService : IDisposable
             var searchPort = settings.StagingSearchPort is > 0 and <= 65535
                 ? settings.StagingSearchPort
                 : (manifestStaging?.Ports.Search ?? LauncherSettings.DefaultStagingSearchPort);
+            var profilePort = settings.StagingProfilePort is > 0 and <= 65535
+                ? settings.StagingProfilePort
+                : (manifestStaging?.Ports.Profile ?? LauncherSettings.DefaultStagingProfilePort);
+            var profileIrcPort = settings.StagingProfileIrcPort is > 0 and <= 65535
+                ? settings.StagingProfileIrcPort
+                : (manifestStaging?.Ports.ProfileIrc ?? LauncherSettings.DefaultStagingProfileIrcPort);
             var mapPort = manifestStaging?.Ports.Map is > 0 and <= 65535
                 ? manifestStaging.Ports.Map
                 : LauncherSettings.DefaultStagingMapPort;
@@ -187,7 +203,9 @@ public sealed class StagingRelayService : IDisposable
                 authPort,
                 dataPort,
                 viewPort,
-                searchPort);
+                searchPort,
+                profilePort,
+                profileIrcPort);
 
             // Important: BootUseHairpin MUST remain false in Staging mode because xiloader's
             // --hairpin rewrites the server-supplied zone_settings.zoneip (e.g. 192.168.86.117)
@@ -198,6 +216,8 @@ public sealed class StagingRelayService : IDisposable
                 StatusProbeHost: remoteHost,
                 StatusProbeLobbyPort: authPort,
                 StatusProbeSearchPort: searchPort,
+                StatusProbeProfilePort: profilePort,
+                StatusProbeProfileIrcPort: profileIrcPort,
                 BootServerHost: StagingRelayConfig.LoopbackHost,
                 BootUseHairpin: false,
                 RequiresLoopbackRelay: true,
@@ -221,6 +241,8 @@ public sealed class StagingRelayService : IDisposable
                 StatusProbeHost: customHost,
                 StatusProbeLobbyPort: customLobby,
                 StatusProbeSearchPort: customSearch,
+                StatusProbeProfilePort: 0,
+                StatusProbeProfileIrcPort: 0,
                 BootServerHost: customHost,
                 BootUseHairpin: settings.CustomUseHairpin,
                 RequiresLoopbackRelay: false,
@@ -238,6 +260,8 @@ public sealed class StagingRelayService : IDisposable
             StatusProbeHost: prodHost,
             StatusProbeLobbyPort: manifest.Ports.Lobby,
             StatusProbeSearchPort: manifest.Ports.Search,
+            StatusProbeProfilePort: 0,
+            StatusProbeProfileIrcPort: 0,
             BootServerHost: prodHost,
             BootUseHairpin: manifest.UseHairpin,
             RequiresLoopbackRelay: false,

@@ -136,6 +136,8 @@ def build_testing_manifest(
                 "data": 55230,
                 "view": 55001,
                 "search": 55002,
+                "profile": 51221,
+                "profileIrc": 51241,
                 "map": 55230,
             },
             "notes": (

@@ -94,7 +94,15 @@ class TestClientCacheAndSync(unittest.TestCase):
         self.assertEqual(staging.get("localLoopbackHost"), "127.0.0.1")
         self.assertEqual(
             staging.get("ports"),
-            {"auth": 55231, "data": 55230, "view": 55001, "search": 55002, "map": 55230},
+            {
+                "auth": 55231,
+                "data": 55230,
+                "view": 55001,
+                "search": 55002,
+                "profile": 51221,
+                "profileIrc": 51241,
+                "map": 55230,
+            },
         )
 
         stable_manifest = json.loads((LAUNCHER_ROOT / "manifest.json").read_text(encoding="utf-8"))

@@ -112,6 +112,12 @@ public sealed class ManifestStagingPorts
     [JsonPropertyName("search")]
     public int Search { get; set; } = LauncherSettings.DefaultStagingSearchPort;
 
+    [JsonPropertyName("profile")]
+    public int Profile { get; set; } = LauncherSettings.DefaultStagingProfilePort;
+
+    [JsonPropertyName("profileIrc")]
+    public int ProfileIrc { get; set; } = LauncherSettings.DefaultStagingProfileIrcPort;
+
     [JsonPropertyName("map")]
     public int Map { get; set; } = LauncherSettings.DefaultStagingMapPort;
 }

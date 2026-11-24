@@ -73,13 +73,15 @@ public sealed class StagingConnectionTests
     }
 
     [Fact]
-    public async Task ProductionToStaging_ResolvesCorrectPlanAndForwardsAllFourTcpRoutes()
+    public async Task ProductionToStaging_ResolvesCorrectPlanAndForwardsAllSixXiloaderRoutesThroughProfile()
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         using var authUpstream = await StartEchoServerAsync("AUTH", cts.Token);
         using var dataUpstream = await StartEchoServerAsync("DATA", cts.Token);
         using var viewUpstream = await StartEchoServerAsync("VIEW", cts.Token);
         using var searchUpstream = await StartEchoServerAsync("SRCH", cts.Token);
+        using var profileUpstream = await StartEchoServerAsync("PROF", cts.Token);
+        using var profileIrcUpstream = await StartEchoServerAsync("PIRC", cts.Token);
 
         var manifest = new LauncherManifest
         {
@@ -96,6 +98,8 @@ public sealed class StagingConnectionTests
                     Data = 55230,
                     View = 55001,
                     Search = 55002,
+                    Profile = 51221,
+                    ProfileIrc = 51241,
                     Map = 55230
                 }
             }
@@ -114,6 +118,8 @@ public sealed class StagingConnectionTests
         Assert.Equal("play.soulspirexi.com", prodPlan.StatusProbeHost);
         Assert.Equal(54231, prodPlan.StatusProbeLobbyPort);
         Assert.Equal(54002, prodPlan.StatusProbeSearchPort);
+        Assert.Equal(0, prodPlan.StatusProbeProfilePort);
+        Assert.Equal(0, prodPlan.StatusProbeProfileIrcPort);
         Assert.False(prodPlan.RequiresLoopbackRelay);
         Assert.Null(prodPlan.RelayConfig);
 
@@ -126,16 +132,22 @@ public sealed class StagingConnectionTests
         Assert.Equal("192.168.86.117", stagingPlan.StatusProbeHost);
         Assert.Equal(55231, stagingPlan.StatusProbeLobbyPort);
         Assert.Equal(55002, stagingPlan.StatusProbeSearchPort);
+        Assert.Equal(51221, stagingPlan.StatusProbeProfilePort);
+        Assert.Equal(51241, stagingPlan.StatusProbeProfileIrcPort);
         Assert.Equal(55230, stagingPlan.MapUdpPort);
         Assert.True(stagingPlan.RequiresLoopbackRelay);
         Assert.NotNull(stagingPlan.RelayConfig);
-        Assert.Equal(4, stagingPlan.RelayConfig!.Routes.Count);
+        Assert.Equal(6, stagingPlan.RelayConfig!.Routes.Count);
+        Assert.Contains(stagingPlan.RelayConfig.Routes, r => r.LocalPort == 51220 && r.RemotePort == 51221);
+        Assert.Contains(stagingPlan.RelayConfig.Routes, r => r.LocalPort == 51240 && r.RemotePort == 51241);
 
-        // 3. Verify live bidirectional TCP forwarding across all 4 mapped ports
+        // 3. Simulate full xiloader login sequence through Profile & Profile IRC (prevents error 0x21)
         var localAuth = AllocateFreeLoopbackPort();
         var localData = AllocateFreeLoopbackPort();
         var localView = AllocateFreeLoopbackPort();
         var localSearch = AllocateFreeLoopbackPort();
+        var localProfile = AllocateFreeLoopbackPort();
+        var localProfileIrc = AllocateFreeLoopbackPort();
 
         var testRelayConfig = StagingRelayConfig.CreateDefault(
             remoteHost: "127.0.0.1",
@@ -143,10 +155,14 @@ public sealed class StagingConnectionTests
             remoteDataPort: ((IPEndPoint)dataUpstream.LocalEndpoint).Port,
             remoteViewPort: ((IPEndPoint)viewUpstream.LocalEndpoint).Port,
             remoteSearchPort: ((IPEndPoint)searchUpstream.LocalEndpoint).Port,
+            remoteProfilePort: ((IPEndPoint)profileUpstream.LocalEndpoint).Port,
+            remoteProfileIrcPort: ((IPEndPoint)profileIrcUpstream.LocalEndpoint).Port,
             localAuthPort: localAuth,
             localDataPort: localData,
             localViewPort: localView,
-            localSearchPort: localSearch);
+            localSearchPort: localSearch,
+            localProfilePort: localProfile,
+            localProfileIrcPort: localProfileIrc);
 
         using var relay = new StagingRelayService();
         var startResult = relay.Start(testRelayConfig);
@@ -158,29 +174,31 @@ public sealed class StagingConnectionTests
         Assert.True(secondStart.Success);
         Assert.True(secondStart.AlreadyRunning);
 
-        var expectedPairs = new (int LocalPort, string ExpectedPrefix)[]
+        // Exact xiloader order: Auth -> Data -> View -> Profile (51220) -> Profile IRC (51240) -> Search (54002)
+        var loginSequence = new (int LocalPort, string StepPayload, string ExpectedPrefix)[]
         {
-            (localAuth, "AUTH"),
-            (localData, "DATA"),
-            (localView, "VIEW"),
-            (localSearch, "SRCH"),
+            (localAuth, "xiloader-auth", "AUTH"),
+            (localData, "xiloader-data", "DATA"),
+            (localView, "xiloader-view", "VIEW"),
+            (localProfile, "xiloader-profile-tls", "PROF"),
+            (localProfileIrc, "xiloader-profile-irc", "PIRC"),
+            (localSearch, "xiloader-search", "SRCH"),
         };
 
-        foreach (var (localPort, prefix) in expectedPairs)
+        foreach (var (localPort, payload, prefix) in loginSequence)
         {
             using var client = new TcpClient();
             await client.ConnectAsync(IPAddress.Loopback, localPort, cts.Token);
             await using var stream = client.GetStream();
-            var outbound = Encoding.UTF8.GetBytes("ping");
-            await stream.WriteAsync(outbound, cts.Token);
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(payload), cts.Token);
 
             var buf = new byte[64];
             var read = await stream.ReadAsync(buf, cts.Token);
             var response = Encoding.UTF8.GetString(buf, 0, read);
-            Assert.Equal($"{prefix}:ping", response);
+            Assert.Equal($"{prefix}:{payload}", response);
         }
 
-        Assert.Equal(4, relay.TotalForwardedConnections);
+        Assert.Equal(6, relay.TotalForwardedConnections);
     }
 
     [Fact]
@@ -231,12 +249,16 @@ public sealed class StagingConnectionTests
             var p2 = AllocateFreeLoopbackPort();
             var p3 = AllocateFreeLoopbackPort();
             var p4 = AllocateFreeLoopbackPort();
+            var p5 = AllocateFreeLoopbackPort();
+            var p6 = AllocateFreeLoopbackPort();
             var config = StagingRelayConfig.CreateDefault(
                 "192.168.86.117",
                 localAuthPort: p1,
                 localDataPort: p2,
                 localViewPort: p3,
-                localSearchPort: p4);
+                localSearchPort: p4,
+                localProfilePort: p5,
+                localProfileIrcPort: p6);
 
             using var relay = new StagingRelayService();
             Assert.True(relay.Start(config).Success);
@@ -246,8 +268,8 @@ public sealed class StagingConnectionTests
             relay.Stop();
             Assert.False(relay.IsRunning);
 
-            // Every local port must be immediately released and re-bindable
-            foreach (var port in new[] { p1, p2, p3, p4 })
+            // Every local port (including Profile 51220 & Profile IRC 51240) must be immediately released and re-bindable
+            foreach (var port in new[] { p1, p2, p3, p4, p5, p6 })
             {
                 using var probe = new TcpListener(IPAddress.Loopback, port);
                 probe.ExclusiveAddressUse = true;
@@ -433,13 +455,17 @@ public sealed class StagingConnectionTests
         var freePort1 = AllocateFreeLoopbackPort();
         var freePort3 = AllocateFreeLoopbackPort();
         var freePort4 = AllocateFreeLoopbackPort();
+        var freePort5 = AllocateFreeLoopbackPort();
+        var freePort6 = AllocateFreeLoopbackPort();
 
         var config = StagingRelayConfig.CreateDefault(
             remoteHost: "192.168.86.117",
             localAuthPort: freePort1,
             localDataPort: occupiedPort,
             localViewPort: freePort3,
-            localSearchPort: freePort4);
+            localSearchPort: freePort4,
+            localProfilePort: freePort5,
+            localProfileIrcPort: freePort6);
 
         using var relay = new StagingRelayService();
         var result = relay.Start(config);
@@ -545,6 +571,98 @@ public sealed class StagingConnectionTests
         Assert.Equal(55230, parsed.StagingServer.Ports.Data);
         Assert.Equal(55001, parsed.StagingServer.Ports.View);
         Assert.Equal(55002, parsed.StagingServer.Ports.Search);
+        Assert.Equal(51221, parsed.StagingServer.Ports.Profile);
+        Assert.Equal(51241, parsed.StagingServer.Ports.ProfileIrc);
         Assert.Equal(55230, parsed.StagingServer.Ports.Map);
+    }
+
+    [Fact]
+    public async Task ProfilePortCollision_RollsBackEarlierFivePortsAndPreservesExistingListener()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        using var existingProfileIrc = await StartEchoServerAsync("PIRC_EXISTING", cts.Token);
+        var occupiedProfileIrcPort = ((IPEndPoint)existingProfileIrc.LocalEndpoint).Port;
+
+        var p1 = AllocateFreeLoopbackPort();
+        var p2 = AllocateFreeLoopbackPort();
+        var p3 = AllocateFreeLoopbackPort();
+        var p4 = AllocateFreeLoopbackPort();
+        var p5 = AllocateFreeLoopbackPort();
+
+        var config = StagingRelayConfig.CreateDefault(
+            remoteHost: "192.168.86.117",
+            localAuthPort: p1,
+            localDataPort: p2,
+            localViewPort: p3,
+            localSearchPort: p4,
+            localProfilePort: p5,
+            localProfileIrcPort: occupiedProfileIrcPort);
+
+        using var relay = new StagingRelayService();
+        var result = relay.Start(config);
+
+        Assert.False(result.Success);
+        Assert.False(relay.IsRunning);
+        Assert.Equal(occupiedProfileIrcPort, result.ConflictingLocalPort);
+        Assert.Equal("Profile IRC", result.ConflictingRouteLabel);
+
+        // Atomic rollback: all 5 earlier ports (Auth, Data, View, Search, Profile) MUST be released
+        foreach (var port in new[] { p1, p2, p3, p4, p5 })
+        {
+            using var probe = new TcpListener(IPAddress.Loopback, port);
+            probe.ExclusiveAddressUse = true;
+            probe.Start();
+            probe.Stop();
+        }
+
+        // Pre-existing listener on occupiedProfileIrcPort remains intact
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, occupiedProfileIrcPort, cts.Token);
+        await using var stream = client.GetStream();
+        await stream.WriteAsync(Encoding.UTF8.GetBytes("ok"), cts.Token);
+        var buf = new byte[64];
+        var read = await stream.ReadAsync(buf, cts.Token);
+        Assert.Equal("PIRC_EXISTING:ok", Encoding.UTF8.GetString(buf, 0, read));
+    }
+
+    [Fact]
+    public async Task StagingStatusProbe_ReportsProfilePortFailuresClearly()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        using var lobby = await StartEchoServerAsync("L", cts.Token);
+        using var search = await StartEchoServerAsync("S", cts.Token);
+        using var profile = await StartEchoServerAsync("P", cts.Token);
+        using var profileIrc = await StartEchoServerAsync("I", cts.Token);
+
+        var lobbyPort = ((IPEndPoint)lobby.LocalEndpoint).Port;
+        var searchPort = ((IPEndPoint)search.LocalEndpoint).Port;
+        var profilePort = ((IPEndPoint)profile.LocalEndpoint).Port;
+        var profileIrcPort = ((IPEndPoint)profileIrc.LocalEndpoint).Port;
+        var deadPort = AllocateFreeLoopbackPort();
+
+        var statusService = new ServerStatusService();
+
+        // 1. All healthy -> Online + Profile OK
+        var allUp = await statusService.CheckStagingAsync("127.0.0.1", lobbyPort, searchPort, profilePort, profileIrcPort, cts.Token);
+        Assert.True(allUp.IsOnline);
+        Assert.True(allUp.LobbyReachable);
+        Assert.True(allUp.SearchReachable);
+        Assert.True(allUp.ProfileReachable);
+        Assert.True(allUp.ProfilePortReachable);
+        Assert.True(allUp.ProfileIrcPortReachable);
+        Assert.Null(allUp.ProfileFailureDetail);
+        Assert.Contains("Profile OK", allUp.SummaryText, StringComparison.OrdinalIgnoreCase);
+
+        // 2. Profile IRC port (51241 equivalent) offline -> IsOnline=false + clear failure detail
+        var ircDown = await statusService.CheckStagingAsync("127.0.0.1", lobbyPort, searchPort, profilePort, deadPort, cts.Token);
+        Assert.False(ircDown.IsOnline);
+        Assert.True(ircDown.LobbyReachable);
+        Assert.True(ircDown.ProfilePortReachable);
+        Assert.False(ircDown.ProfileIrcPortReachable);
+        Assert.False(ircDown.ProfileReachable);
+        Assert.NotNull(ircDown.ProfileFailureDetail);
+        Assert.Contains(deadPort.ToString(), ircDown.ProfileFailureDetail!, StringComparison.Ordinal);
+        Assert.Contains("Profile IRC", ircDown.ProfileFailureDetail!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Profile Offline", ircDown.SummaryText, StringComparison.OrdinalIgnoreCase);
     }
 }
