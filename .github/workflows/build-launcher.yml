@@ -353,7 +353,7 @@ jobs:
 
   sync-soulspire-native-binary:
     needs: [verify-manifest, build-and-test, build-soulspire-native]
-    if: (github.ref == 'refs/heads/feat/soulspire-native-foundation' || github.ref == 'refs/heads/feat/dat-virtualization-poc') && !startsWith(github.event.head_commit.message, 'chore(soulspire-native):')
+    if: (github.ref == 'refs/heads/feat/soulspire-native-foundation' || github.ref == 'refs/heads/feat/dat-virtualization-poc' || github.ref == 'refs/heads/feat/berserker-dual-great-axe') && !startsWith(github.event.head_commit.message, 'chore(soulspire-native):')
     runs-on: ubuntu-latest
     permissions:
       contents: write

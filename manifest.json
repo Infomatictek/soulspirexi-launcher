@@ -465,8 +465,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/crystalsocket/tests/weapon_config_test.lua",
       "targetPath": "crystalsocket/tests/weapon_config_test.lua",
-      "sha256": "c28471b7af636eea63cbc2796077a2fe438689024605d919f95de0886519bf86",
-      "size": 5757
+      "sha256": "9bd8daa505ba3b00a9689be55089c7b3d1e48ce3659f50300ae9e0569c7a71cb",
+      "size": 5944
     },
     {
       "category": "addon",

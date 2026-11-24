@@ -80,6 +80,8 @@ f:close()
 local ok_stale = WC.load_from_string(raw_json, '0000000000000000')
 assert(ok_stale == false and #WC.native_rules() == 0)
 assert(WC.allows_dual_2h_sub_menu(true, 1, 2, 75, WC.SKILLS.GREAT_AXE) == false)
+-- Fail-closed disables custom overrides cleanly so vanilla FFXI equipment/appearance remains unaffected
+assert(WC.appearance_mask_for(17, 1) == nil and WC.ranged_only_for(17, 1) == nil)
 
 local tampered = raw_json:gsub('"minEffectiveLevel": 10', '"minEffectiveLevel": 11', 1)
 local ok_tamper = WC.load_from_string(tampered)
