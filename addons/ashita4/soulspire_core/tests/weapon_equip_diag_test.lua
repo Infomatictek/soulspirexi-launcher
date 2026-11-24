@@ -3,10 +3,17 @@ package.path = './?.lua;../crystalsocket/?.lua;' .. package.path
 
 local bit = require('bit')
 local WC = require('weapon_config')
+local NativeBridge = require('core.native_bridge')
 local Diag = require('core.weapon_equip_diag')
 
+-- 0. Verify canonical NativeBridge FFI struct sizes match soulspire_native/core/api.h exactly!
+local abi_ok, abi_err = NativeBridge.verify_abi_sizes()
+assert(abi_ok == true, 'NativeBridge ABI struct size mismatch: ' .. tostring(abi_err))
+
 local ALL_27_HOOKS_MASK = bit.lshift(1, 27) - 1
+local ALL_31_HOOKS_MASK = bit.lshift(1, 31) - 1
 local MISSING_HOOK26_MASK = bit.band(ALL_27_HOOKS_MASK, bit.bnot(bit.lshift(1, 25)))
+local MISSING_HOOK26_31_MASK = bit.band(ALL_31_HOOKS_MASK, bit.bnot(bit.lshift(1, 28)))
 
 assert(WC.status().loaded == true, 'Authoritative soul-weapon-config.json must load')
 local rules = WC.native_rules()
@@ -144,8 +151,21 @@ local ok_tr, rep_tr = Diag.run_diagnostic({
     main_weapon = main_ga,
     candidates = { second_ga },
     slices_override = {},
-    native_override = { dll_loaded = true, enabled = true, installed_hooks = 31, expected_hooks = 31, installed_mask = ALL_27_HOOKS_MASK, job = 1, branch = 2, known = true, weapon_rules_count = 2 },
+    native_override = { dll_loaded = true, enabled = true, installed_hooks = 31, expected_hooks = 31, installed_mask = ALL_31_HOOKS_MASK, job = 1, branch = 2, known = true, weapon_rules_count = 2 },
 })
 assert(ok_tr == true and rep_tr.summary.packets0x050Count == 1 and rep_tr.packetTrace0x050[1].equipSlot == 1)
+assert(rep_tr.native.equipHooksOk == true, '31-hook bitmask (bits 21, 27, 28, 29) must validate as OK')
+
+-- 7. Verify 31-hook bitmask detects missing Hook #26 (bit 28) cleanly.
+local ok_31_miss, rep_31_miss = Diag.run_diagnostic({
+    diagnostics_enabled = true,
+    rules_override = rules,
+    effective_level = 20,
+    main_weapon = main_ga,
+    candidates = { second_ga },
+    slices_override = {},
+    native_override = { dll_loaded = true, enabled = true, installed_hooks = 30, expected_hooks = 31, installed_mask = MISSING_HOOK26_31_MASK, job = 1, branch = 2, known = true, weapon_rules_count = 2 },
+})
+assert(ok_31_miss == true and rep_31_miss.native.equipHooksOk == false)
 
 print('Soulspire Core weapon_equip_diag tests passed.')

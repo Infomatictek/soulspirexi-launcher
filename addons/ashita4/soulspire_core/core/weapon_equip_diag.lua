@@ -16,6 +16,7 @@
 
 local bit = require('bit')
 local ok_ffi, ffi = pcall(require, 'ffi')
+local NativeBridge = require('core.native_bridge')
 
 local D = {}
 
@@ -106,152 +107,31 @@ D.SKILL_NAMES = {
 }
 
 -- Bit indices in SoulspireNativeHookDiagnostics.installed_mask (0-based).
-D.EQUIP_HOOK_BITS = {
-    { bit = 21, number = 22, rva = '0x133E33', name = 'soul_can_equip_in_slot' },
-    { bit = 24, number = 25, rva = '0x133D56', name = 'soul_sub_weapon_detour' },
-    { bit = 25, number = 26, rva = '0x21DF85', name = 'dual_2h_menu_detour' },
-    { bit = 26, number = 27, rva = '0x133DD3', name = 'dual_2h_equip_detour' },
-}
-
-local status_t, weapon_status_t, hook_diag_t, ident_diag_t, iface_info_t, query_fn_t
-if ok_ffi and ffi then
-    pcall(ffi.cdef, 'void* __stdcall GetModuleHandleA(const char*);')
-    pcall(ffi.cdef, 'void* __stdcall GetProcAddress(void*, const char*);')
-    local ok1, t1 = pcall(ffi.typeof, [=[struct {
-        uint32_t size; uint32_t version; uint32_t enabled; uint32_t hooks;
-        uint32_t character_id; uint32_t job; uint32_t known; uint32_t branch;
-        uint32_t search_rows; uint32_t decoded_rows; uint32_t item_labels;
-        uint32_t search_labels; uint32_t full_labels; uint32_t queries_sent;
-        uint32_t replies_accepted; uint32_t replies_rejected; uint32_t last_error;
-    }[1]]=])
-    if ok1 then status_t = t1 end
-
-    local ok2, t2 = pcall(ffi.typeof, [=[struct {
-        uint32_t size; uint32_t version; uint32_t rules_count; uint32_t generation;
-        uint32_t allow_hits; uint32_t deny_hits;
-    }[1]]=])
-    if ok2 then weapon_status_t = t2 end
-
-    local ok3, t3 = pcall(ffi.typeof, [=[struct {
-        uint32_t size; uint32_t version; uint32_t total_hooks; uint32_t expected_hooks;
-        uint32_t installed_mask; uint32_t site_set_mask; uint32_t capabilities;
-        uint32_t ffxi_base; uint32_t ffxi_timestamp; uint32_t ffxi_image_size;
-        uint32_t init_stage; uint32_t failed_rva; uint32_t failed_index;
-        uint8_t  observed_bytes[8];
-    }[1]]=])
-    if ok3 then hook_diag_t = t3 end
-
-    local ok4, t4 = pcall(ffi.typeof, [=[struct {
-        uint32_t size; uint32_t version; uint32_t source; uint32_t status;
-        uint32_t schema_version; uint32_t soul_count;
-        char     compiled_registry_hash[24];
-        char     active_registry_hash[24];
-        char     warning[128];
-        int32_t  tracking_px; int32_t offset_x_px;
-        uint32_t use_glyph_widths; uint32_t presentation_from_file;
-    }[1]]=])
-    if ok4 then ident_diag_t = t4 end
-
-    local ok5, t5 = pcall(ffi.typeof, [=[struct {
-        uint32_t size; uint32_t abi_version; uint32_t expected_hooks; uint32_t installed_hooks;
-        uint32_t capabilities; uint32_t enabled_modules_mask; uint32_t active_modules_mask;
-        uint32_t menu2fon_banks_used; uint32_t menu2fon_banks_max; uint32_t menu2fon_fallback_draws;
-        uint32_t config_from_file; uint32_t log_level;
-        char     project_name[32];
-        char     registry_hash[24];
-    }[1]]=])
-    if ok5 then iface_info_t = t5 end
-
-    local ok6, t6 = pcall(ffi.typeof, 'uint32_t (__stdcall *)(void*, uint32_t)')
-    if ok6 then query_fn_t = t6 end
-end
-
-local function read_cstr(arr, cap)
-    local out = {}
-    for i = 0, cap - 1 do
-        local b = tonumber(arr[i]) or 0
-        if b == 0 then break end
-        out[#out + 1] = string.char(b)
-    end
-    return table.concat(out)
-end
-
-local function call_native_struct(handle, export_name, ctype)
-    if handle == nil or not ctype or not query_fn_t then return nil, 'unavailable' end
-    local addr = ffi.C.GetProcAddress(handle, export_name)
-    if addr == nil then return nil, export_name .. ' export missing' end
-    local fn = ffi.cast(query_fn_t, addr)
-    local buf = ffi.new(ctype)
-    local rc = tonumber(fn(buf, ffi.sizeof(buf)))
-    if rc ~= 0 then return nil, export_name .. ' rc=' .. tostring(rc) end
-    return buf[0], nil
+-- 31-hook layout adds 3 CALL patches (bits 22..24) before PrologueDetours, shifting detours +3.
+function D.equip_hook_specs(expected_hooks)
+    local is_31 = (tonumber(expected_hooks) or 31) >= 31
+    return {
+        { bit = 21, number = 22, rva = '0x133E33', name = 'soul_can_equip_in_slot' },
+        { bit = is_31 and 27 or 24, number = 25, rva = '0x133D56', name = 'soul_sub_weapon_detour' },
+        { bit = is_31 and 28 or 25, number = 26, rva = '0x21DF85', name = 'dual_2h_menu_detour' },
+        { bit = is_31 and 29 or 26, number = 27, rva = '0x133DD3', name = 'dual_2h_equip_detour' },
+    }
 end
 
 function D.query_native_runtime()
-    if not (ok_ffi and ffi) then
-        return { dll_loaded = false, error = 'FFI unavailable' }
-    end
-    local ok, snap = pcall(function()
-        local handle = ffi.C.GetModuleHandleA('soulspire_native.dll')
-        if handle == nil then
-            return { dll_loaded = false, error = 'soulspire_native.dll not loaded in process' }
-        end
-        local res = { dll_loaded = true }
-        local st = call_native_struct(handle, 'SoulspireNativeGetStatus', status_t)
-        if st then
-            res.enabled = tonumber(st.enabled) == 1
-            res.hooks = tonumber(st.hooks)
-            res.character_id = tonumber(st.character_id)
-            res.job = tonumber(st.job)
-            res.known = tonumber(st.known) == 1
-            res.branch = tonumber(st.branch)
-            res.last_error = tonumber(st.last_error)
-        end
-        local ws = call_native_struct(handle, 'SoulspireNativeGetWeaponStatus', weapon_status_t)
-        if ws then
-            res.weapon_rules_count = tonumber(ws.rules_count)
-            res.weapon_rules_generation = tonumber(ws.generation)
-            res.weapon_allow_hits = tonumber(ws.allow_hits)
-            res.weapon_deny_hits = tonumber(ws.deny_hits)
-        end
-        local hd = call_native_struct(handle, 'SoulspireNativeGetHookDiagnostics', hook_diag_t)
-        if hd then
-            res.expected_hooks = tonumber(hd.expected_hooks)
-            res.installed_hooks = tonumber(hd.total_hooks)
-            res.installed_mask = tonumber(hd.installed_mask)
-            res.capabilities = tonumber(hd.capabilities)
-            res.init_stage = tonumber(hd.init_stage)
-            res.failed_rva = tonumber(hd.failed_rva)
-        end
-        local id = call_native_struct(handle, 'SoulspireNativeGetIdentityDiagnostics', ident_diag_t)
-        if id then
-            res.compiled_registry_hash = read_cstr(id.compiled_registry_hash, 24)
-            res.active_registry_hash = read_cstr(id.active_registry_hash, 24)
-        end
-        local ii = call_native_struct(handle, 'SoulspireNativeGetInterfaceInfo', iface_info_t)
-        if ii then
-            res.abi_version = tonumber(ii.abi_version)
-            res.enabled_modules_mask = tonumber(ii.enabled_modules_mask)
-            res.active_modules_mask = tonumber(ii.active_modules_mask)
-            res.registry_hash = read_cstr(ii.registry_hash, 24)
-        end
-        return res
-    end)
-    if not ok then
-        return { dll_loaded = false, error = tostring(snap) }
-    end
-    return snap
+    return NativeBridge.query_equipment_runtime()
 end
 
 function D.inspect_equipment_hooks(installed_mask, expected_hooks)
     local mask = tonumber(installed_mask) or 0
     local out = {}
     local all_ok = true
-    for _, spec in ipairs(D.EQUIP_HOOK_BITS) do
+    for _, spec in ipairs(D.equip_hook_specs(expected_hooks)) do
         local installed = bit.band(mask, bit.lshift(1, spec.bit)) ~= 0
         if not installed then all_ok = false end
         out[#out + 1] = {
             hook = spec.number,
+            bit = spec.bit,
             rva = spec.rva,
             name = spec.name,
             installed = installed,
@@ -659,6 +539,7 @@ function D.run_diagnostic(opts)
             weaponAllowHits = native.weapon_allow_hits or 0,
             weaponDenyHits = native.weapon_deny_hits or 0,
             lastError = native.last_error or 0,
+            queryErrors = native.query_errors or {},
         },
         sync = {
             compiledRegistryHash = native.compiled_registry_hash or '',
