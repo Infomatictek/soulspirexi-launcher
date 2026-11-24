@@ -809,7 +809,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         set { if (_settings.AutoUpdateLauncher != value) { _settings.AutoUpdateLauncher = value; OnPropertyChanged(); } }
     }
 
-    public string LauncherVersionText => $"v{LauncherSelfUpdateService.GetCurrentVersion()}";
+    public string LauncherVersionText => $"v{LauncherSelfUpdateService.GetCurrentInformationalVersion()}";
 
     public IReadOnlyList<UpdateChannel> UpdateChannelOptions { get; } =
     [
