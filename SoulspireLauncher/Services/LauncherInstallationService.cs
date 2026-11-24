@@ -340,24 +340,15 @@ public static class LauncherInstallationService
                 throw new IOException($"Versioned release copy verification failed: {releaseVerify.ErrorMessage}");
             }
 
-            // 3. Create verified rollback backup of current working executable (if present)
+            // 3. Create verified rollback backup of current working executable (with lock/AV retries)
             if (File.Exists(targetExePath))
             {
-                preUpdateSha = LauncherPackageVerifier.ComputeSha256Hex(targetExePath);
-                var tmpBackup = rollbackBackupPath + ".tmp";
-                File.Copy(targetExePath, tmpBackup, overwrite: true);
-                var backupVerify = LauncherPackageVerifier.VerifyFileIntegrity(
-                    tmpBackup,
-                    preUpdateSha,
-                    expectedSize: 0,
-                    minimumSizeBytes: 1,
-                    requirePeHeader: false);
-                if (!backupVerify.IsValid)
-                {
-                    throw new IOException($"Failed to verify rollback backup: {backupVerify.ErrorMessage}");
-                }
-
-                File.Move(tmpBackup, rollbackBackupPath, overwrite: true);
+                preUpdateSha = BackupFileWithRetry(
+                    targetExePath,
+                    rollbackBackupPath,
+                    maxLockRetries,
+                    retryDelayMs,
+                    log);
                 backupCreated = true;
                 log?.Invoke($"Created verified rollback backup ({preUpdateSha[..12]}) at {rollbackBackupPath}.");
             }
@@ -638,6 +629,54 @@ public static class LauncherInstallationService
         }
 
         return removed;
+    }
+
+    internal static string BackupFileWithRetry(
+        string sourceFile,
+        string rollbackBackupPath,
+        int maxRetries,
+        int retryDelayMs,
+        Action<string>? log = null)
+    {
+        Exception? lastException = null;
+        var attempts = Math.Max(1, maxRetries);
+        var tmpBackup = rollbackBackupPath + ".tmp";
+
+        for (var attempt = 1; attempt <= attempts; attempt++)
+        {
+            try
+            {
+                var sha = LauncherPackageVerifier.ComputeSha256Hex(sourceFile);
+                File.Copy(sourceFile, tmpBackup, overwrite: true);
+                var backupVerify = LauncherPackageVerifier.VerifyFileIntegrity(
+                    tmpBackup,
+                    sha,
+                    expectedSize: 0,
+                    minimumSizeBytes: 1,
+                    requirePeHeader: false);
+                if (!backupVerify.IsValid)
+                {
+                    throw new IOException($"Failed to verify rollback backup: {backupVerify.ErrorMessage}");
+                }
+
+                File.Move(tmpBackup, rollbackBackupPath, overwrite: true);
+                return sha;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                SafeDeleteFile(tmpBackup);
+                lastException = ex;
+                log?.Invoke($"File lock / antivirus retry {attempt}/{attempts} backing up {Path.GetFileName(sourceFile)}: {ex.Message}");
+                if (attempt < attempts)
+                {
+                    Thread.Sleep(Math.Max(10, retryDelayMs));
+                }
+            }
+        }
+
+        throw new IOException(
+            $"Could not back up {sourceFile} after {attempts} attempts (file may be locked by another process or antivirus scan): {lastException?.Message}",
+            lastException);
     }
 
     internal static void ReplaceFileWithRetry(

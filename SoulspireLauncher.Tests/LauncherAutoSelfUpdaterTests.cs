@@ -450,7 +450,7 @@ public sealed class LauncherAutoSelfUpdaterTests
 
             // 2. Transient lock (simulating AV scan / exiting process) -> succeeds on retry
             var transientLock = new FileStream(targetExe, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
-            _ = Task.Run(async () =>
+            var releaseTask = Task.Run(async () =>
             {
                 await Task.Delay(120);
                 transientLock.Dispose();
@@ -462,6 +462,7 @@ public sealed class LauncherAutoSelfUpdaterTests
                 retryDelayMs: 50,
                 requirePeHeader: true,
                 minimumExeBytes: 64);
+            await releaseTask;
             Assert.True(succeeded.Success, succeeded.Message);
             Assert.Equal(newSha, LauncherPackageVerifier.ComputeSha256Hex(targetExe));
         }

@@ -1114,7 +1114,7 @@ public sealed class LauncherSelfUpdateService
             "  ping -n 2 127.0.0.1 >nul",
             "  goto copyloop",
             ")",
-            "if not exist \"%DST%\" goto rollback",
+            "if not exist \"%DST%\" goto cleanup",
             "del /F /Q \"%SRC%\" >nul 2>&1",
             $"start \"\" \"%DST%\" {JustUpdatedArg}",
             "goto cleanup",

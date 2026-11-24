@@ -155,17 +155,10 @@ internal static class Program
                 throw new IOException("Versioned release copy SHA-256 mismatch.");
             }
 
-            // 3. Back up current working launcher to rollback/SoulspireLauncher.prev.exe
+            // 3. Back up current working launcher to rollback/SoulspireLauncher.prev.exe (with lock/AV retries)
             if (File.Exists(targetExePath))
             {
-                preUpdateSha = ComputeSha256Hex(targetExePath);
-                var tmpBackup = rollbackBackupPath + ".tmp";
-                File.Copy(targetExePath, tmpBackup, overwrite: true);
-                if (!string.Equals(ComputeSha256Hex(tmpBackup), preUpdateSha, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new IOException("Rollback backup SHA-256 verification failed.");
-                }
-                File.Move(tmpBackup, rollbackBackupPath, overwrite: true);
+                preUpdateSha = BackupFileWithRetry(targetExePath, rollbackBackupPath, maxRetries: 25, retryDelayMs: 400, Log);
                 backupCreated = true;
                 Log($"Verified rollback backup saved ({preUpdateSha[..12]}).");
             }
@@ -358,6 +351,43 @@ internal static class Program
 
         // Small grace period for Windows file handles / Defender scan release
         Thread.Sleep(350);
+    }
+
+    private static string BackupFileWithRetry(
+        string sourceFile,
+        string rollbackBackupPath,
+        int maxRetries,
+        int retryDelayMs,
+        Action<string> log)
+    {
+        Exception? last = null;
+        var tmpBackup = rollbackBackupPath + ".tmp";
+        for (var i = 1; i <= maxRetries; i++)
+        {
+            try
+            {
+                var sha = ComputeSha256Hex(sourceFile);
+                File.Copy(sourceFile, tmpBackup, overwrite: true);
+                if (!string.Equals(ComputeSha256Hex(tmpBackup), sha, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new IOException("Rollback backup SHA-256 verification failed.");
+                }
+                File.Move(tmpBackup, rollbackBackupPath, overwrite: true);
+                return sha;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                SafeDeleteFile(tmpBackup);
+                last = ex;
+                log($"Lock/AV retry {i}/{maxRetries} backing up {Path.GetFileName(sourceFile)}: {ex.Message}");
+                if (i < maxRetries)
+                {
+                    Thread.Sleep(retryDelayMs);
+                }
+            }
+        }
+
+        throw new IOException($"Could not back up {sourceFile} after {maxRetries} retries: {last?.Message}", last);
     }
 
     private static void ReplaceFileWithRetry(
