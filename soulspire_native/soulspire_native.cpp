@@ -2188,7 +2188,9 @@ extern "C" uint32_t __stdcall SoulspireNativeInitialize() {
     soul_sub_menu_allow_resume = reinterpret_cast<uintptr_t>(base + 0x21DF8A);
     soul_sub_menu_skip_resume = reinterpret_cast<uintptr_t>(base + 0x21DFE9);
     soul_sub_2h_main_deny_resume = reinterpret_cast<uintptr_t>(base + 0x133DD8);
-    soul_sub_2h_main_allow_resume = reinterpret_cast<uintptr_t>(base + 0x133DEB);
+    // 0x133DCB (`je 0x133E05`) is the exact non-2H allow target in EquipMenu::TryEquipItem;
+    // 0x133DEB sits inside the push 0x99 error-return tail (`xor al, al; ret 0x10`).
+    soul_sub_2h_main_allow_resume = reinterpret_cast<uintptr_t>(base + 0x133E05);
 
     AcquireSRWLockExclusive(&weapon_lock);
     load_runtime_resources(pinned, action_row_max_chars, &weapon_rule_catalog, &weapon_presentation_mgr);
