@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.2.0-testing.5",
+  "manifestVersion": "2.2.0-testing.6",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
     "version": "main (d6085d5)",
@@ -116,7 +116,7 @@
       "category": "plugin",
       "sourcePath": "channels/testing/payload/plugins/ashita4/soulspire_native.dll",
       "targetPath": "soulspire_native.dll",
-      "sha256": "10b379e1e3761ffeda6a0c052e5dfc41e81168da99712bbd959d2fd4a23420e3",
+      "sha256": "c2fd15cb0a634ce12bde7d2d5b215d7f0638adaba513683fce157d26faab2226",
       "size": 224256
     },
     {
@@ -10036,7 +10036,7 @@
     "hash": "cf86aa59ff8d16c6",
     "idLockStatus": "locked",
     "nativeDllCompiledHash": "cf86aa59ff8d16c6",
-    "nativeDllSha256": "10b379e1e3761ffeda6a0c052e5dfc41e81168da99712bbd959d2fd4a23420e3",
+    "nativeDllSha256": "c2fd15cb0a634ce12bde7d2d5b215d7f0638adaba513683fce157d26faab2226",
     "nativeDllClientVerified": false,
     "nativeHooks": 31,
     "crystalJobsHooks": 31

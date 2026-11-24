@@ -1,19 +1,19 @@
 {
   "dllPath": "plugins/ashita4/soulspire_native.dll",
-  "dllSha256": "10b379e1e3761ffeda6a0c052e5dfc41e81168da99712bbd959d2fd4a23420e3",
+  "dllSha256": "c2fd15cb0a634ce12bde7d2d5b215d7f0638adaba513683fce157d26faab2226",
   "compiledRegistryHash": "cf86aa59ff8d16c6",
   "runtimeIdentityLoader": true,
   "identitySchemaVersion": 1,
   "nativeHooks": 31,
-  "sourceCommit": "44db3c00f13e444e195b556b6d7f48cb9d0ad363",
+  "sourceCommit": "de65cd0fe5cb8e3ee0039ad07baeecfc207fea3f",
   "buildTarget": "Win32-x86-MSVC",
-  "ciRunId": "45475018833",
-  "ciRunUrl": "https://github.com/Infomatictek/soulspirexi-launcher/actions/runs/45475018833",
+  "ciRunId": "45484416271",
+  "ciRunUrl": "https://github.com/Infomatictek/soulspirexi-launcher/actions/runs/45484416271",
   "ciVerified": true,
   "clientVerified": false,
   "notes": "CI-built 31-hook soulspire_native.dll (native Commands menu entry) synced from GitHub Actions windows-latest MSVC x86 build. Client verification requires manual Windows Ashita v4 playtesting.",
   "dllSize": 224256,
   "expectedHooks": 31,
   "abiVersion": 2,
-  "branch": "fix/ws3-weap-002-equip-sync-diag"
+  "branch": "fix/ws3-weap-002-hook27-allow-resume"
 }
