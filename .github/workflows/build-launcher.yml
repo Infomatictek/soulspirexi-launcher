@@ -267,7 +267,18 @@ jobs:
             "selftest_exe_sha256=$testHash"
           ) | Set-Content -Path "soulspire_native-build-info.txt" -Encoding UTF8
 
+          $ErrorActionPreference = 'Continue'
           python scripts/verify-soulspire-native-dll.py $dllPath --build-info soulspire_native-build-info.txt --expected-commit "${{ github.sha }}"
+          $vrc = $LASTEXITCODE
+          $ErrorActionPreference = 'Stop'
+          if ($vrc -ne 0) {
+            if (Test-Path "soulspire_native-build.log") {
+              foreach ($line in (Get-Content "soulspire_native-build.log" -Tail 15)) {
+                Write-Host "::error::BUILDLOG: $line"
+              }
+            }
+            exit $vrc
+          }
           Get-Content "soulspire_native-build-info.txt"
 
       - name: Upload soulspire_native.dll and selftest.exe build artifacts
