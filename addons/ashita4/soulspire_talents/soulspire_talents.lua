@@ -29,6 +29,26 @@ if not okReg or type(soulRegistry) ~= 'table' then soulRegistry = nil end
 local okWsReg, wsRegistry = pcall(require, 'ws_registry_generated')
 if not okWsReg or type(wsRegistry) ~= 'table' then wsRegistry = nil end
 
+local function loadCoreSibling(rel_mod)
+    if type(addon) ~= 'table' or type(addon.path) ~= 'string' or addon.path == '' then return nil end
+    local root = addon.path:gsub('[/\\]+$', ''):gsub('[/\\][^/\\]+$', '')
+    local core_dir = root .. '/soulspire_core'
+    local prev = package.path
+    package.path = core_dir .. '/?.lua;' .. core_dir .. '/?/init.lua;' .. prev
+    local ok, mod = pcall(require, rel_mod)
+    package.path = prev
+    return (ok and type(mod) == 'table') and mod or nil
+end
+
+local coreIpc = loadCoreSibling('core.ipc')
+local DataService = loadCoreSibling('core.data_service')
+local dataService = nil
+if DataService and DataService.new and type(addon) == 'table' and type(addon.path) == 'string' then
+    local root = addon.path:gsub('[/\\]+$', ''):gsub('[/\\][^/\\]+$', '')
+    dataService = DataService.new({ cache_dir = root .. '/soulspire_core/cache', auto_load = true })
+end
+local oxtlIpcToken = coreIpc and coreIpc.register_listener('OXTL', 'soulspire_talents') or nil
+
 local function clamp(v, lo, hi)
     if v < lo then return lo end
     if v > hi then return hi end
@@ -91,6 +111,7 @@ end
 state, actions = soulforgeState.new({
     soulRegistry = soulRegistry,
     wsRegistry   = wsRegistry,
+    dataService  = dataService,
     savePrefs    = savePrefs,
 })
 
@@ -137,7 +158,8 @@ ashita.events.register('load', 'ox_talents_load', function()
         local getLvl = player.GetMainJobLevel or player.GetMainLevel
         state.lastKnownJob = player:GetMainJob()
         state.lastKnownLvl = getLvl and getLvl(player) or 1
-        actions.sync()
+        -- Do not flood OP_SYNC on login when standalone /talents window is closed;
+        -- static catalog is already loaded from local cache and dynamic state syncs on open.
     end
 end)
 
@@ -197,14 +219,25 @@ ashita.events.register('command', 'ox_talents_cmd', function(e)
 end)
 
 ashita.events.register('packet_in', 'ox_talents_packet_in', function(e)
+    if e.id == 0x00A or e.id == 0x00B then
+        if actions and actions.invalidate then
+            actions.invalidate('zone_change')
+        end
+        return
+    end
     local buf = e.data_modified or e.data
     if actions.handlePacketIn(e.id, buf, e.size) then
-        e.blocked = true
+        if not coreIpc or coreIpc.should_block(oxtlIpcToken) then
+            e.blocked = true
+        end
     end
 end)
 
 ashita.events.register('d3d_present', 'ox_talents_present', function()
     local now = os.clock()
+    if actions and actions.tick then
+        actions.tick(now)
+    end
     if now - state.lastAutoCheck >= 1.0 then
         state.lastAutoCheck = now
         local player = AshitaCore:GetMemoryManager():GetPlayer()
@@ -255,6 +288,10 @@ ashita.events.register('d3d_present', 'ox_talents_present', function()
 end)
 
 ashita.events.register('unload', 'ox_talents_soulforge_unload', function()
+    if coreIpc and oxtlIpcToken then
+        coreIpc.unregister_listener(oxtlIpcToken)
+        oxtlIpcToken = nil
+    end
     savePrefs()
     soulforgeUI.unload()
 end)

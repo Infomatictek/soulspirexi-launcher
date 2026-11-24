@@ -310,23 +310,34 @@ class TestingChannelPublishTests(unittest.TestCase):
         self.assertEqual(stable["repo"]["branch"], "main")
         self.assertEqual(core["channel"], "testing")
         self.assertEqual(core["candidateId"], "core-ui-24hook")
-        self.assertEqual(core["repo"]["branch"], "feat/soulspire-core-native-ui-gamepad")
+        self.assertEqual(core["repo"]["branch"], "feat/client-data-cache-overhaul")
         self.assertEqual(
             core["repo"]["rawBaseUrl"],
-            "https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/feat/soulspire-core-native-ui-gamepad",
+            "https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/feat/client-data-cache-overhaul",
         )
 
-        # Verify all required Core, Soulforge, and native DLL files are included
+        # Verify all required Core, Cache, Soulforge, and native DLL files are included
         targets = {f["targetPath"]: f for f in core["files"]}
         for required_target in (
             "soulspire_core/soulspire_core.lua",
             "soulspire_core/core/foundations.lua",
             "soulspire_core/core/registry.lua",
+            "soulspire_core/core/data_service.lua",
+            "soulspire_core/core/json.lua",
+            "soulspire_core/core/sha256.lua",
+            "soulspire_core/core/ipc.lua",
             "soulspire_core/core/native_bridge.lua",
             "soulspire_core/core/menu_bridge.lua",
             "soulspire_core/core/input.lua",
             "soulspire_core/core/focus.lua",
             "soulspire_core/core/ui.lua",
+            "soulspire_core/cache/manifest.json",
+            "soulspire_core/cache/souls.json",
+            "soulspire_core/cache/weapon_skills.json",
+            "soulspire_core/cache/talents.json",
+            "soulspire_core/cache/abilities.json",
+            "soulspire_core/cache/equipment.json",
+            "soulspire_core/cache/ui_metadata.json",
             "soulspire_core/modules/character.lua",
             "soulspire_core/modules/weapon_mastery.lua",
             "soulspire_core/modules/soul_talents.lua",

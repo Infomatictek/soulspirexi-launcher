@@ -22,8 +22,10 @@ local function clamp(v, lo, hi)
 end
 
 -- Use non-colliding request ID window (0x4000..0x7EFF) so Core never collides with
--- standalone crystalsocket (1..0x3FFF) or crystaljobs.dll native decoder (0x8000..0xFFFF).
+-- standalone crystalsocket (1..0x3FFF) or soulspire_native.dll native decoder (0x8000..0xFFFF).
 local CORE_REQ_BASE = 0x4000
+local MAX_SYNC_RETRIES = 2
+local RETRY_BACKOFF_SEC = 1.6
 
 function Character.new(opts)
     opts = opts or {}
@@ -36,6 +38,7 @@ function Character.new(opts)
         protocol      = opts.protocol,
         crystal_state = cs_state,
         soul_registry = opts.soul_registry,
+        data_service  = opts.data_service,
         assets        = opts.assets,
         send_packet   = opts.send_packet,
         clock         = opts.clock or os.clock,
@@ -45,6 +48,9 @@ function Character.new(opts)
         selected_idx  = 1,
         confirm_btn   = 1,
         confirm_entry = nil,
+        sync_retries  = 0,
+        retry_after   = nil,
+        last_sync_err = nil,
         player_info   = {
             name       = 'Adventurer',
             main_job   = 0,
@@ -57,6 +63,56 @@ function Character.new(opts)
         hud_branch    = nil,
         hud_job       = nil,
     }, Character)
+end
+
+function Character:_cache_ready()
+    return self.data_service ~= nil and self.data_service:is_cache_usable()
+end
+
+function Character:_can_socket(snap)
+    if not snap or not snap.loaded or snap.pending then return false end
+    if self:_cache_ready() then
+        local cached = self.data_service:get_souls_for_job(snap.current_job or self.player_info.main_job or 0)
+        if type(cached) == 'table' and #cached > 0 then
+            return true
+        end
+    end
+    return snap.catalog ~= nil and #(snap.catalog.entries or {}) > 0
+end
+
+function Character:_ensure_cached_catalog_in_state(job_id)
+    -- Keep crystal_state.catalogs[job_id] populated from verified local cache so
+    -- crystal_state:request(OP_SELECT, ...) passes its local catalog presence guard
+    -- without ever needing a redundant CRYC catalog flood from the server.
+    if not self.crystal_state or not self:_cache_ready() then return false end
+    local jid = tonumber(job_id) or self.crystal_state.current_job or self.player_info.main_job or 0
+    if jid < 1 or jid > 22 then return false end
+    if self.crystal_state.catalogs[jid] and #(self.crystal_state.catalogs[jid].entries or {}) > 0 then
+        return true
+    end
+    local souls = self.data_service:get_souls_for_job(jid)
+    if type(souls) ~= 'table' or #souls == 0 then return false end
+    local entries = {}
+    for i, s in ipairs(souls) do
+        entries[i] = {
+            id           = s.branchId,
+            permanent_id = s.id,
+            key          = s.internalKey,
+            name         = s.displayName,
+            role         = s.roleLabel or s.roleCategory,
+            icon         = s.icon,
+            req_level    = s.reqLevel or 10,
+            description  = s.summary or s.lore or '',
+            highlights   = s.highlights or {},
+        }
+    end
+    self.crystal_state.catalogs[jid] = {
+        job_id   = jid,
+        job_name = JOB_NAMES[jid] or '---',
+        entries  = entries,
+        source   = 'cache',
+    }
+    return true
 end
 
 function Character:has_modal()
@@ -113,16 +169,45 @@ end
 
 -- Observe incoming 0x1FF CRYS/CRYC packets for Core's request range (0x4000..0x7EFF),
 -- and also update active/owned state passively when standalone crystalsocket receives a reply.
-function Character:handle_packet_in(id, data, now)
+function Character:handle_packet_in(id, data, now, size)
     if not self.protocol or not self.crystal_state or id ~= self.protocol.RESPONSE_ID then
         return false
     end
-    local decoded = self.protocol.decode_packet(data)
+    if type(data) ~= 'string' then return false end
+    local pkt = (type(size) == 'number' and size > 0 and size <= #data) and data:sub(1, size) or data
+    local decoded = self.protocol.decode_packet(pkt)
     if not decoded then return false end
+
+    if self.data_service then
+        self.data_service:record_metric('packets_in_crys', 1)
+        self.data_service:record_metric('bytes_in_crys', #pkt)
+    end
 
     local ts = now or self.clock()
     if decoded.request_id >= CORE_REQ_BASE and decoded.request_id < 0x8000 then
-        pcall(self.crystal_state.receive, self.crystal_state, data, ts)
+        local ok, recv_ok, why = pcall(self.crystal_state.receive, self.crystal_state, pkt, ts)
+        if ok and recv_ok then
+            if decoded.kind == 'state' then
+                if decoded.result == 0 then
+                    self.sync_retries = 0
+                    self.retry_after = nil
+                    self.last_sync_err = nil
+                elseif decoded.result == 3 and self.sync_retries < MAX_SYNC_RETRIES then
+                    -- Server Busy (e.g. concurrent sync): schedule clean bounded retry
+                    self.sync_retries = self.sync_retries + 1
+                    self.retry_after = ts + RETRY_BACKOFF_SEC
+                    self.last_sync_err = 'Server busy; retrying Soul sync...'
+                    if self.data_service then
+                        self.data_service:record_metric('sync_retries', 1)
+                        self.data_service:record_event('crys', 'busy_retry', 'req=' .. tostring(decoded.request_id))
+                    end
+                else
+                    self.last_sync_err = self.crystal_state.message
+                end
+            end
+        elseif self.data_service then
+            self.data_service:record_event('crys', 'receive_err', tostring(why or recv_ok))
+        end
         return true -- owned by Core
     end
 
@@ -134,8 +219,39 @@ function Character:handle_packet_in(id, data, now)
             self.crystal_state.current_lvl = decoded.level
         end
         self.crystal_state.status = 'ready'
+        self.crystal_state.message = 'Collection updated.'
+        self.sync_retries = 0
+        self.retry_after = nil
+        self.last_sync_err = nil
+        self:_ensure_cached_catalog_in_state(decoded.job)
     end
     return false
+end
+
+function Character:tick(now)
+    if not self.crystal_state then return end
+    local ts = now or self.clock()
+    local timed_out = self.crystal_state:tick(ts)
+    if timed_out then
+        if self.data_service then
+            self.data_service:record_metric('timeouts', 1)
+            self.data_service:record_event('crys', 'timeout', 'CrystalSocket reply timed out')
+        end
+        if self.sync_retries < MAX_SYNC_RETRIES then
+            self.sync_retries = self.sync_retries + 1
+            self.retry_after = ts + RETRY_BACKOFF_SEC
+            self.last_sync_err = 'No reply; retrying Soul sync (' .. tostring(self.sync_retries) .. '/' .. tostring(MAX_SYNC_RETRIES) .. ')...'
+            if self.data_service then
+                self.data_service:record_metric('sync_retries', 1)
+            end
+        else
+            self.last_sync_err = 'Server did not confirm Soul state — press [X] to retry.'
+        end
+    end
+    if self.retry_after and ts >= self.retry_after and not self.crystal_state.pending then
+        self.retry_after = nil
+        self:sync(false)
+    end
 end
 
 function Character:get_entries()
@@ -163,6 +279,39 @@ function Character:get_entries()
         },
     }
 
+    -- 1. Prefer verified local cache for instant static Soul metadata (descriptions, highlights, icons, roles)
+    local cachedSouls = (self:_cache_ready() and jobId >= 1 and jobId <= 22)
+        and self.data_service:get_souls_for_job(jobId) or nil
+    if cachedSouls and #cachedSouls > 0 then
+        for _, cs in ipairs(cachedSouls) do
+            local isOwned = snap.loaded and self.protocol and self.protocol.owns(ownedMask, cs.branchId) or false
+            local desc = (cs.summary and cs.summary ~= '') and cs.summary or (cs.lore or '')
+            local hl = {}
+            for _, line in ipairs(cs.highlights or {}) do hl[#hl + 1] = line end
+            if #hl == 0 and cs.weaponModeLabel and cs.weaponModeLabel ~= '' then
+                hl[1] = 'Weapon Style: ' .. tostring(cs.weaponModeLabel)
+            end
+            entries[#entries + 1] = {
+                id           = cs.id,
+                branch       = cs.branchId,
+                key          = cs.internalKey,
+                name         = cs.displayName,
+                abbr         = cs.abbreviation or jobKey,
+                role         = cs.roleLabel or cs.roleCategory,
+                roleCategory = cs.roleCategory or 'support',
+                icon         = cs.icon,
+                req_level    = cs.reqLevel or 10,
+                owned        = isOwned,
+                active       = (activeBranch == cs.branchId),
+                description  = desc,
+                highlights   = hl,
+                source       = 'cache',
+            }
+        end
+        return entries, snap, activeBranch, jobKey
+    end
+
+    -- 2. Fallback to server-transmitted CRYC catalog (when cache is missing/corrupt/incompatible)
     local catEntries = snap.catalog and snap.catalog.entries or nil
     if catEntries and #catEntries > 0 then
         for _, ce in ipairs(catEntries) do
@@ -181,10 +330,10 @@ function Character:get_entries()
                 active       = (activeBranch == ce.id),
                 description  = ce.description or '',
                 highlights   = ce.highlights or {},
+                source       = 'server',
             }
         end
     elseif self.soul_registry and self.soul_registry.byJob and jobId >= 1 and jobId <= 22 then
-        -- Populate canonical Soul entries from registry while waiting for live server catalog sync
         for b = 1, 3 do
             local reg = self.soul_registry.byJob(jobId, b)
             if reg then
@@ -197,11 +346,12 @@ function Character:get_entries()
                     role         = reg.roleLabel or reg.roleCategory,
                     roleCategory = reg.roleCategory,
                     icon         = reg.icon,
-                    req_level    = 1,
+                    req_level    = 10,
                     owned        = isOwned,
                     active       = (activeBranch == b),
-                    description  = 'Syncing live crystal collection from server...',
+                    description  = 'Client cache unavailable; syncing live crystal collection from server...',
                     highlights   = { 'Canonical Role: ' .. tostring(reg.roleLabel or reg.roleCategory) },
+                    source       = 'registry_fallback',
                 }
             end
         end
@@ -234,6 +384,9 @@ function Character:get_header_identity()
 end
 
 function Character:_send_crystal_packet(packet)
+    if self.data_service then
+        self.data_service:record_metric('packets_out_crys', 1)
+    end
     if type(self.send_packet) == 'function' then
         return self.send_packet(packet)
     end
@@ -253,6 +406,14 @@ end
 function Character:sync(force_catalog)
     self:refresh_player_context()
     if not self.crystal_state then return false end
+    self.retry_after = nil
+    -- When verified local cache is loaded, send lightweight OP_QUERY (1 packet, zero Busy rate-limit!)
+    -- unless legacy server catalog sync is explicitly required.
+    if not force_catalog and self:_cache_ready() and self:_ensure_cached_catalog_in_state() then
+        return self.crystal_state:request(self.protocol.OP_QUERY, 0, self.clock(), function(pkt)
+            return self:_send_crystal_packet(pkt)
+        end, self.crystal_state.current_job)
+    end
     return self.crystal_state:sync_current(self.clock(), function(pkt)
         return self:_send_crystal_packet(pkt)
     end, force_catalog == true)
@@ -260,6 +421,7 @@ end
 
 function Character:select_branch(branch)
     if not self.crystal_state or not self.protocol then return false, 'Unavailable' end
+    self:_ensure_cached_catalog_in_state()
     return self.crystal_state:request(self.protocol.OP_SELECT, branch, self.clock(), function(pkt)
         return self:_send_crystal_packet(pkt)
     end)
@@ -268,9 +430,19 @@ end
 function Character:on_open()
     self:refresh_player_context()
     if self.crystal_state then
-        self.crystal_state:ensure_loaded(self.clock(), function(pkt)
-            return self:_send_crystal_packet(pkt)
-        end)
+        if self:_cache_ready() and self:_ensure_cached_catalog_in_state() then
+            -- Lightweight OP_QUERY for authoritative ownership & active Soul state
+            if not self.crystal_state.pending then
+                local snap = self.crystal_state:snapshot()
+                if not snap.loaded or self.crystal_state.needs_refresh then
+                    self:sync(false)
+                end
+            end
+        else
+            self.crystal_state:ensure_loaded(self.clock(), function(pkt)
+                return self:_send_crystal_packet(pkt)
+            end)
+        end
     end
 end
 
@@ -330,15 +502,15 @@ function Character:on_action(action)
         return true
     elseif action == 'confirm' then
         local e = entries[self.selected_idx]
-        local catalog_ready = (snap.catalog ~= nil and #(snap.catalog.entries or {}) > 0)
-        if e and snap.loaded and catalog_ready and not snap.pending and e.owned and not e.active then
+        if e and self:_can_socket(snap) and e.owned and not e.active then
             self.confirm_entry = e
             self.region = 'confirm_socket'
             self.confirm_btn = 1
         end
         return true
     elseif action == 'context' then
-        self:sync(true)
+        self.sync_retries = 0
+        self:sync(not self:_cache_ready())
         return true
     elseif action == 'cancel' then
         return false -- allow Core to close
@@ -363,9 +535,7 @@ end
 
 function Character:draw(imgui, dl, F, L, x, y, w, h)
     self:refresh_player_context()
-    if self.crystal_state then
-        self.crystal_state:tick(self.clock())
-    end
+    self:tick(self.clock())
 
     local s   = L.uiScale or 1.0
     local gap = L.gap or math.floor(8 * s)
@@ -442,8 +612,18 @@ function Character:draw(imgui, dl, F, L, x, y, w, h)
     dl:AddRectFilled({ x + pad, boxY }, { x + leftW - pad, boxY + boxH }, F.u32.abyss_solid, 5)
     dl:AddRect({ x + pad, boxY }, { x + leftW - pad, boxY + boxH }, F.u32.border_subtle, 5, 0, 1.0)
     F.drawShadowText(imgui, dl, x + pad + 10 * s, boxY + 8 * s, 'SYNC & NATIVE STATUS', F.u32.aether_cyan, 0.72 * s, 'l')
+    local statusLabel
+    if snap.loaded then
+        statusLabel = self:_cache_ready() and 'Collection: ready (cached)' or 'Collection: ready'
+    elseif snap.pending or self.retry_after then
+        statusLabel = 'Collection: syncing...'
+    elseif self.last_sync_err then
+        statusLabel = 'Collection: ' .. tostring(self.last_sync_err)
+    else
+        statusLabel = 'Collection: ' .. tostring(snap.status or 'offline')
+    end
     F.drawShadowText(imgui, dl, x + pad + 10 * s, boxY + 26 * s,
-        F.fitText(imgui, 'Collection: ' .. tostring(snap.status or 'offline'), leftW - pad * 2 - 20 * s, 0.74 * s),
+        F.fitText(imgui, statusLabel, leftW - pad * 2 - 20 * s, 0.74 * s),
         snap.loaded and F.u32.success or F.u32.text_secondary, 0.74 * s, 'l')
     local dll = self:_get_dll_status()
     local dllLine = dll and string.format('Native DLL: %d hooks active', dll.hooks or 0)
@@ -470,7 +650,8 @@ function Character:draw(imgui, dl, F, L, x, y, w, h)
         listFocused and F.u32.aether_cyan or F.u32.soul_gold, 0.94 * s, 'l')
     if F.drawActionButton(imgui, dl, '##ch_sync_btn', midX + midW - pad - math.floor(62 * s), y + 6 * s,
         math.floor(62 * s), math.floor(22 * s), 'SYNC [X]', 'cyan', { fontScale = 0.70 * s }) then
-        self:sync(true)
+        self.sync_retries = 0
+        self:sync(not self:_cache_ready())
     end
     F.drawDivider(dl, midX + pad, y + 32 * s, midW - pad * 2, listFocused and F.u32.aether_cyan or F.u32.soul_gold_dim)
 
@@ -482,11 +663,10 @@ function Character:draw(imgui, dl, F, L, x, y, w, h)
         local ry = rowStartY + (i - 1) * (rowH + math.floor(8 * s))
         local isSel = (i == self.selected_idx)
         imgui.SetCursorScreenPos({ midX + pad, ry })
-        local catalog_ready = (snap.catalog ~= nil and #(snap.catalog.entries or {}) > 0)
         if imgui.InvisibleButton('##ch_soul_' .. tostring(e.branch), { rowW, rowH }) then
             self.selected_idx = i
             self.region = 'crystals'
-            if snap.loaded and catalog_ready and not snap.pending and e.owned and not e.active then
+            if self:_can_socket(snap) and e.owned and not e.active then
                 self.confirm_entry = e
                 self.region = 'confirm_socket'
                 self.confirm_btn = 1
@@ -610,7 +790,7 @@ function Character:draw(imgui, dl, F, L, x, y, w, h)
         elseif focused.active then
             F.drawActionButton(imgui, dl, '##ch_actv', rx + pad, actY, innerW, actBtnH,
                 'CURRENTLY SOCKETED', 'neutral', { disabled = true, fontScale = 0.80 * s })
-        elseif focused.owned and snap.loaded and (snap.catalog ~= nil and #(snap.catalog.entries or {}) > 0) then
+        elseif focused.owned and self:_can_socket(snap) then
             if F.drawActionButton(imgui, dl, '##ch_sock', rx + pad, actY, innerW, actBtnH,
                 'SOCKET SOUL CRYSTAL [A]', 'gold', { fontScale = 0.82 * s }) then
                 self.confirm_entry = focused
@@ -619,7 +799,7 @@ function Character:draw(imgui, dl, F, L, x, y, w, h)
             end
         else
             F.drawActionButton(imgui, dl, '##ch_lock', rx + pad, actY, innerW, actBtnH,
-                snap.loaded and 'LOCKED BY PROGRESSION' or 'WAITING FOR SERVER SYNC',
+                snap.loaded and 'LOCKED BY PROGRESSION' or (self.last_sync_err and 'SYNC FAILED — PRESS [X]' or 'WAITING FOR SERVER SYNC'),
                 'neutral', { disabled = true, fontScale = 0.78 * s })
         end
     end

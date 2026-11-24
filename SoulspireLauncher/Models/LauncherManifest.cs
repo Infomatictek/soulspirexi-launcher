@@ -25,6 +25,9 @@ public sealed class LauncherManifest
     [JsonPropertyName("registry")]
     public ManifestRegistryMetadata? Registry { get; set; }
 
+    [JsonPropertyName("clientDataCache")]
+    public ManifestClientDataCache? ClientDataCache { get; set; }
+
     [JsonPropertyName("serverName")]
     public string ServerName { get; set; } = "SoulspireXI";
 
@@ -270,4 +273,31 @@ public sealed class ManifestNewsItem
 
     [JsonPropertyName("body")]
     public string Body { get; set; } = string.Empty;
+}
+
+public sealed class ManifestClientDataCache
+{
+    [JsonPropertyName("schemaVersion")]
+    public int SchemaVersion { get; set; } = 1;
+
+    [JsonPropertyName("protocolVersion")]
+    public int ProtocolVersion { get; set; } = 2;
+
+    [JsonPropertyName("contentVersion")]
+    public string ContentVersion { get; set; } = string.Empty;
+
+    [JsonPropertyName("contentHash")]
+    public string ContentHash { get; set; } = string.Empty;
+
+    [JsonPropertyName("registryHash")]
+    public string RegistryHash { get; set; } = string.Empty;
+
+    [JsonPropertyName("manifestTargetPath")]
+    public string ManifestTargetPath { get; set; } = "soulspire_core/cache/manifest.json";
+
+    [JsonPropertyName("manifestSha256")]
+    public string ManifestSha256 { get; set; } = string.Empty;
+
+    [JsonPropertyName("packageCount")]
+    public int PackageCount { get; set; }
 }

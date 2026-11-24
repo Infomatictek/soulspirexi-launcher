@@ -346,6 +346,24 @@ ashita.events.register('packet_in', 'crystalsocket_packet_in', function(e)
         if decoded and decoded.kind == 'state' and decoded.request_id >= 0x8000 and labels:native_decoder_ready() then
             return
         end
+        -- SoulspireXI Core owns request IDs 0x4000..0x7EFF; passively mirror valid CRYS state for
+        -- native labels without blocking e.blocked so soulspire_core receives and consumes its reply.
+        if decoded and decoded.request_id >= 0x4000 and decoded.request_id < 0x8000 then
+            if decoded.kind == 'state' and decoded.result == 0 then
+                context()
+                if state.current_job == decoded.job then
+                    state.all_entries = decoded.entries
+                    state.accepted = decoded.entries[decoded.job + 1]
+                    if decoded.level and decoded.level > 0 then
+                        state.current_lvl = decoded.level
+                    end
+                    state.status = 'ready'
+                    labels:sync(state:snapshot(), character_id, now())
+                    sync_appearance()
+                end
+            end
+            return
+        end
         -- Reserved replies must never reach the stock packet dispatcher, including malformed replies.
         e.blocked = true
         context()

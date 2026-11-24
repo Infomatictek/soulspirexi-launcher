@@ -795,12 +795,35 @@ local function drawSoulforgeCanvas(state, action, L, x, y, w, h, nav)
         elseif state.selectedWsId ~= nil then
             local wsEntry = state.catalogById and state.catalogById[state.selectedWsId]
             local wsLabel = wsEntry and wsEntry.name or ('Weapon Skill #' .. tostring(state.selectedWsId))
-            F.drawCrystalMedallion(dl, cx, cy - 38 * s, 34 * s, {
-                rim  = F.u32.aether_cyan,
-                core = F.rgba.crystal_violet,
-            })
-            F.drawShadowText(imgui, dl, cx, cy + 10 * s, 'LOADING ' .. string.upper(wsLabel) .. '...', F.u32.aether_cyan, 0.96 * s, 'c')
-            F.drawShadowText(imgui, dl, cx, cy + 36 * s, 'Waiting for server talent tree response.', F.u32.text_secondary, 0.82 * s, 'c')
+            if state.wsError then
+                F.drawCrystalMedallion(dl, cx, cy - 38 * s, 34 * s, {
+                    rim  = F.u32.soul_gold_dim,
+                    core = F.rgba.midnight_alt,
+                })
+                F.drawShadowText(imgui, dl, cx, cy + 10 * s, 'SYNC FAILED: ' .. string.upper(wsLabel), F.u32.soul_gold_bright, 0.96 * s, 'c')
+                local maxChars = math.max(30, math.floor((w - 80 * s) / (7.6 * s)))
+                local ly = cy + 36 * s
+                for _, ln in ipairs(F.wrapLines(tostring(state.wsError), maxChars, 3)) do
+                    F.drawShadowText(imgui, dl, cx, ly, ln, F.u32.text_secondary, 0.82 * s, 'c')
+                    ly = ly + math.floor(18 * s)
+                end
+                local bW, bH = math.floor(148 * s), math.floor(28 * s)
+                if F.drawActionButton(imgui, dl, '##sf_canvas_ws_retry', cx - bW * 0.5, ly + 12 * s, bW, bH, 'RETRY SYNC', 'gold', { fontScale = 0.78 * s }) then
+                    action.requestWS(state.selectedWsId)
+                end
+            else
+                F.drawCrystalMedallion(dl, cx, cy - 38 * s, 34 * s, {
+                    rim  = F.u32.aether_cyan,
+                    core = F.rgba.crystal_violet,
+                })
+                local dots = string.rep('.', (math.floor((now or 0) * 2) % 3) + 1)
+                F.drawShadowText(imgui, dl, cx, cy + 10 * s, 'LOADING ' .. string.upper(wsLabel) .. dots, F.u32.aether_cyan, 0.96 * s, 'c')
+                F.drawShadowText(imgui, dl, cx, cy + 36 * s, 'Confirming server-authoritative talent ranks.', F.u32.text_secondary, 0.82 * s, 'c')
+                local bW, bH = math.floor(136 * s), math.floor(26 * s)
+                if F.drawActionButton(imgui, dl, '##sf_canvas_ws_reload', cx - bW * 0.5, cy + 66 * s, bW, bH, 'RETRY', 'cyan', { fontScale = 0.76 * s }) then
+                    action.requestWS(state.selectedWsId)
+                end
+            end
         elseif #rows == 0 then
             F.drawCrystalMedallion(dl, cx, cy - 42 * s, 34 * s, {
                 rim  = F.u32.soul_gold_dim,

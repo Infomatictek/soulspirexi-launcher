@@ -42,6 +42,21 @@ if not okStrip then strip = nil end
 local okMenu, menu    = pcall(require, 'soulhud_menu')
 if not okMenu then menu = nil end
 
+local hudCoreIpc, oxhudIpcToken = nil, nil
+do
+    if type(addon) == 'table' and type(addon.path) == 'string' and addon.path ~= '' then
+        local root = addon.path:gsub('[/\\]+$', ''):gsub('[/\\][^/\\]+$', '')
+        local prev = package.path
+        package.path = root .. '/soulspire_core/?.lua;' .. root .. '/soulspire_core/?/init.lua;' .. prev
+        local okIpc, ipcMod = pcall(require, 'core.ipc')
+        package.path = prev
+        if okIpc and type(ipcMod) == 'table' then
+            hudCoreIpc = ipcMod
+            oxhudIpcToken = ipcMod.register_listener('OXHUD', 'soulspire_soulhud')
+        end
+    end
+end
+
 loadSouls(registry)
 
 local PROTO_TAG = '[OXHUD]|'
@@ -359,6 +374,10 @@ ashita.events.register('load', 'ox_soulhud_load', function()
 end)
 
 ashita.events.register('unload', 'ox_soulhud_unload', function()
+    if hudCoreIpc and oxhudIpcToken then
+        hudCoreIpc.unregister_listener(oxhudIpcToken)
+        oxhudIpcToken = nil
+    end
     settingsMod.save(cfg)
     registry.cleanupState(state.runtime)
     gauge.reset()
@@ -404,7 +423,9 @@ ashita.events.register('packet_in', 'ox_soulhud_packet_in', function(e)
     end
 
     if payload then
-        e.blocked = true
+        if not hudCoreIpc or hudCoreIpc.should_block(oxhudIpcToken) then
+            e.blocked = true
+        end
         applyProtoPayload(payload)
     elseif boostPayload then
         e.blocked = true

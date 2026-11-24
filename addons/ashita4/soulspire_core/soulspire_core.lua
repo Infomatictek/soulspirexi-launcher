@@ -21,6 +21,8 @@ require('common')
 local ffi           = require('ffi')
 local imgui         = require('imgui')
 local Registry      = require('core.registry')
+local DataService   = require('core.data_service')
+local CoreIPC       = require('core.ipc')
 local MenuBridge    = require('core.menu_bridge')
 local NativeBridge  = require('core.native_bridge')
 local Focus         = require('core.focus')
@@ -34,6 +36,8 @@ local CharacterMod  = require('modules.character')
 local registry = Registry.new()
 local focus    = Focus.new(registry)
 local input    = Input.new()
+local data_service = nil
+local oxtl_ipc_token, oxhud_ipc_token = nil, nil
 local menu, assets, ui
 local sf_state, sf_actions, sf_ui, sf_art
 local weapon_mastery_mod, soul_talents_mod, character_mod, cs_soul_identity
@@ -283,7 +287,25 @@ local function push_core_imgui_style()
 end
 
 local function init_modules()
-    -- 1. Character / Soul Identity (reuses crystalsocket protocol & state)
+    -- 0. Shared Core Data Service (verified local static JSON cache + diagnostics)
+    data_service = DataService.new({
+        addon_path = addon.path,
+        auto_load  = true,
+    })
+    if not data_service:is_cache_ready() then
+        log('Client cache warning: ' .. tostring(data_service.error_message))
+    else
+        local info = data_service:get_cache_info()
+        log(string.format('Verified client cache %s (schema=v%d hash=%s load=%.1fms)',
+            tostring(info.contentVersion), info.schemaVersion, tostring(info.registryHash), info.loadMs))
+    end
+
+    -- Register process-local packet coexistence tokens so standalone addons never prematurely
+    -- block 0x1FD OXTL or 0x017 [OXHUD]| packets before Core receives them.
+    oxtl_ipc_token  = CoreIPC.register_listener('OXTL', 'soulspire_core')
+    oxhud_ipc_token = CoreIPC.register_listener('OXHUD', 'soulspire_core')
+
+    -- 1. Character / Soul Identity (reuses crystalsocket protocol & state + cached 66-Soul metadata)
     local cs_proto = load_sibling_lua('crystalsocket', 'protocol.lua')
     local cs_state_mod = load_sibling_lua('crystalsocket', 'state.lua')
     cs_soul_identity = load_sibling_lua('crystalsocket', 'soul_identity.lua')
@@ -293,6 +315,7 @@ local function init_modules()
             protocol      = cs_proto,
             crystal_state = cs_state,
             soul_registry = Registry.souls,
+            data_service  = data_service,
             assets        = assets,
             dll_status_fn = read_crystaljobs_status,
         })
@@ -301,7 +324,7 @@ local function init_modules()
         registry:set_available('character', false, 'CrystalSocket sibling modules unavailable.')
     end
 
-    -- 2. Weapon Mastery (The Soulforge) & 3. Soul Talents (shared soulforge_state)
+    -- 2. Weapon Mastery (The Soulforge) & 3. Soul Talents (shared soulforge_state + DataService)
     local sf_state_mod = load_sibling_lua('soulspire_talents', 'soulforge_state.lua')
     local ws_reg       = load_sibling_lua('soulspire_talents', 'ws_registry_generated.lua')
     sf_art             = load_sibling_lua('soulspire_talents', 'art.lua')
@@ -318,6 +341,7 @@ local function init_modules()
         sf_state, sf_actions = sf_state_mod.new({
             soulRegistry = Registry.souls,
             wsRegistry   = ws_reg,
+            dataService  = data_service,
             savePrefs    = save_settings,
         })
         weapon_mastery_mod = WeaponMastery.new(sf_state, sf_actions, sf_ui)
@@ -325,6 +349,7 @@ local function init_modules()
 
         soul_talents_mod = SoulTalents.new(sf_state, sf_actions, sf_ui, {
             soul_registry = Registry.souls,
+            data_service  = data_service,
             on_jump_to_ws = function(ws_id, node_key)
                 focus:select_module('weapon_mastery')
                 weapon_mastery_mod:focus_ws_and_node(ws_id, node_key)
@@ -380,6 +405,14 @@ ashita.events.register('load', 'soulspire_core_load', function()
 end)
 
 ashita.events.register('unload', 'soulspire_core_unload', function()
+    if oxtl_ipc_token then
+        CoreIPC.unregister_listener(oxtl_ipc_token)
+        oxtl_ipc_token = nil
+    end
+    if oxhud_ipc_token then
+        CoreIPC.unregister_listener(oxhud_ipc_token)
+        oxhud_ipc_token = nil
+    end
     save_settings()
     focus:blur_all('unload')
     input:reset()
@@ -491,14 +524,47 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
             line4 = 'commands_menu unavailable: ' .. tostring(mm_err)
             log(line4)
         end
+        local line5 = ''
+        if data_service then
+            local diag_ds = data_service:get_diagnostics()
+            local c = diag_ds.cache
+            local m = diag_ds.metrics
+            line5 = ('cache status=%s compat=%s schema=v%d proto=v%d ver=%s reg=%s load=%.1fms oxtl_rx=%d(%dB) crys_rx=%d(%dB) retries=%d timeouts=%d'):format(
+                tostring(c.status), tostring(c.compatState), c.schemaVersion or 0,
+                sf_state and (sf_state.protocolVersion or 1) or 1,
+                tostring(c.contentVersion), tostring(c.registryHash), tonumber(c.loadMs) or 0,
+                m.packets_in_oxtl or 0, m.bytes_in_oxtl or 0,
+                m.packets_in_crys or 0, m.bytes_in_crys or 0,
+                m.sync_retries or 0, m.timeouts or 0
+            )
+            log(line5)
+        end
         if type(addon.path) == 'string' and addon.path ~= '' then
             pcall(function()
                 local f = io.open(addon.path:gsub('[/\\]+$', '') .. '/soulspire_core-status.log', 'w')
                 if f then
-                    f:write('[soulspire_core] ' .. line1 .. '\n[soulspire_core] ' .. line2 .. '\n[soulspire_core] ' .. line3 .. '\n[soulspire_core] ' .. line4 .. '\n')
+                    f:write('[soulspire_core] ' .. line1 .. '\n[soulspire_core] ' .. line2 .. '\n[soulspire_core] ' .. line3 .. '\n[soulspire_core] ' .. line4 .. '\n[soulspire_core] ' .. line5 .. '\n')
                     f:close()
                 end
             end)
+        end
+    elseif sub == 'cache' then
+        if not data_service then
+            log('DataService not initialized.')
+            return
+        end
+        if rest == 'verify' then
+            local okV, errV = data_service:verify_all()
+            log(okV and 'Cache SHA-256 verification PASSED for all packages.' or ('Cache verification FAILED: ' .. tostring(errV)))
+        end
+        local diag_ds = data_service:get_diagnostics()
+        local c = diag_ds.cache
+        log(('cache status=%s compat=%s schema=v%d ver=%s reg=%s load=%.1fms err=%s'):format(
+            tostring(c.status), tostring(c.compatState), c.schemaVersion or 0,
+            tostring(c.contentVersion), tostring(c.registryHash), tonumber(c.loadMs) or 0,
+            tostring(c.error or 'none')))
+        for _, ev in ipairs(diag_ds.recentEvents or {}) do
+            log(('  [%.2fs] %s/%s: %s'):format(ev.at or 0, ev.domain, ev.kind, ev.detail))
         end
     elseif sub == 'debug' then
         if not menu or not menu:is_available() then
@@ -600,7 +666,9 @@ ashita.events.register('packet_in', 'soulspire_core_packet_in', function(e)
     if e.id == 0x00A or e.id == 0x00B then
         focus:blur_all('zone_change')
         input:reset()
-        if sf_state then
+        if sf_actions and sf_actions.invalidate then
+            sf_actions.invalidate('zone_change')
+        elseif sf_state then
             sf_state.needsRefresh = true
         end
         sf_last_context_sig = nil
@@ -609,12 +677,14 @@ ashita.events.register('packet_in', 'soulspire_core_packet_in', function(e)
 
     local buf = e.data_modified or e.data
     if sf_actions and sf_actions.handlePacketIn(e.id, buf, e.size) then
-        e.blocked = true
+        if CoreIPC.should_block(oxtl_ipc_token) then
+            e.blocked = true
+        end
         return
     end
 
     if character_mod and e.id == 0x1FF and type(buf) == 'string' then
-        if character_mod:handle_packet_in(e.id, buf) then
+        if character_mod:handle_packet_in(e.id, buf, nil, e.size) then
             e.blocked = true
         end
         return
@@ -634,6 +704,9 @@ ashita.events.register('packet_in', 'soulspire_core_packet_in', function(e)
         local msg = string.sub(buf, 24):match('^([^%z]*)')
         if msg and string.sub(msg, 1, 8) == '[OXHUD]|' then
             soul_talents_mod:observe_hud_line(string.sub(msg, 9))
+            if CoreIPC.should_block(oxhud_ipc_token) then
+                e.blocked = true
+            end
         end
     end
 end)
@@ -642,6 +715,9 @@ ashita.events.register('packet_out', 'soulspire_core_packet_out', function(e)
     if e.id == 0x00D then
         focus:blur_all('logout')
         input:reset()
+        if sf_actions and sf_actions.invalidate then
+            sf_actions.invalidate('logout')
+        end
     end
 end)
 
@@ -672,15 +748,21 @@ ashita.events.register('d3d_present', 'soulspire_core_present', function()
         input:arm_open_guard(0.20)
     end
 
-    -- Keep shared Soulforge state lifecycle in sync with Core Weapon Mastery / Soul Talents
+    -- Keep shared Soulforge & Character state lifecycles in sync with bounded retry/timeout ticking
+    if character_mod and character_mod.tick then
+        character_mod:tick(now)
+    end
     if sf_state and sf_actions then
+        if sf_actions.tick then
+            sf_actions.tick(now)
+        end
         local active_mod = focus:active_module()
         local sf_active = focus:is_hub_open() and active_mod ~= nil
             and (active_mod.id == 'weapon_mastery' or active_mod.id == 'soul_talents')
         sf_state.open[1] = sf_active
 
         if in_session and sf_active then
-            if (not sf_state.synced or #(sf_state.catalog or {}) == 0)
+            if (not sf_state.synced and sf_state.syncPending == nil and sf_state.lastSyncError == nil)
                 and (now - (sf_state.syncRequestedAt or 0)) >= 4.0 then
                 sf_actions.sync()
             end
@@ -689,7 +771,7 @@ ashita.events.register('d3d_present', 'soulspire_core_present', function()
                 local ctx_sig = read_sf_context_signature()
                 if ctx_sig ~= nil then
                     if sf_last_context_sig ~= nil and ctx_sig ~= sf_last_context_sig then
-                        if not sf_state.synced or #(sf_state.catalog or {}) == 0 then
+                        if not sf_state.synced then
                             sf_actions.sync()
                         else
                             sf_actions.refreshState()

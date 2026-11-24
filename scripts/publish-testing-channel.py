@@ -106,7 +106,9 @@ def build_testing_manifest(
         staged_dll_sha, _ = sha256_file(dest_dll)
 
     if provenance_json is not None and provenance_json.is_file():
-        shutil.copy2(provenance_json, testing_dir / "crystaljobs-provenance.json")
+        dest_prov = testing_dir / "crystaljobs-provenance.json"
+        if provenance_json.resolve() != dest_prov.resolve():
+            shutil.copy2(provenance_json, dest_prov)
 
     stable_manifest = json.loads(stable_manifest_path.read_text(encoding="utf-8"))
     testing_manifest = copy.deepcopy(stable_manifest)

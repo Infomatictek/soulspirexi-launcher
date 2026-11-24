@@ -35,7 +35,7 @@ public sealed class ManifestUpdateService
     public const string TestingSearchAlignedTextManifestRelativePath = "channels/testing-search-aligned-text/manifest.json";
     public const string TestingCoreUiManifestRelativePath = "channels/testing-core-ui/manifest.json";
     public const string TestingRegistry24HookBranch = "feat/runtime-soul-identity-and-spacing";
-    public const string TestingCoreUiBranch = "feat/soulspire-core-native-ui-gamepad";
+    public const string TestingCoreUiBranch = "feat/client-data-cache-overhaul";
     public const string InstalledStateFileName = ".soulspire-state.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -401,6 +401,29 @@ public sealed class ManifestUpdateService
             var dllName = dllEntry?.TargetPath ?? "soulspire_native.dll";
             error = $"Refusing Stable manifest: {dllName} is not marked client-verified (nativeDllClientVerified=false).";
             return false;
+        }
+
+        // Verify clientDataCache manifest entry integrity when declared.
+        var cacheMeta = manifest.ClientDataCache;
+        if (cacheMeta is not null)
+        {
+            var targetPath = string.IsNullOrWhiteSpace(cacheMeta.ManifestTargetPath)
+                ? "soulspire_core/cache/manifest.json"
+                : cacheMeta.ManifestTargetPath.Replace('\\', '/');
+            var cacheEntry = manifest.Files.FirstOrDefault(f =>
+                f.Category.Equals("addon", StringComparison.OrdinalIgnoreCase) &&
+                f.TargetPath.Replace('\\', '/').Equals(targetPath, StringComparison.OrdinalIgnoreCase));
+            if (cacheEntry is null)
+            {
+                error = $"Manifest declares clientDataCache but is missing file entry '{targetPath}'.";
+                return false;
+            }
+            if (!string.IsNullOrWhiteSpace(cacheMeta.ManifestSha256) &&
+                !cacheEntry.Sha256.Equals(cacheMeta.ManifestSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                error = $"Manifest clientDataCache.manifestSha256 ({cacheMeta.ManifestSha256}) does not match {targetPath} ({cacheEntry.Sha256}).";
+                return false;
+            }
         }
 
         return true;

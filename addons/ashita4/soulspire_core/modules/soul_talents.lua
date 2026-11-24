@@ -22,6 +22,7 @@ function SoulTalents.new(sf_state, sf_actions, sf_ui, opts)
         actions          = sf_actions,
         ui               = sf_ui,
         soul_registry    = opts.soul_registry,
+        data_service     = opts.data_service,
         on_jump_to_ws    = opts.on_jump_to_ws, -- fn(wsId, nodeKey)
         region           = 'slots', -- 'slots' | 'nodes' | 'confirm_reset'
         slot_index       = 1,
@@ -246,9 +247,14 @@ function SoulTalents:draw(imgui, dl, F, L, x, y, w, h)
     self.slot_index = clamp(self.slot_index, 1, self.ui.MAX_SPEC_WS_SLOTS)
     self.node_index = clamp(self.node_index, 1, math.max(1, #nodes))
 
-    -- Resolve canonical Soul metadata
+    -- Resolve canonical Soul metadata (prefer verified local cache via DataService)
     local soulEntry = nil
-    if self.soul_registry and self.soul_registry.resolve then
+    if self.data_service and self.data_service:is_cache_usable() then
+        soulEntry = self.data_service:get_soul_by_key(st.specKey)
+            or self.data_service:get_soul_by_key(st.rawSpecKey)
+            or self.data_service:get_soul_by_key(st.specName)
+    end
+    if not soulEntry and self.soul_registry and self.soul_registry.resolve then
         soulEntry = self.soul_registry.resolve(st.rawSpecKey) or self.soul_registry.resolve(st.specName)
     end
     local soulName = (soulEntry and soulEntry.displayName) or st.specName or 'Base'
