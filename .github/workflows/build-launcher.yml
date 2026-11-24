@@ -195,20 +195,21 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Build and self-test Soulspire Native (Win32 / x86, 27 hooks)
+      - name: Build and self-test Soulspire Native (Win32 / x86, 31 hooks)
         shell: pwsh
         env:
           SOULSPIRE_NATIVE_KEEP_SELFTEST: "1"
         run: |
           $ErrorActionPreference = 'Continue'
-          & cmd.exe /c "soulspire_native\build.cmd 2>&1" | Tee-Object -FilePath "soulspire_native-build.log"
+          & cmd.exe /c "call soulspire_native\build.cmd" 2>&1 | Tee-Object -FilePath "soulspire_native-build.log"
           $rc = $LASTEXITCODE
           $ErrorActionPreference = 'Stop'
-          if ($rc -ne 0) {
-            foreach ($line in (Get-Content "soulspire_native-build.log" | Select-String -Pattern '(error |ERROR:|Assertion failed|fatal error)' | Select-Object -First 20)) {
+          if ($rc -ne 0 -or -not (Test-Path "soulspire_native/selftest.exe")) {
+            foreach ($line in (Get-Content "soulspire_native-build.log" | Select-String -Pattern '(error |warning |ERROR:|Assertion failed|fatal error)' | Select-Object -First 20)) {
               Write-Host "::error::$($line.Line)"
             }
             Get-Content "soulspire_native-build.log" -Tail 50
+            if ($rc -eq 0) { $rc = 1 }
             exit $rc
           }
 
@@ -236,7 +237,7 @@ jobs:
             dllPath               = "plugins/ashita4/soulspire_native.dll"
             dllSha256             = $dllHash
             dllSize               = $dllBytes.Length
-            expectedHooks         = 27
+            expectedHooks         = 31
             abiVersion            = 2
             compiledRegistryHash  = $regHash
             runtimeIdentityLoader = $true
@@ -249,7 +250,7 @@ jobs:
             buildTarget           = "Win32-x86-MSVC"
             ciVerified            = $true
             clientVerified        = $false
-            notes                 = "CI-built 27-hook soulspire_native.dll provenance. Never set clientVerified=true until verified in the Windows FFXI client."
+            notes                 = "CI-built 31-hook soulspire_native.dll (with native Commands menu entry) provenance. Never set clientVerified=true until verified in the Windows FFXI client."
           }
           $provenance | ConvertTo-Json -Depth 4 | Set-Content -Path "soulspire_native-provenance.json" -Encoding UTF8
 
@@ -259,7 +260,7 @@ jobs:
             "branch=${{ github.ref_name }}"
             "run_id=${{ github.run_id }}"
             "registry_hash=$regHash"
-            "expected_hooks=27"
+            "expected_hooks=31"
             "abi_version=2"
             "soulspire_native_dll_size=$($dllBytes.Length)"
             "soulspire_native_dll_sha256=$dllHash"
@@ -297,7 +298,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Build and self-test 27-hook soulspire_native.dll (Win32 / x86)
+      - name: Build and self-test 31-hook soulspire_native.dll (Win32 / x86)
         shell: pwsh
         env:
           SOULSPIRE_NATIVE_KEEP_SELFTEST: "1"
@@ -311,7 +312,7 @@ jobs:
             exit $rc
           }
 
-      - name: Verify 27-hook soulspire_native.dll and build Testing channel manifest
+      - name: Verify 31-hook soulspire_native.dll and build Testing channel manifest
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -337,7 +338,7 @@ jobs:
             --server-commit "${{ github.sha }}" `
             --server-image "soulspirexi/server:main" `
             --repo-branch "${{ github.ref_name }}" `
-            --native-hooks 27
+            --native-hooks 31
 
           python scripts/verify-launcher-manifest.py --manifest channels/testing/manifest.json
 
@@ -354,7 +355,7 @@ jobs:
 
   sync-soulspire-native-binary:
     needs: [verify-manifest, build-and-test, build-soulspire-native]
-    if: (github.ref == 'refs/heads/feat/soulspire-native-foundation' || github.ref == 'refs/heads/feat/dat-virtualization-poc' || github.ref == 'refs/heads/feat/berserker-dual-great-axe') && !startsWith(github.event.head_commit.message, 'chore(soulspire-native):')
+    if: (github.ref == 'refs/heads/feat/soulspire-native-foundation' || github.ref == 'refs/heads/feat/dat-virtualization-poc' || github.ref == 'refs/heads/feat/berserker-dual-great-axe' || github.ref == 'refs/heads/feat/soulspire-core-native-ui-gamepad' || github.ref == 'refs/heads/fix/ws3-weap-002-equip-sync-diag') && !startsWith(github.event.head_commit.message, 'chore(soulspire-native):')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -396,7 +397,7 @@ jobs:
               "dllSha256": prov["dllSha256"],
               "dllSize": prov["dllSize"],
               "compiledRegistryHash": prov["compiledRegistryHash"],
-              "expectedHooks": 27,
+              "expectedHooks": 31,
               "abiVersion": 2,
               "runtimeIdentityLoader": True,
               "identitySchemaVersion": 1,
@@ -406,7 +407,7 @@ jobs:
               "ciRunUrl": prov["ciRunUrl"],
               "ciVerified": True,
               "clientVerified": False,
-              "notes": "CI-built 27-hook soulspire_native.dll synced from GitHub Actions windows-latest MSVC x86 build. Client verification requires manual Windows Ashita v4 playtesting.",
+              "notes": "CI-built 31-hook soulspire_native.dll (native Commands menu entry) synced from GitHub Actions windows-latest MSVC x86 build. Client verification requires manual Windows Ashita v4 playtesting.",
           })
           state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
           PY
@@ -426,7 +427,7 @@ jobs:
             echo "No binary/manifest changes to commit."
             exit 0
           fi
-          git commit -m "chore(soulspire-native): sync CI-verified 27-hook soulspire_native.dll"
+          git commit -m "chore(soulspire-native): sync CI-verified 31-hook soulspire_native.dll"
           git push origin "HEAD:${{ github.ref_name }}"
 
   publish-release:

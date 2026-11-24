@@ -15,7 +15,7 @@ extern "C" {
 enum {
     SOULSPIRE_NATIVE_ABI_VERSION       = 2,
     SOULSPIRE_NATIVE_LEGACY_ABI_VER    = 1,
-    SOULSPIRE_NATIVE_EXPECTED_HOOKS    = 27
+    SOULSPIRE_NATIVE_EXPECTED_HOOKS    = 31
 };
 
 /* Initialization / lifecycle result codes:
@@ -59,7 +59,8 @@ enum {
     SOULSPIRE_NATIVE_CAP_SOUL_CAST_LOOKUP    = 1u << 12,
     SOULSPIRE_NATIVE_CAP_SOUL_SUB_WEAPON     = 1u << 13,
     SOULSPIRE_NATIVE_CAP_SOUL_SUB_2H         = 1u << 14,
-    SOULSPIRE_NATIVE_CAP_DAT_VIRTUALIZATION  = 1u << 15
+    SOULSPIRE_NATIVE_CAP_DAT_VIRTUALIZATION  = 1u << 15,
+    SOULSPIRE_NATIVE_CAP_COMMANDS_MENU_ENTRY = 1u << 16
 };
 
 /* Weapon template modes. */
@@ -249,6 +250,28 @@ typedef struct SoulspireNativeInterfaceInfo {
 } SoulspireNativeInterfaceInfo;
 
 uint32_t SOULSPIRE_NATIVE_CALL SoulspireNativeGetInterfaceInfo(SoulspireNativeInterfaceInfo* info, uint32_t size);
+
+/* Native FFXI Commands menu ("menu    menuwind") Soulspire entry diagnostics & event bridge. */
+typedef struct SoulspireNativeMainMenuStatus {
+    uint32_t size;
+    uint32_t version;
+    uint32_t hooks_installed;       /* 1 if all 4 Commands menu hooks are active */
+    uint32_t injected;              /* 1 if Soulspire button (ID 16) is currently injected in live menuwind */
+    uint32_t button_id;             /* 16 */
+    uint32_t button_count;          /* 16 when injected, 15 vanilla */
+    uint32_t frame_height;          /* 218 when injected, 202 vanilla */
+    uint32_t sprite_synthesized;    /* 1 if native 20-tile "Soulspire" sprite is active */
+    uint32_t sprite_banks_used;     /* immutable sprite banks allocated (max 4) */
+    uint32_t open_injections;       /* total successful OpenMenu injections */
+    uint32_t nav_overrides;         /* total D-pad/keyboard Up/Down/Left/Right overrides */
+    uint32_t activations;           /* total Confirm activations on Soulspire row */
+    uint32_t pending_open_requests; /* unconsumed open requests waiting for SoulspireXI Core */
+    uint32_t total_hooks;
+    uint32_t expected_hooks;
+} SoulspireNativeMainMenuStatus;
+
+uint32_t SOULSPIRE_NATIVE_CALL SoulspireNativeGetMainMenuStatus(SoulspireNativeMainMenuStatus* status, uint32_t size);
+uint32_t SOULSPIRE_NATIVE_CALL SoulspireNativeConsumeCoreOpenRequest(void);
 
 #ifdef __cplusplus
 }

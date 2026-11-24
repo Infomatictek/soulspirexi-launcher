@@ -121,6 +121,23 @@ for i = 1, 2 do
     assert(captured_rules[i].size == 24 and captured_rules[i].reserved == 0)
 end
 
+-- 4b. Regression: empty Lua weapon rule table must NOT wipe C++-loaded native rules.
+local wipe_called = false
+local ok_empty, err_empty = labels:sync_weapon_rules({}, function()
+    wipe_called = true
+    return 0
+end)
+assert(ok_empty == false and wipe_called == false,
+    'Empty weapon_config sync must refuse to call SoulspireNativeReplaceWeaponRules(NULL, 0)')
+assert(type(err_empty) == 'string' and err_empty:find('preserve', 1, true) ~= nil)
+
+-- 4c. Regression: WAR Lv20 / DRG10 Berserker (job=1, branch=2, lvl=20) with Great Axe
+-- must pass Sub-menu DUAL_2H eligibility while other WAR Souls and Lv9 fail closed.
+assert(WC.allows_dual_2h_sub_menu(true, 1, 2, 20, WC.SKILLS.GREAT_AXE) == true)
+assert(WC.allows_dual_2h_sub_menu(true, 1, 0, 20, WC.SKILLS.GREAT_AXE) == false)
+assert(WC.allows_dual_2h_sub_menu(true, 1, 1, 20, WC.SKILLS.GREAT_AXE) == false)
+assert(WC.allows_dual_2h_sub_menu(true, 1, 3, 20, WC.SKILLS.GREAT_AXE) == false)
+
 -- 5. Verify no custom Sub picker or 0x050 injection helpers exist.
 assert(WC.pick_sub_weapon == nil and WC.inject_equip == nil and UI.draw_sub_picker == nil)
 
