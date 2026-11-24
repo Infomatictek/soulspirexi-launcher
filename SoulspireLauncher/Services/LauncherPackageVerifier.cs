@@ -34,7 +34,23 @@ public sealed record ExtractedUpdatePackage(
 public static class LauncherPackageVerifier
 {
     public const string SupportedSignatureAlgorithm = "ECDSA-P256-SHA256";
+    public const string TrustedSigningKeyId = "soulspire-launcher-release-v1";
+    public const string EmbeddedPublicKeyResourceName = "SoulspireLauncher.Resources.release-signing-public.pem";
     public const long DefaultMinimumValidExeBytes = 512 * 1024;
+
+    public static string? LoadEmbeddedTrustedPublicKeyPem()
+    {
+        var assembly = typeof(LauncherPackageVerifier).Assembly;
+        using var stream = assembly.GetManifestResourceStream(EmbeddedPublicKeyResourceName);
+        if (stream is null)
+        {
+            return null;
+        }
+
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        var pem = reader.ReadToEnd().Trim();
+        return string.IsNullOrWhiteSpace(pem) ? null : pem;
+    }
 
     public static string ComputeSha256Hex(string filePath)
     {

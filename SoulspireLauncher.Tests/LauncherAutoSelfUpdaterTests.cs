@@ -285,7 +285,7 @@ public sealed class LauncherAutoSelfUpdaterTests
         {
             using var http = new HttpClient(new StubHttpMessageHandler(_ =>
                 new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new FailingAfterBytesStream(256)) }));
-            var svc = new LauncherSelfUpdateService(http);
+            var svc = new LauncherSelfUpdateService(http, requireSignature: false);
 
             var check = new LauncherUpdateCheckResult
             {
@@ -331,7 +331,7 @@ public sealed class LauncherAutoSelfUpdaterTests
 
             using var http = new HttpClient(new StubHttpMessageHandler(_ =>
                 new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(corruptedZipBytes) }));
-            var svc = new LauncherSelfUpdateService(http);
+            var svc = new LauncherSelfUpdateService(http, requireSignature: false);
 
             var check = new LauncherUpdateCheckResult
             {
@@ -402,6 +402,61 @@ public sealed class LauncherAutoSelfUpdaterTests
         // Untrusted non-HTTPS download URL -> MUST fail closed
         Assert.False(LauncherPackageVerifier.IsTrustedDownloadUri("http://evil.example.com/SoulspireLauncher.exe"));
         Assert.False(LauncherPackageVerifier.IsTrustedDownloadUri("https://evil.example.com/SoulspireLauncher.exe"));
+    }
+
+    [Fact]
+    public void DefaultSelfUpdateService_EmbedsTrustedPublicKeyAndFailsClosedOnUnsignedMetadata()
+    {
+        var embeddedPem = LauncherPackageVerifier.LoadEmbeddedTrustedPublicKeyPem();
+        Assert.False(string.IsNullOrWhiteSpace(embeddedPem));
+        Assert.Contains("BEGIN PUBLIC KEY", embeddedPem!, StringComparison.Ordinal);
+
+        // Verify embedded key is a valid ECDSA-P256 public key
+        using (var ecdsa = ECDsa.Create())
+        {
+            ecdsa.ImportFromPem(embeddedPem!);
+            Assert.Equal(256, ecdsa.KeySize);
+        }
+
+        var defaultSvc = new LauncherSelfUpdateService();
+        Assert.True(defaultSvc.RequireSignature);
+        Assert.Equal(embeddedPem, defaultSvc.TrustedPublicKeyPem);
+
+        // Unsigned release metadata MUST fail closed under the default embedded trust chain
+        var unsignedMeta = new LauncherReleaseMetadata
+        {
+            Channel = "testing-core-ui",
+            Version = "2.2.0-testing.core-ui.1",
+            Tag = "v2.2.0-testing.core-ui.1",
+            PackageType = "zip",
+            DownloadUrl = "https://github.com/Infomatictek/soulspirexi-launcher/releases/download/v2.2.0-testing.core-ui.1/SoulspireLauncher-win-x64.zip",
+            Sha256 = new string('a', 64),
+            Size = 1024,
+            ExecutableSha256 = new string('b', 64),
+            SignatureBase64 = null
+        };
+        var json = JsonSerializer.Serialize(unsignedMeta);
+
+        Assert.Throws<InvalidDataException>(() =>
+            LauncherSelfUpdateService.ParseChannelReleaseMetadataJson(
+                json,
+                new Version(2, 1, 10),
+                UpdateChannel.TestingCoreUi,
+                currentInformationalVersion: "2.1.10",
+                trustedPublicKeyPem: defaultSvc.TrustedPublicKeyPem,
+                requireSignature: defaultSvc.RequireSignature));
+
+        // Signature from an untrusted third-party key MUST also fail closed against embedded public key
+        SignMetadata(unsignedMeta);
+        var foreignSignedJson = JsonSerializer.Serialize(unsignedMeta);
+        Assert.Throws<InvalidDataException>(() =>
+            LauncherSelfUpdateService.ParseChannelReleaseMetadataJson(
+                foreignSignedJson,
+                new Version(2, 1, 10),
+                UpdateChannel.TestingCoreUi,
+                currentInformationalVersion: "2.1.10",
+                trustedPublicKeyPem: defaultSvc.TrustedPublicKeyPem,
+                requireSignature: defaultSvc.RequireSignature));
     }
 
     [Fact]

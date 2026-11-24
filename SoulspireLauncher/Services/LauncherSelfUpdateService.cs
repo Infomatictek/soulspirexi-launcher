@@ -63,14 +63,17 @@ public sealed class LauncherSelfUpdateService
     public LauncherSelfUpdateService(
         HttpClient? httpClient = null,
         string? trustedPublicKeyPem = null,
-        bool requireSignature = false,
+        bool requireSignature = true,
         bool allowLoopbackHttpForTests = false)
     {
         _http = httpClient ?? ManifestUpdateService.CreateDefaultHttpClient();
-        _trustedPublicKeyPem = trustedPublicKeyPem;
+        _trustedPublicKeyPem = trustedPublicKeyPem ?? LauncherPackageVerifier.LoadEmbeddedTrustedPublicKeyPem();
         _requireSignature = requireSignature;
         _allowLoopbackHttpForTests = allowLoopbackHttpForTests;
     }
+
+    public string? TrustedPublicKeyPem => _trustedPublicKeyPem;
+    public bool RequireSignature => _requireSignature;
 
     public static string GetChannelSlug(UpdateChannel channel) =>
         channel switch
@@ -516,21 +519,54 @@ public sealed class LauncherSelfUpdateService
             // Feed may not be published yet on older branches; fall through to GitHub Releases API.
         }
 
-        // 2. Fallback to GitHub Releases API (supports companion launcher-release.json asset if present)
+        // 2. Fallback to GitHub Releases API (supports companion launcher-release.json asset;
+        //    when RequireSignature=true, unsigned releases without a verified launcher-release.json fail closed).
         if (IsTestingChannel(channel))
         {
             var listUrl = $"https://api.github.com/repos/{owner}/{repo}/releases?per_page=15";
             var json = await _http.GetStringAsync(listUrl, cts.Token).ConfigureAwait(false);
             var companion = await TryResolveCompanionMetadataFromReleaseListAsync(json, currentVersion, channel, currentInfoVersion, owner, repo, cts.Token)
                 .ConfigureAwait(false);
-            return companion ?? ParseReleaseListJson(json, currentVersion, channel, currentInfoVersion);
+            if (companion is not null)
+            {
+                return companion;
+            }
+
+            if (_requireSignature)
+            {
+                return new LauncherUpdateCheckResult
+                {
+                    UpdateAvailable = false,
+                    CurrentVersion = currentVersion,
+                    Channel = channel,
+                    Source = "github-releases-signature-required"
+                };
+            }
+
+            return ParseReleaseListJson(json, currentVersion, channel, currentInfoVersion);
         }
 
         var apiUrl = $"https://api.github.com/repos/{owner}/{repo}/releases/latest";
         var latestJson = await _http.GetStringAsync(apiUrl, cts.Token).ConfigureAwait(false);
         var stableCompanion = await TryResolveCompanionMetadataFromReleaseJsonAsync(latestJson, currentVersion, UpdateChannel.Stable, currentInfoVersion, owner, repo, cts.Token)
             .ConfigureAwait(false);
-        return stableCompanion ?? ParseLatestReleaseJson(latestJson, currentVersion, UpdateChannel.Stable, currentInfoVersion);
+        if (stableCompanion is not null)
+        {
+            return stableCompanion;
+        }
+
+        if (_requireSignature)
+        {
+            return new LauncherUpdateCheckResult
+            {
+                UpdateAvailable = false,
+                CurrentVersion = currentVersion,
+                Channel = UpdateChannel.Stable,
+                Source = "github-releases-signature-required"
+            };
+        }
+
+        return ParseLatestReleaseJson(latestJson, currentVersion, UpdateChannel.Stable, currentInfoVersion);
     }
 
     private async Task<LauncherUpdateCheckResult?> TryResolveCompanionMetadataFromReleaseListAsync(

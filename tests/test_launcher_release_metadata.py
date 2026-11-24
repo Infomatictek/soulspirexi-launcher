@@ -95,6 +95,59 @@ class LauncherReleaseMetadataTests(unittest.TestCase):
                 tampered["sha256"] = "0" * 64
                 self.assertFalse(mod.verify_payload_openssl(mod.build_canonical_signing_payload(tampered), sig, pub_pem))
 
+    def test_require_signature_fails_closed_when_signing_credentials_missing_or_mismatched(self) -> None:
+        pub_key = LAUNCHER_ROOT / "keys" / "soulspire-launcher-release-v1.pub.pem"
+        self.assertTrue(pub_key.is_file(), f"Committed public key missing: {pub_key}")
+        self.assertIn("BEGIN PUBLIC KEY", pub_key.read_text(encoding="utf-8"))
+
+        with tempfile.TemporaryDirectory(prefix="soulspire_failclosed_") as tmp:
+            root = Path(tmp)
+            exe_path = root / "SoulspireLauncher.exe"
+            updater_path = root / "SoulspireUpdater.exe"
+            zip_path = root / "SoulspireLauncher-win-x64.zip"
+            out_path = root / "launcher-release.json"
+
+            exe_path.write_bytes(b"MZ" + b"L" * 1024)
+            updater_path.write_bytes(b"MZ" + b"U" * 512)
+            with zipfile.ZipFile(zip_path, "w") as zf:
+                zf.write(exe_path, arcname="SoulspireLauncher.exe")
+                zf.write(updater_path, arcname="SoulspireUpdater.exe")
+
+            # 1. Missing private key env var MUST fail closed under --require-signature
+            rc = mod.main([
+                "--channel", "testing-core-ui",
+                "--tag", "v2.2.0-testing.core-ui.1",
+                "--package", str(zip_path),
+                "--executable", str(exe_path),
+                "--updater", str(updater_path),
+                "--private-key-env", "NONEXISTENT_SOULSPIRE_TEST_KEY_ENV",
+                "--require-signature",
+                "--verify-public-key", str(pub_key),
+                "--output", str(out_path),
+            ])
+            self.assertNotEqual(rc, 0)
+            self.assertFalse(out_path.exists())
+
+            # 2. Unsigned metadata MUST fail closed under --verify-only
+            unsigned_rc = mod.main([
+                "--channel", "testing-core-ui",
+                "--tag", "v2.2.0-testing.core-ui.1",
+                "--package", str(zip_path),
+                "--executable", str(exe_path),
+                "--updater", str(updater_path),
+                "--private-key-env", "NONEXISTENT_SOULSPIRE_TEST_KEY_ENV",
+                "--output", str(out_path),
+            ])
+            self.assertEqual(unsigned_rc, 0)
+            verify_rc = mod.main([
+                "--verify-only", str(out_path),
+                "--verify-public-key", str(pub_key),
+                "--package", str(zip_path),
+                "--executable", str(exe_path),
+                "--updater", str(updater_path),
+            ])
+            self.assertNotEqual(verify_rc, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

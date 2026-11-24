@@ -99,7 +99,7 @@ jobs:
           echo "Changed files:"
           echo "$changed"
 
-          if echo "$changed" | grep -Eq '^(SoulspireLauncher/|SoulspireUpdater/|SoulspireLauncher\.Tests/|SoulspireLauncher\.sln|manifest\.json|channels/launcher-releases/|dat-overlay/|addons/|plugins/|soulspire_native/|scripts/|tests/|\.github/workflows/build-launcher\.yml)'; then
+          if echo "$changed" | grep -Eq '^(SoulspireLauncher/|SoulspireUpdater/|SoulspireLauncher\.Tests/|SoulspireLauncher\.sln|keys/|manifest\.json|channels/launcher-releases/|dat-overlay/|addons/|plugins/|soulspire_native/|scripts/|tests/|\.github/workflows/build-launcher\.yml)'; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
           else
             echo "No launcher/client/manifest files changed; skipping redundant Windows launcher build."
@@ -232,14 +232,24 @@ jobs:
           if (Test-Path "publish/SoulspireLauncher/OverlordsLauncher.exe") { throw "Legacy OverlordsLauncher.exe must not be packaged in new releases" }
           if (-not (Test-Path "SoulspireLauncher-win-x64.zip")) { throw "Missing SoulspireLauncher-win-x64.zip" }
 
-          python scripts/build-launcher-release-metadata.py `
-            --channel "${{ steps.version.outputs.channel }}" `
-            --tag "${{ steps.version.outputs.tag }}" `
-            --package "SoulspireLauncher-win-x64.zip" `
-            --executable "publish/SoulspireLauncher/SoulspireLauncher.exe" `
-            --updater "publish/SoulspireLauncher/SoulspireUpdater.exe" `
-            --release-notes "Verified CI build ${{ steps.version.outputs.tag }} (${{ github.sha }})" `
-            --output "launcher-release.json"
+          $isReleasePublish = ("${{ github.ref }}" -like "refs/tags/v*") -or ("${{ inputs.publish_channel }}" -and "${{ inputs.publish_channel }}" -ne "none")
+          $metaArgs = @(
+            "scripts/build-launcher-release-metadata.py",
+            "--channel", "${{ steps.version.outputs.channel }}",
+            "--tag", "${{ steps.version.outputs.tag }}",
+            "--package", "SoulspireLauncher-win-x64.zip",
+            "--executable", "publish/SoulspireLauncher/SoulspireLauncher.exe",
+            "--updater", "publish/SoulspireLauncher/SoulspireUpdater.exe",
+            "--verify-public-key", "keys/soulspire-launcher-release-v1.pub.pem",
+            "--release-notes", "Verified CI build ${{ steps.version.outputs.tag }} (${{ github.sha }})",
+            "--output", "launcher-release.json"
+          )
+          if ($isReleasePublish) {
+            # Fail closed: never produce unsigned metadata for any release tag or publish dispatch
+            $metaArgs += "--require-signature"
+          }
+          & python @metaArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Get-Content "launcher-release.json"
 
       - name: Verify Windows executable metadata and SoulspireXI identity
@@ -546,13 +556,20 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout trusted public key and verifier
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            keys
+            scripts/build-launcher-release-metadata.py
+
       - name: Download launcher build artifact
         uses: actions/download-artifact@v8
         with:
           name: SoulspireLauncher-win-x64
           path: release-assets
 
-      - name: Verify release assets exist (and no legacy OverlordsLauncher.exe)
+      - name: Verify release assets, hashes, and ECDSA signature (fail-closed)
         shell: bash
         run: |
           set -euo pipefail
@@ -561,6 +578,12 @@ jobs:
           test ! -e release-assets/publish/SoulspireLauncher/OverlordsLauncher.exe
           test -s release-assets/SoulspireLauncher-win-x64.zip
           test -s release-assets/launcher-release.json
+          python3 scripts/build-launcher-release-metadata.py \
+            --verify-only release-assets/launcher-release.json \
+            --verify-public-key keys/soulspire-launcher-release-v1.pub.pem \
+            --package release-assets/SoulspireLauncher-win-x64.zip \
+            --executable release-assets/publish/SoulspireLauncher/SoulspireLauncher.exe \
+            --updater release-assets/publish/SoulspireLauncher/SoulspireUpdater.exe
 
       - name: Determine and validate release channel (Stable vs Testing prerelease)
         id: channel
