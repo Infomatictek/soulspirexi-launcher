@@ -198,9 +198,11 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
                     tostring(n.equipHooksOk), tostring(n.resolvedSoulId or 'none'),
                     n.activeJob, n.activeBranch, tostring(n.soulKnown), n.effectiveLevel,
                     n.weaponRulesCount, n.weaponAllowHits, n.weaponDenyHits))
-                log(('Equip diag candidates: total=%d dual_2h=%d vanilla_sub=%d rejected=%d output=%s'):format(
+                log(('Equip diag candidates: total=%d dual_2h=%d vanilla_sub=%d rejected=%d 0x050_trace=%d slices=%d output=%s'):format(
                     rep.summary.candidateCount, rep.summary.allowedDual2h,
-                    rep.summary.allowedVanillaSub, rep.summary.rejected, tostring(out_path or 'memory')))
+                    rep.summary.allowedVanillaSub, rep.summary.rejected,
+                    rep.summary.packets0x050Count or 0, rep.summary.codeSlicesCount or 0,
+                    tostring(out_path or 'memory')))
             else
                 log('Weapon equip diag refused/failed: ' .. tostring(rep))
             end
@@ -284,6 +286,24 @@ ashita.events.register('packet_in', 'soulspire_core_packet_in', function(e)
     elseif e.id == 0x1FC then
         local now_sec = ashita.time and ashita.time.get_tick64 and (ashita.time.get_tick64() / 1000) or os.time()
         weapon_pres:observe_oxsi(e.data_modified or e.data, now_sec)
+    elseif e.id == 0x050 and weapon_pres:is_diagnostics_enabled() then
+        local now_sec = ashita.time and ashita.time.get_tick64 and (ashita.time.get_tick64() / 1000) or os.time()
+        local rec = WeaponEquipDiag.observe_equip_packet('in', e.data_modified or e.data, now_sec)
+        if rec then
+            log(('[weapondiag] S2C 0x050 equip_slot=%d inv_idx=%d container=%d'):format(
+                rec.equipSlot, rec.invIndex, rec.container))
+        end
+    end
+end)
+
+ashita.events.register('packet_out', 'soulspire_core_packet_out', function(e)
+    if e.id == 0x050 and weapon_pres:is_diagnostics_enabled() then
+        local now_sec = ashita.time and ashita.time.get_tick64 and (ashita.time.get_tick64() / 1000) or os.time()
+        local rec = WeaponEquipDiag.observe_equip_packet('out', e.data_modified or e.data, now_sec)
+        if rec then
+            log(('[weapondiag] C2S 0x050 equip_slot=%d inv_idx=%d container=%d'):format(
+                rec.equipSlot, rec.invIndex, rec.container))
+        end
     end
 end)
 
