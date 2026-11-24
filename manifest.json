@@ -6056,10 +6056,17 @@
     },
     {
       "category": "addon",
+      "sourcePath": "addons/ashita4/soulspire_core/core/weapon_render_probe.lua",
+      "targetPath": "soulspire_core/core/weapon_render_probe.lua",
+      "sha256": "1ee9ba164eb1140c1cbbc2144c2954a5db2785c7cdc7011a97b88e0ac26372dc",
+      "size": 18150
+    },
+    {
+      "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/soulspire_core.lua",
       "targetPath": "soulspire_core/soulspire_core.lua",
-      "sha256": "bdcc9decc1071cec6644e6e857ccb59e57b6963fcc0be1bf582bb66e56c92237",
-      "size": 10056
+      "sha256": "d35bdd7b9da73ace3aac71b51ceca2a3aff9458f142575f5874a59dfb899003a",
+      "size": 10984
     },
     {
       "category": "addon",
@@ -6074,6 +6081,13 @@
       "targetPath": "soulspire_core/tests/weapon_presentation_test.lua",
       "sha256": "d0b4fa2aab1a0ecca5e676376bdc72322198cf54cc21fd2f18c8653da28c761a",
       "size": 7790
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/ashita4/soulspire_core/tests/weapon_render_probe_test.lua",
+      "targetPath": "soulspire_core/tests/weapon_render_probe_test.lua",
+      "sha256": "87404fcdadefbea24a6107b36a35da755a7b06081b8e9873ecac933a837d4c97",
+      "size": 5434
     },
     {
       "category": "addon",

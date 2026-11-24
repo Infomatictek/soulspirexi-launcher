@@ -11,22 +11,22 @@
 ### A. Tasks Completable Automatically on Unraid Linux (Zero Windows Runtime Required)
 1. **Centralized Registry Authoring & Compilation:** Edit `registry/weapon_configs.json` and run `tools/registry_compiler.py --generate --launcher-repo <path>` to produce `soulspire_weapon_config_generated.lua` and integrity-checked `plugins/ashita4/data/soul-weapon-config.json` (zero DLL rebuild for new Soul rules).
 2. **Isolated Server Image Compilation & Real-Engine Certification:** Build isolated `soulspirexi/server:cert-*` Docker images containing `patches/0001..0077` and run full real-engine `xi_test` suites (`soul_weapon_config`) without touching live prod/staging containers.
-3. **Static x86 PE32 Disassembly of `FFXiMain.dll` (ONCE Verified Binary Is Supplied):**
-   - Verified available in the Linux build container (`objdump --target=pei-i386 -d -M intel`, `strings`, `readelf`, Python PE section/RVA/xref scanners).
-   - **Permanent Private Research Workspace:** `/mnt/user/soulspire-dev/native-research/` (`client/`, `disassembly/`, `skeletons/`, `signatures/`, `weapon-models/`, `captures/`, `documentation/`, `MANIFEST.json`). **Never commit retail `FFXiMain.dll` or `ROM/*.DAT` to Git.**
-   - Place a read-only copy of retail `FFXiMain.dll` at `/mnt/user/soulspire-dev/native-research/client/FFXiMain.dll` and run `/mnt/user/soulspire-dev/native-research/disassembly/verify_client_binary.py` to confirm:
-     - PE `TimeDateStamp == 0x6AE818B4`
-     - `SizeOfImage == 0x00C17000`
-     - `45/45` verified hook signatures match
-   - Perform static reverse engineering on Linux to locate the character skeleton bone-matrix & `wep0`/`wep1` D3D8 mesh submission call sites, extract exact 24-byte ASLR-relocated signatures for `soulspire_native/hooks/layout.h`, and write the C++ hook binding to `WeaponPresentationManager::evaluate()`.
+3. **Narrowly Scoped `.text` Code-Window Analysis (Zero Full Process Dumps, Zero PII):**
+   - Verified on-disk retail `FFXiMain.dll` (`2,905,680` B, `sha256:d809ebe33301...`, `TimeDateStamp=0x6AE818B4`, `SizeOfImage=0x00C17000`) is staged privately at `/mnt/user/soulspire-dev/native-research/client/FFXiMain.dll` (never committed to Git). Because on-disk `.text` has `RawSize=0` (`POL1` runtime-unpacked), static `.text` disassembly uses a **narrowly scoped, opt-in Ashita v4 developer probe** (`core/weapon_render_probe.lua`, disabled by default) rather than a full process memory dump.
+   - **Never bypass or reimplement PlayOnline's loader**, never dump full process memory, and never collect credentials, account IDs, character names, chat, inventory, or unrelated memory.
+   - Once `/mnt/user/soulspire-dev/native-research/signatures/soul-weapon-render-probe.local.json` (`< 50 KB`, strictly bounded `.text` instruction windows normalized to `0x10000000`) is provided, `/mnt/user/soulspire-dev/native-research/disassembly/analyze_weapon_probe.py` disassembles the matched `D3DTS_WORLD` / `wep0` / `wep1` / `GrapIDTbl` sites on Unraid Linux (`objdump -m i386 -M intel`) to extract exact 24-byte ASLR-relocated signatures for `soulspire_native/hooks/layout.h` and bind `WeaponPresentationManager::evaluate()`.
 4. **Windows MSVC `/W4 /WX` Compilation, `selftest.exe`, & Binary Sync:**
    - Executed automatically on GitHub Actions `windows-latest` via `.github/workflows/build-launcher.yml` (`build-soulspire-native` + `sync-soulspire-native-binary`), committing the CI-verified `plugins/ashita4/soulspire_native.dll`, `soulspire_native/dll_sync_state.json`, and updated `manifest.json` directly back to `feat/berserker-dual-great-axe` with full provenance.
 
 ### B. Tasks Strictly Requiring Your Windows Gaming PC (FFXI + Ashita v4)
-1. **Supply One Verified Copy of Retail `FFXiMain.dll` (for Linux Static Disassembly):**
-   - Copy `C:\Program Files (x86)\PlayOnline\SquareEnix\FINAL FANTASY XI\FFXiMain.dll` (or your custom PlayOnline install path) from your Windows gaming PC to `/mnt/user/soulspire-dev/native-research/client/FFXiMain.dll` on Unraid (read-only, never committed to Git).
+1. **Run the Narrowly Scoped Developer Probe (2 Commands, Zero Process Dumps):**
+   - Launch FFXI normally via **SoulspireLauncher** (Testing Channel — zero manual DLL or DAT copying).
+   - In-game, run:
+     - `/soulspire weapondiag on`
+     - `/soulspire weapondiag probe`
+     - `/soulspire weapondiag off`
+   - Copy the tiny private report (`< 50 KB`, gitignored) from `<Ashita>\plugins\data\soul-weapon-render-probe.local.json` to `/mnt/user/soulspire-dev/native-research/signatures/soul-weapon-render-probe.local.json`.
    - *(Already recovered on Unraid — no need to copy)* All 7 playable race skeleton DATs (`ROM/27/82.DAT`..`56/59.DAT`) are already symlinked from `dat-overlays/flintlock-akimbo-compact/ROM` and their `0x29` bone hierarchies are extracted in `/mnt/user/soulspire-dev/native-research/skeletons/`.
-   - *(Optional for offline grip/length bounds)* Copy representative retail Great Axe DATs (e.g., `Butterfly Axe` `MId=94`, `Heavy Axe` `MId=93`, `Greataxe` `MId=95`) to `/mnt/user/soulspire-dev/native-research/weapon-models/retail-great-axes/` (never committed).
 2. **Launcher-Delivered Testing Sync (Zero Manual DLL or DAT Copying):**
    - Launch **SoulspireLauncher** pointed at the Testing Channel build (produced by `build-testing-channel` in `build-launcher.yml`) or the branch manifest once promoted.
    - SoulspireLauncher automatically downloads and SHA-256-verifies `plugins/soulspire_native.dll`, `plugins/data/soul-weapon-config.json`, `addons/crystalsocket/`, `addons/soulspire_core/`, and `addons/soulspire_flintlock/` — **no manual DLL copying, manual DAT edits, or standalone player addons required**.

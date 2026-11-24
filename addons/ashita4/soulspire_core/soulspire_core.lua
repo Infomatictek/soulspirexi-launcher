@@ -23,6 +23,7 @@ local Assets       = require('core.assets')
 local UI           = require('core.ui')
 local NativeBridge = require('core.native_bridge')
 local WeaponPres   = require('core.weapon_presentation')
+local WeaponProbe  = require('core.weapon_render_probe')
 
 local registry = Registry.new()
 local focus    = Focus.new(registry)
@@ -59,6 +60,7 @@ ashita.events.register('load', 'soulspire_core_load', function()
         local data_dir = addon.path:gsub('[/\\]+$', '') .. '\\..\\..\\plugins\\data\\'
         weapon_pres.config_path = data_dir .. 'soul-weapon-config.json'
         weapon_pres.calibration_path = data_dir .. 'soul-weapon-calibration.local.json'
+        weapon_pres.probe_output_path = data_dir .. 'soul-weapon-render-probe.local.json'
         weapon_pres:load_file()
     end
     local ok, scaling = pcall(require, 'scaling')
@@ -165,9 +167,22 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
             weapon_pres:reset_transforms()
             if weapon_pres.calibration_path then weapon_pres:save_calibration_and_sync_native() end
             log('Reset weapon presentation transforms to authoritative registry baseline.')
+        elseif action == 'probe' then
+            local ok, res, out_path = WeaponProbe.run_live_probe({
+                diagnostics_enabled = weapon_pres:is_diagnostics_enabled(),
+                output_path = weapon_pres.probe_output_path,
+            })
+            if ok and type(res) == 'table' then
+                local total = 0
+                for _, f in ipairs(res.findings or {}) do total = total + (f.match_count or 0) end
+                log(('Weapon render probe COMPLETE: anchors=%d/%d findings=%d output=%s (private local file, never commit)'):format(
+                    res.anchor_matched or 0, res.anchor_total or 0, total, tostring(out_path)))
+            else
+                log('Weapon render probe refused/failed: ' .. tostring(res))
+            end
         else
             local st = weapon_pres:status()
-            log(('weapondiag loaded=%s enabled=%s bindings=%d profiles=%d peers=%d hash=%s (usage: /soulspire weapondiag on|off|save|export|reset)'):format(
+            log(('weapondiag loaded=%s enabled=%s bindings=%d profiles=%d peers=%d hash=%s (usage: /soulspire weapondiag on|off|save|export|reset|probe)'):format(
                 tostring(st.loaded),
                 tostring(st.diagnostics_enabled),
                 st.binding_count,
