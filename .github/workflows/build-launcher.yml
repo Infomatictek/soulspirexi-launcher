@@ -336,6 +336,7 @@ jobs:
             --server-branch "${{ github.ref_name }}" `
             --server-commit "${{ github.sha }}" `
             --server-image "soulspirexi/server:main" `
+            --repo-branch "${{ github.ref_name }}" `
             --native-hooks 27
 
           python scripts/verify-launcher-manifest.py --manifest channels/testing/manifest.json
