@@ -9,6 +9,7 @@
 #include "actions/action_catalog.h"
 #include "equipment/weapon_rules.h"
 #include "rendering/menu2fon.h"
+#include "rendering/weapon_presentation.h"
 #include "menus/menu_hooks.h"
 #include "resources/resource_manager.h"
 #include "dat_virtualization/dat_virtualization.h"
@@ -37,6 +38,7 @@ static Transport transport;
 static ActionCatalog action_catalog;
 static VisibilityCatalog visibility_catalog;
 static WeaponRuleCatalog weapon_rule_catalog;
+static WeaponPresentationManager weapon_presentation_mgr;
 static DatVirtualizationManager dat_virt_mgr;
 static ActiveSoulOverride soul_override;
 static HookDiagnosticsState hook_diag;
@@ -1492,7 +1494,9 @@ extern "C" uint32_t __stdcall SoulspireNativeReloadConfig() {
         ReleaseSRWLockExclusive(&lifecycle_lock);
         return 1;
     }
-    load_runtime_resources(mod, action_row_max_chars);
+    AcquireSRWLockExclusive(&weapon_lock);
+    load_runtime_resources(mod, action_row_max_chars, &weapon_rule_catalog, &weapon_presentation_mgr);
+    ReleaseSRWLockExclusive(&weapon_lock);
     dat_virt_mgr.configure(module_enabled(SOULSPIRE_NATIVE_MOD_DAT_VIRTUALIZATION));
     ReleaseSRWLockExclusive(&lifecycle_lock);
     return 0;
@@ -1577,7 +1581,9 @@ extern "C" uint32_t __stdcall SoulspireNativeInitialize() {
     soul_sub_2h_main_deny_resume = reinterpret_cast<uintptr_t>(base + 0x133DD8);
     soul_sub_2h_main_allow_resume = reinterpret_cast<uintptr_t>(base + 0x133DEB);
 
-    load_runtime_resources(pinned, action_row_max_chars);
+    AcquireSRWLockExclusive(&weapon_lock);
+    load_runtime_resources(pinned, action_row_max_chars, &weapon_rule_catalog, &weapon_presentation_mgr);
+    ReleaseSRWLockExclusive(&weapon_lock);
     dat_virt_mgr.configure(module_enabled(SOULSPIRE_NATIVE_MOD_DAT_VIRTUALIZATION));
 
     for (uint32_t i = 0; i < kPatchCount; ++i) {

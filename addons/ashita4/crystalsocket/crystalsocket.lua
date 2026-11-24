@@ -298,6 +298,8 @@ end)
 
 ashita.events.register('load', 'crystalsocket_load', function()
     if type(addon.path) == 'string' and addon.path ~= '' then
+        WeaponConfig.load_default(addon.path)
+        native_weapon_rules = WeaponConfig.native_rules()
         labels:set_dll_path(addon.path:gsub('[/\\]+$', '') .. '\\..\\..\\plugins\\soulspire_native.dll')
         labels:ensure_loaded()
         labels:sync_weapon_rules(native_weapon_rules)

@@ -2,21 +2,26 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <vector>
 
 namespace soulspire::native {
 
-// Reusable Soul Weapon Presentation System (C++17).
+// Generic, Data-Driven Soul Weapon Presentation Engine (C++17).
 //
-// Design guarantees:
-//   1. Fail-closed on unknown, expired, or unsynchronized Soul identity.
-//   2. Never infers Berserker eligibility from WAR base job alone.
-//   3. Evaluates local and remote characters strictly from the observed actor's
-//      own verified Soul and equipped weapons (never local player's Soul for peers).
-//   4. Independently preserves each equipped Great Axe's actual model ID.
-//   5. Supports all 8 playable FFXI character models with drawn (right/left hand)
-//      and sheathed (crossed-back X formation with depth separation) transforms.
-//   6. Developer live-adjustment overrides are disabled by default.
+// Zero hardcoded Soul names, job IDs, branch IDs, level gates, weapon skills,
+// or race transform defaults live in this module. All rules, bindings, and
+// reusable 8-race presentation profiles are loaded in memory from the
+// authoritative registry-generated plugins/data/soul-weapon-config.json.
+//
+// Guarantees:
+//   1. Fail-closed when config is missing, stale, schema-mismatched, or invalid.
+//   2. Fail-closed on unknown, expired, or unsynchronized Soul identity.
+//   3. Evaluates local actors from confirmed local Soul and remote actors
+//      strictly from the observed peer's OXSI Soul (never local player's Soul).
+//   4. Resolves actual equipped weapon model IDs dynamically per Main/Sub slot.
+//   5. Developer live-adjustment calibration overrides are disabled by default.
 
 enum class PlayableRace : uint8_t {
     Unknown        = 0,
@@ -30,10 +35,22 @@ enum class PlayableRace : uint8_t {
     Galka          = 8,
 };
 
+enum class PresentationProfileKind : uint8_t {
+    Unknown                  = 0,
+    Dual2HAttachments        = 1,
+    RangedDualPistolOverlay  = 2,
+    TwoHandShieldAttachments = 3,
+    Dual1HAttachments        = 4,
+};
+
 enum class WeaponPresentationState : uint8_t {
-    Vanilla        = 0,
-    DrawnDual2H    = 1,
-    SheathedCrossX = 2,
+    Vanilla               = 0,
+    DrawnDual2H           = 1,
+    SheathedCrossX        = 2,
+    DrawnTwoHandShield    = 3,
+    SheathedTwoHandShield = 4,
+    DrawnDual1H           = 5,
+    SheathedDual1H        = 6,
 };
 
 struct WeaponAttachmentTransform {
@@ -56,6 +73,28 @@ struct RaceWeaponTransformSet {
     WeaponAttachmentTransform drawn_sub{};
     WeaponAttachmentTransform sheathed_main{};
     WeaponAttachmentTransform sheathed_sub{};
+};
+
+struct PresentationProfileRecord {
+    char id[48]{};
+    PresentationProfileKind kind = PresentationProfileKind::Unknown;
+    bool visual_certified = false;
+    bool requires_native_3d_bone_hook = false;
+    bool has_races = false;
+    std::array<RaceWeaponTransformSet, 8> races{};
+};
+
+struct SoulWeaponBinding {
+    char     soul_id[32]{};
+    uint8_t  job = 0;
+    uint8_t  branch = 0;
+    uint8_t  min_effective_level = 10;
+    uint8_t  mode = 0;
+    uint32_t main_skill_mask = 0;
+    uint32_t sub_skill_mask = 0;
+    uint16_t main_item_id = 0;
+    uint16_t sub_item_id = 0;
+    int32_t  presentation_profile_index = -1;
 };
 
 struct PeerSoulRecord {
@@ -91,6 +130,8 @@ struct ActorPresentationDecision {
     WeaponPresentationState state = WeaponPresentationState::Vanilla;
     uint16_t main_model_id        = 0;
     uint16_t sub_model_id         = 0;
+    char     soul_id[32]{};
+    char     profile_id[48]{};
     WeaponAttachmentTransform main_transform{};
     WeaponAttachmentTransform sub_transform{};
 };
@@ -163,79 +204,96 @@ inline bool valid_playable_race(PlayableRace race) noexcept {
     return id >= 1u && id <= 8u;
 }
 
-inline RaceWeaponTransformSet default_berserker_race_transforms(PlayableRace race) noexcept {
-    // Matches plugins/ashita4/data/soul-weapon-presentation.json defaults across all 8 playable models.
-    auto make_set = [](float dtx, float dty, float dtz, float dpitch, float droll, float dgrip_y, float scale, float dsep,
-                       float stx, float sty, float stz, float spitch, float syaw, float sroll, float sgrip_y, float ssep,
-                       float depth_sep) noexcept -> RaceWeaponTransformSet {
-        RaceWeaponTransformSet s{};
-        s.drawn_main    = { -dtx, dty, dtz, dpitch, 0.0f, -droll, 0.0f, dgrip_y, 0.0f, scale, dsep, 0.0f };
-        s.drawn_sub     = {  dtx, dty, dtz, dpitch, 0.0f,  droll, 0.0f, dgrip_y, 0.0f, scale, dsep, 0.0f };
-        s.sheathed_main = { -stx, sty, stz, spitch, -syaw,  sroll, 0.0f, sgrip_y, 0.0f, scale, ssep, stz };
-        s.sheathed_sub  = {  stx, sty, stz + depth_sep, spitch,  syaw, -sroll, 0.0f, sgrip_y, 0.0f, scale, ssep, stz + depth_sep };
-        return s;
-    };
-
-    switch (race) {
-        case PlayableRace::HumeMale:
-            return make_set(0.012f, 0.008f, -0.015f, 8.0f, 6.0f, -0.180f, 0.94f, 0.040f,
-                            0.045f, 0.060f,  0.145f, 6.0f, 8.0f, 42.0f, -0.120f, 0.090f, 0.038f);
-        case PlayableRace::HumeFemale:
-            return make_set(0.010f, 0.006f, -0.014f, 8.0f, 5.5f, -0.165f, 0.90f, 0.036f,
-                            0.040f, 0.055f,  0.135f, 5.5f, 7.5f, 41.0f, -0.110f, 0.080f, 0.036f);
-        case PlayableRace::ElvaanMale:
-            return make_set(0.014f, 0.010f, -0.016f, 7.5f, 6.0f, -0.200f, 0.96f, 0.044f,
-                            0.050f, 0.075f,  0.155f, 6.5f, 8.0f, 43.0f, -0.130f, 0.100f, 0.040f);
-        case PlayableRace::ElvaanFemale:
-            return make_set(0.012f, 0.008f, -0.015f, 7.5f, 5.5f, -0.185f, 0.92f, 0.038f,
-                            0.044f, 0.068f,  0.145f, 6.0f, 7.5f, 42.0f, -0.120f, 0.088f, 0.038f);
-        case PlayableRace::TarutaruMale:
-            return make_set(0.008f, 0.012f, -0.012f, 11.0f, 7.0f, -0.115f, 0.78f, 0.030f,
-                            0.032f, 0.045f,  0.115f, 7.0f, 9.0f, 39.0f, -0.080f, 0.064f, 0.032f);
-        case PlayableRace::TarutaruFemale:
-            return make_set(0.008f, 0.012f, -0.012f, 11.0f, 7.0f, -0.115f, 0.78f, 0.030f,
-                            0.032f, 0.045f,  0.118f, 7.0f, 9.0f, 39.0f, -0.080f, 0.064f, 0.032f);
-        case PlayableRace::Mithra:
-            return make_set(0.011f, 0.007f, -0.015f, 8.5f, 6.0f, -0.170f, 0.91f, 0.038f,
-                            0.042f, 0.058f,  0.142f, 6.0f, 8.0f, 41.5f, -0.115f, 0.084f, 0.036f);
-        case PlayableRace::Galka:
-            return make_set(0.018f, 0.014f, -0.020f, 7.0f, 6.5f, -0.220f, 1.04f, 0.055f,
-                            0.062f, 0.085f,  0.205f, 8.0f, 9.5f, 44.0f, -0.145f, 0.124f, 0.044f);
-        default:
-            return default_berserker_race_transforms(PlayableRace::HumeMale);
-    }
-}
-
 class WeaponPresentationManager {
 public:
-    static constexpr uint8_t  kWarJobId          = 1;
-    static constexpr uint8_t  kBerserkerBranch   = 2;
-    static constexpr uint8_t  kBerserkerMinLevel = 10;
-    static constexpr uint16_t kGreatAxeSkill     = 6;
+    static constexpr size_t kMaxBindings = 256;
+    static constexpr size_t kMaxProfiles = 32;
 
-    WeaponPresentationManager() noexcept {
-        reset_transforms();
+    void clear() noexcept {
+        loaded_ = false;
+        bindings_.clear();
+        profiles_.clear();
+        calibration_profiles_.clear();
+        has_calibration_override_ = false;
+        registry_hash_[0] = '\0';
+        weapon_config_hash_[0] = '\0';
     }
 
-    void reset_transforms() noexcept {
-        for (uint8_t r = 1; r <= 8; ++r) {
-            race_transforms_[r - 1] = default_berserker_race_transforms(static_cast<PlayableRace>(r));
+    bool replace_config(const std::vector<SoulWeaponBinding>& bindings,
+                        const std::vector<PresentationProfileRecord>& profiles,
+                        const char* registry_hash,
+                        const char* weapon_config_hash) {
+        if (bindings.size() > kMaxBindings || profiles.size() > kMaxProfiles) {
+            clear();
+            return false;
         }
+        for (const auto& b : bindings) {
+            if (b.job < 1 || b.job > 22 || b.branch < 1 || b.branch > 3) {
+                clear();
+                return false;
+            }
+            if (b.presentation_profile_index >= static_cast<int32_t>(profiles.size())) {
+                clear();
+                return false;
+            }
+        }
+        bindings_ = bindings;
+        profiles_ = profiles;
+        calibration_profiles_ = profiles;
+        has_calibration_override_ = false;
+        std::memset(registry_hash_, 0, sizeof(registry_hash_));
+        std::memset(weapon_config_hash_, 0, sizeof(weapon_config_hash_));
+        if (registry_hash != nullptr) {
+            std::snprintf(registry_hash_, sizeof(registry_hash_), "%s", registry_hash);
+        }
+        if (weapon_config_hash != nullptr) {
+            std::snprintf(weapon_config_hash_, sizeof(weapon_config_hash_), "%s", weapon_config_hash);
+        }
+        loaded_ = true;
+        return true;
     }
+
+    bool loaded() const noexcept { return loaded_; }
+    size_t binding_count() const noexcept { return bindings_.size(); }
+    size_t profile_count() const noexcept { return profiles_.size(); }
+    const char* registry_hash() const noexcept { return registry_hash_; }
+    const char* weapon_config_hash() const noexcept { return weapon_config_hash_; }
 
     // Diagnostics are strictly disabled by default.
     bool diagnostics_enabled() const noexcept { return diagnostics_enabled_; }
     void set_diagnostics_enabled(bool enabled) noexcept { diagnostics_enabled_ = enabled; }
 
-    bool set_race_transform_override(PlayableRace race, bool sheathed, bool is_sub,
-                                     const WeaponAttachmentTransform& xform) noexcept {
-        if (!diagnostics_enabled_ || !valid_playable_race(race)) {
+    void reset_calibration_overrides() noexcept {
+        calibration_profiles_ = profiles_;
+        has_calibration_override_ = false;
+    }
+
+    int32_t find_profile_index(const char* profile_id) const noexcept {
+        if (profile_id == nullptr || profile_id[0] == '\0') return -1;
+        for (size_t i = 0; i < profiles_.size(); ++i) {
+            if (std::strcmp(profiles_[i].id, profile_id) == 0) {
+                return static_cast<int32_t>(i);
+            }
+        }
+        return -1;
+    }
+
+    bool set_profile_race_transform_override(const char* profile_id, PlayableRace race,
+                                             bool sheathed, bool is_sub,
+                                             const WeaponAttachmentTransform& xform) noexcept {
+        if (!diagnostics_enabled_ || !loaded_ || !valid_playable_race(race)) {
             return false;
         }
         if (xform.scale < 0.25f || xform.scale > 2.5f) {
             return false;
         }
-        auto& slot = race_transforms_[static_cast<size_t>(static_cast<uint8_t>(race) - 1u)];
+        const int32_t pidx = find_profile_index(profile_id);
+        if (pidx < 0 || static_cast<size_t>(pidx) >= calibration_profiles_.size()) {
+            return false;
+        }
+        auto& prof = calibration_profiles_[static_cast<size_t>(pidx)];
+        if (!prof.has_races) return false;
+        auto& slot = prof.races[static_cast<size_t>(static_cast<uint8_t>(race) - 1u)];
         if (sheathed) {
             if (is_sub) slot.sheathed_sub = xform;
             else slot.sheathed_main = xform;
@@ -243,12 +301,18 @@ public:
             if (is_sub) slot.drawn_sub = xform;
             else slot.drawn_main = xform;
         }
+        has_calibration_override_ = true;
         return true;
     }
 
-    const RaceWeaponTransformSet& transforms_for(PlayableRace race) const noexcept {
-        const size_t idx = valid_playable_race(race) ? static_cast<size_t>(static_cast<uint8_t>(race) - 1u) : 0u;
-        return race_transforms_[idx];
+    const RaceWeaponTransformSet* transforms_for(const char* profile_id, PlayableRace race) const noexcept {
+        if (!loaded_ || !valid_playable_race(race)) return nullptr;
+        const int32_t pidx = find_profile_index(profile_id);
+        if (pidx < 0) return nullptr;
+        const auto& source = (diagnostics_enabled_ && has_calibration_override_) ? calibration_profiles_ : profiles_;
+        const auto& prof = source[static_cast<size_t>(pidx)];
+        if (!prof.has_races) return nullptr;
+        return &prof.races[static_cast<size_t>(static_cast<uint8_t>(race) - 1u)];
     }
 
     PeerSoulRegistry& peers() noexcept { return peers_; }
@@ -256,6 +320,9 @@ public:
 
     ActorPresentationDecision evaluate(const ActorPresentationQuery& q) const noexcept {
         ActorPresentationDecision out{};
+        if (!loaded_) {
+            return out; // Fail closed when authoritative config is unavailable.
+        }
         if (q.is_dead || !q.distinct_items) {
             return out;
         }
@@ -265,11 +332,11 @@ public:
         if (q.main_item_id == 0 || q.sub_item_id == 0 || q.main_model_id == 0 || q.sub_model_id == 0) {
             return out;
         }
-        if (q.main_skill != kGreatAxeSkill || q.sub_skill != kGreatAxeSkill) {
+        if (q.main_skill == 0 || q.main_skill >= 32u || q.sub_skill == 0 || q.sub_skill >= 32u) {
             return out;
         }
 
-        // Strict Soul gate: local uses local confirmed Soul; remote uses ONLY remote peer's OXSI Soul.
+        // Strict Soul gate: local uses confirmed local Soul; remote uses ONLY remote peer's OXSI Soul.
         uint8_t resolved_job = 0;
         uint8_t resolved_branch = 0;
         uint8_t resolved_level = 0;
@@ -288,20 +355,63 @@ public:
             resolved_level = peer.effective_level;
         }
 
-        // Strictly exclusive to active WAR Berserker (job=1, branch=2, effective_level>=10).
-        if (resolved_job != kWarJobId || resolved_branch != kBerserkerBranch || resolved_level < kBerserkerMinLevel) {
+        const uint32_t main_bit = 1u << q.main_skill;
+        const uint32_t sub_bit = 1u << q.sub_skill;
+        const SoulWeaponBinding* matched = nullptr;
+        for (const auto& b : bindings_) {
+            if (b.job != resolved_job || b.branch != resolved_branch) continue;
+            if (resolved_level < b.min_effective_level) continue;
+            if ((b.main_skill_mask & main_bit) == 0) continue;
+            if ((b.sub_skill_mask & sub_bit) == 0) continue;
+            if (b.main_item_id != 0 && b.main_item_id != q.main_item_id) continue;
+            if (b.sub_item_id != 0 && b.sub_item_id != q.sub_item_id) continue;
+            if (b.presentation_profile_index < 0 ||
+                static_cast<size_t>(b.presentation_profile_index) >= profiles_.size()) {
+                continue;
+            }
+            matched = &b;
+            break;
+        }
+        if (matched == nullptr) {
             return out;
         }
 
-        const auto& set = transforms_for(q.race);
+        const auto& source = (diagnostics_enabled_ && has_calibration_override_) ? calibration_profiles_ : profiles_;
+        const auto& prof = source[static_cast<size_t>(matched->presentation_profile_index)];
+        if (!prof.has_races) {
+            return out;
+        }
+
+        WeaponPresentationState drawn_state = WeaponPresentationState::Vanilla;
+        WeaponPresentationState sheathed_state = WeaponPresentationState::Vanilla;
+        switch (prof.kind) {
+            case PresentationProfileKind::Dual2HAttachments:
+                drawn_state = WeaponPresentationState::DrawnDual2H;
+                sheathed_state = WeaponPresentationState::SheathedCrossX;
+                break;
+            case PresentationProfileKind::TwoHandShieldAttachments:
+                drawn_state = WeaponPresentationState::DrawnTwoHandShield;
+                sheathed_state = WeaponPresentationState::SheathedTwoHandShield;
+                break;
+            case PresentationProfileKind::Dual1HAttachments:
+                drawn_state = WeaponPresentationState::DrawnDual1H;
+                sheathed_state = WeaponPresentationState::SheathedDual1H;
+                break;
+            default:
+                return out;
+        }
+
+        const auto& set = prof.races[static_cast<size_t>(static_cast<uint8_t>(q.race) - 1u)];
         out.main_model_id = q.main_model_id;
         out.sub_model_id  = q.sub_model_id;
+        std::snprintf(out.soul_id, sizeof(out.soul_id), "%s", matched->soul_id);
+        std::snprintf(out.profile_id, sizeof(out.profile_id), "%s", prof.id);
         if (q.is_engaged) {
-            out.state          = WeaponPresentationState::DrawnDual2H;
+            out.state          = drawn_state;
             out.main_transform = set.drawn_main;
             out.sub_transform  = set.drawn_sub;
         } else {
-            out.state          = WeaponPresentationState::SheathedCrossX;
+            out.state          = sheathed_state;
             out.main_transform = set.sheathed_main;
             out.sub_transform  = set.sheathed_sub;
         }
@@ -309,7 +419,13 @@ public:
     }
 
 private:
-    std::array<RaceWeaponTransformSet, 8> race_transforms_{};
+    bool loaded_ = false;
+    std::vector<SoulWeaponBinding> bindings_{};
+    std::vector<PresentationProfileRecord> profiles_{};
+    std::vector<PresentationProfileRecord> calibration_profiles_{};
+    bool has_calibration_override_ = false;
+    char registry_hash_[24]{};
+    char weapon_config_hash_[24]{};
     PeerSoulRegistry peers_{};
     bool diagnostics_enabled_ = false;
 };

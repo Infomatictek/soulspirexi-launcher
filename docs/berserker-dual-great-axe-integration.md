@@ -3,7 +3,38 @@
 **Task ID:** `WS3-WEAP-002` (Expanded)  
 **Repositories:** `Infomatictek/soulspirexi` (`berserker_dual_great_axe`) & `Infomatictek/soulspirexi-launcher` (`feat/berserker-dual-great-axe`)  
 **Canonical Native Foundation:** `soulspire_native/` (`plugins/ashita4/soulspire_native.dll`, 27 hooks, ABI v2, `DEC-015`)  
-**Authoritative Presentation Config:** `plugins/ashita4/data/soul-weapon-presentation.json`
+**Authoritative Registry Source:** `Infomatictek/soulspirexi/registry/weapon_configs.json` (keyed by immutable permanent Soul IDs from `registry/souls.json`, preserving frozen `registryHash: cf86aa59ff8d16c6`)  
+**Generated Client Artifact (via Launcher `manifest.json`):** `plugins/ashita4/data/soul-weapon-config.json` (`schemaVersion: 1`, FNV-1a64 + FNV-1a32 integrity checked)
+
+---
+
+## 0. Database-Driven Native Weapon Hooks Architecture (Phase 2)
+
+```
+registry/souls.json + registry/locked_ids.json + registry/weapon_configs.json
+        │
+        ▼ (tools/registry_compiler.py / tools/registry_publish.py)
+        ├──► Server: modules/custom/lua/soulspire_weapon_config_generated.lua
+        │         └── loaded in memory by soulspire_weapon_config.lua (zero runtime SQL)
+        └──► Client: plugins/ashita4/data/soul-weapon-config.json
+                  └── distributed via manifest.json (SHA-256 verified)
+                        ├──► soulspire_native/equipment/weapon_config_loader.h
+                        │     ├── populates WeaponRuleCatalog (Hooks #22, #25, #26, #27)
+                        │     └── populates WeaponPresentationManager (8-race profiles)
+                        ├──► addons/ashita4/crystalsocket/weapon_config.lua & soul_appearance.lua
+                        ├──► addons/ashita4/soulspire_flintlock/flintlock_state.lua
+                        └──► addons/ashita4/soulspire_core/core/weapon_presentation.lua
+```
+
+- **Zero hardcoded Soul rules in native hooks:** `weapon_rules.h`, `weapon_config_loader.h`, `weapon_presentation.h`, and `soulspire_native.cpp` contain zero Soul names, job/branch rules, level gates, or weapon skill constants.
+- **Fail-closed integrity:** Missing, stale (`registryHash` mismatch), schema-mismatched (`schemaVersion != 1`), or tampered (`integrityFnv1a64` / `integrityFnv1a32` mismatch) config fails closed to vanilla FFXI behavior.
+- **Zero-recompile extensibility proven:** Adding a new Soul weapon rule (e.g., `drk_dps` dual Scythe reusing `dual_2h_crossed_back_x`) in `registry/weapon_configs.json` compiles both server Lua and client `soul-weapon-config.json` and activates in `WeaponRuleCatalog` + `WeaponPresentationManager` without editing or recompiling C++ or `soulspire_native.dll` (verified in `test_soul_weapon_config.py` and `soulspire_native/tests/selftest.cpp`).
+- **Remaining Hardcoded Values Audit:**
+  - `soulspire_native/hooks/layout.h` — `FFXiMain.dll` PE fingerprint (`TS=0x6AE818B4`, `SizeOfImage=0x00C17000`) & 49 ASLR-relocated 24-byte signatures: **Required client binary safety isolation** (explicitly separated from gameplay config).
+  - `soulspire_native/core/api.h` & `weapon_config.lua` — Engine enum constants (`DUAL_1H=1`, `DUAL_2H=2`, `TWOHAND_SHIELD=3`, FFXI `SkillType` 1..12, `PlayableRace` 1..8, packet offsets `0x0051`/`0x000A`/`0x000D`/`0x1FC`, `PeerSoulRegistry::kMaxPeers=128`, `kTtlMs=120000`): **Stable FFXI protocol / C ABI constants**, not gameplay or Soul rules.
+  - `modules/custom/lua/soulspire_polearm_buckler.lua` & `war_specs.lua` — Legacy `OX_POLEARM_BUCKLER` local-var combat/guard hook used by pre-`0073` C++ `CanEquipPolearmBuckler`: **Retained for backwards compatibility** alongside authoritative `war_tank` entry in `registry/weapon_configs.json`; zero conflict.
+  - `addons/ashita4/soulspire_flintlock/flintlock_state.lua` — `FIREARM_SKILLS = { [26] = true }` (FFXI Marksmanship skill ID) and `0x7073` ranged-cancel packet constant: **FFXI client protocol constants**; Soul gating itself is loaded dynamically from `soul-weapon-config.json` (`rangedOnly`).
+  - `soulspire_native/rendering/weapon_presentation.h` — Scale bounds `[0.25f, 2.5f]` and `kMaxBindings=256`, `kMaxProfiles=32`: **Memory/render safety bounds** preventing malformed developer calibration transforms.
 
 ---
 

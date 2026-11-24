@@ -56,7 +56,9 @@ end
 ashita.events.register('load', 'soulspire_core_load', function()
     assets = Assets.new(addon.path)
     if type(addon.path) == 'string' and addon.path ~= '' then
-        weapon_pres.config_path = addon.path:gsub('[/\\]+$', '') .. '\\..\\..\\plugins\\data\\soul-weapon-presentation.json'
+        local data_dir = addon.path:gsub('[/\\]+$', '') .. '\\..\\..\\plugins\\data\\'
+        weapon_pres.config_path = data_dir .. 'soul-weapon-config.json'
+        weapon_pres.calibration_path = data_dir .. 'soul-weapon-calibration.local.json'
         weapon_pres:load_file()
     end
     local ok, scaling = pcall(require, 'scaling')
@@ -145,22 +147,33 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
         local action = (rest or ''):lower():gsub('^%s+', ''):gsub('%s+$', '')
         if action == 'on' then
             weapon_pres:set_diagnostics_enabled(true)
-            log('Developer weapon alignment diagnostics ENABLED (session-only; disabled by default).')
+            weapon_pres:load_calibration_file()
+            log('Developer weapon alignment diagnostics ENABLED (disabled by default; live sync to soulspire_native active).')
         elseif action == 'off' then
             weapon_pres:set_diagnostics_enabled(false)
+            if weapon_pres.calibration_path then weapon_pres:save_calibration_and_sync_native() end
             log('Developer weapon alignment diagnostics DISABLED.')
+        elseif action == 'save' then
+            local ok, path, synced = weapon_pres:save_calibration_and_sync_native()
+            log(ok and ('Saved developer calibration to ' .. tostring(path) .. ' (native_sync=' .. tostring(synced) .. ')')
+                or ('Save failed: ' .. tostring(path)))
         elseif action == 'export' then
             local ok, res = weapon_pres:export_file()
-            log(ok and ('Exported authoritative weapon presentation config to ' .. tostring(res))
+            log(ok and ('Exported calibrated weapon presentation profile to ' .. tostring(res))
                 or ('Export failed: ' .. tostring(res)))
         elseif action == 'reset' then
             weapon_pres:reset_transforms()
-            log('Reset weapon presentation transforms to compiled defaults.')
+            if weapon_pres.calibration_path then weapon_pres:save_calibration_and_sync_native() end
+            log('Reset weapon presentation transforms to authoritative registry baseline.')
         else
-            log(('weapondiag enabled=%s peers=%d config=%s (usage: /soulspire weapondiag on|off|export|reset)'):format(
-                tostring(weapon_pres:is_diagnostics_enabled()),
-                weapon_pres.peer_count,
-                tostring(weapon_pres.config_path or 'unset')))
+            local st = weapon_pres:status()
+            log(('weapondiag loaded=%s enabled=%s bindings=%d profiles=%d peers=%d hash=%s (usage: /soulspire weapondiag on|off|save|export|reset)'):format(
+                tostring(st.loaded),
+                tostring(st.diagnostics_enabled),
+                st.binding_count,
+                st.profile_count,
+                st.peer_count,
+                tostring(st.weapon_config_hash)))
         end
     else
         log('Commands: /soulspire [open [section] | close | status | debug | weapondiag] (alias: /ss)')

@@ -1,9 +1,14 @@
--- Reusable data-driven Soul-specific visual appearance rules for Ashita v4.
+-- Reusable registry-driven Soul-specific visual appearance rules for Ashita v4.
 -- Client-side visual presentation only:
 --   * Masks selected GrapIDTbl slots in incoming 0x0051 / 0x000A / self 0x000D packets.
 --   * Never sends outgoing equipment packets, never unequips items, never alters stats.
 --   * Caches the server's real GrapIDTbl so switching Souls, changing gear, zoning,
 --     relogging, or unloading immediately restores exact equipped appearances.
+--   * Zero hardcoded Soul IDs or job/branch numbers: loads appearanceMasks from
+--     authoritative registry-generated plugins/ashita4/data/soul-weapon-config.json
+--     via weapon_config.lua and fails closed if config is missing or invalid.
+
+local WeaponConfig = require('weapon_config')
 
 local M = {}
 
@@ -23,17 +28,6 @@ M.GRAP_BYTES       = 18
 local EMPTY_MAIN_BYTES = string.char(0x00, 0x60)
 local EMPTY_SUB_BYTES  = string.char(0x00, 0x70)
 
--- Reusable Soul appearance rule table, keyed by [job_id][branch_id].
--- Add future Soul visual overrides here without adding standalone addons or global DAT hacks.
-M.RULES = {
-    [17] = { -- COR
-        [1] = { -- Flintlock (ranged-only specialist: hide equipped Main/Sub melee weapons)
-            hide_main = true,
-            hide_sub  = true,
-        },
-    },
-}
-
 local function read_u16_le(data, pos1)
     local lo, hi = data:byte(pos1, pos1 + 1)
     if not hi then return nil end
@@ -46,12 +40,12 @@ local function read_u32_le(data, pos1)
     return b1 + b2 * 256 + b3 * 65536 + b4 * 16777216
 end
 
+-- Queries authoritative registry-loaded appearanceMasks (fail-closed if unavailable).
 function M.rule_for(job, branch)
     if type(job) ~= 'number' or type(branch) ~= 'number' then
         return nil
     end
-    local by_job = M.RULES[job]
-    return by_job and by_job[branch] or nil
+    return WeaponConfig.appearance_mask_for(job, branch)
 end
 
 function M.apply_rule_to_grap(grap18, rule)

@@ -1,7 +1,10 @@
 #define SOULSPIRE_NATIVE_SELFTEST
 #include "../soulspire_native.cpp"
-#include "../rendering/weapon_presentation.h"
 #include <cassert>
+#include <cmath>
+#include <fstream>
+#include <iterator>
+#include <string>
 
 static uint8_t row_a[72]{}, row_b[72]{};
 static uint32_t sprite_calls, simple_sprite_calls, text_calls, persona_text_calls, last_persona_color;
@@ -1111,26 +1114,90 @@ static void runtime_identity_and_config_checks() {
     publish_search_presentation(cfg);
 }
 
-static void weapon_presentation_checks() {
-    WeaponPresentationManager mgr;
-    assert(!mgr.diagnostics_enabled());
+static std::string read_repo_weapon_config_json() {
+    const char* candidates[] = {
+        "..\\plugins\\ashita4\\data\\soul-weapon-config.json",
+        "plugins\\ashita4\\data\\soul-weapon-config.json",
+        "../plugins/ashita4/data/soul-weapon-config.json",
+        "plugins/ashita4/data/soul-weapon-config.json",
+    };
+    for (const char* path : candidates) {
+        std::ifstream f(path, std::ios::binary);
+        if (f.good()) {
+            return std::string((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        }
+    }
+    return {};
+}
 
-    // 1. All 8 playable character models have valid drawn & crossed-back X sheathed transforms.
+static void weapon_presentation_checks() {
+    // 0. Unloaded manager MUST fail closed to Vanilla for every actor/Soul.
+    WeaponPresentationManager mgr;
+    assert(!mgr.loaded());
+    assert(!mgr.diagnostics_enabled());
+    {
+        ActorPresentationQuery unloaded{};
+        unloaded.actor_id = 1001; unloaded.is_local = true; unloaded.soul_known = true;
+        unloaded.job = 1; unloaded.branch = 2; unloaded.effective_level = 75;
+        unloaded.race = PlayableRace::HumeMale; unloaded.is_engaged = true;
+        unloaded.main_item_id = 16704; unloaded.main_skill = 6; unloaded.main_model_id = 94;
+        unloaded.sub_item_id  = 16706; unloaded.sub_skill  = 6; unloaded.sub_model_id  = 93;
+        assert(mgr.evaluate(unloaded).state == WeaponPresentationState::Vanilla);
+    }
+
+    // 1. Load & validate authoritative registry-generated plugins/ashita4/data/soul-weapon-config.json.
+    const std::string wc_json = read_repo_weapon_config_json();
+    assert(!wc_json.empty());
+
+    ParsedWeaponConfig parsed{};
+    assert(parse_weapon_config_json(wc_json.data(), wc_json.size(), kRegistryHash, parsed));
+    assert(parsed.valid && parsed.status == WEAPON_CFG_RUNTIME_LOADED);
+    assert(parsed.native_rules.size() >= 2u);
+    assert(parsed.bindings.size() >= 2u);
+    assert(parsed.profiles.size() >= 2u);
+    assert(parsed.appearance_masks.size() >= 1u);
+    assert(parsed.ranged_only.size() >= 1u);
+
+    // Fail-closed checks: stale registryHash, bad schemaVersion, and tampered integrityFnv1a64.
+    {
+        ParsedWeaponConfig bad{};
+        assert(!parse_weapon_config_json(wc_json.data(), wc_json.size(), "0000000000000000", bad));
+        assert(bad.status == WEAPON_CFG_BAD_REGISTRY_HASH);
+
+        std::string tampered = wc_json;
+        const size_t pos = tampered.find("\"minEffectiveLevel\": 10");
+        assert(pos != std::string::npos);
+        tampered.replace(pos, 23, "\"minEffectiveLevel\": 11");
+        assert(!parse_weapon_config_json(tampered.data(), tampered.size(), kRegistryHash, bad));
+        assert(bad.status == WEAPON_CFG_BAD_INTEGRITY);
+
+        std::string bad_schema = wc_json;
+        const size_t spos = bad_schema.find("\"schemaVersion\": 1");
+        assert(spos != std::string::npos);
+        bad_schema.replace(spos, 18, "\"schemaVersion\": 9");
+        assert(!parse_weapon_config_json(bad_schema.data(), bad_schema.size(), kRegistryHash, bad));
+        assert(bad.status == WEAPON_CFG_BAD_SCHEMA);
+    }
+
+    assert(mgr.replace_config(parsed.bindings, parsed.profiles, parsed.registry_hash, parsed.weapon_config_hash));
+    assert(mgr.loaded());
+
+    // 2. All 8 playable character models have valid drawn & crossed-back X sheathed transforms.
     for (uint8_t r = 1; r <= 8; ++r) {
         const auto race = static_cast<PlayableRace>(r);
-        const auto& set = mgr.transforms_for(race);
-        // Drawn: mirrored right/left hand symmetry
+        const RaceWeaponTransformSet* set_ptr = mgr.transforms_for("dual_2h_crossed_back_x", race);
+        assert(set_ptr != nullptr);
+        const auto& set = *set_ptr;
         assert(std::fabs(set.drawn_main.tx + set.drawn_sub.tx) < 0.001f);
         assert(std::fabs(set.drawn_main.roll_deg + set.drawn_sub.roll_deg) < 0.01f);
         assert(set.drawn_main.scale > 0.5f && set.drawn_sub.scale > 0.5f);
-        // Sheathed crossed-back X: opposite diagonal roll & positive depth separation (no intersection)
         assert(std::fabs(set.sheathed_main.tx + set.sheathed_sub.tx) < 0.001f);
         assert(set.sheathed_main.roll_deg > 30.0f && set.sheathed_sub.roll_deg < -30.0f);
         assert(std::fabs(set.sheathed_main.roll_deg + set.sheathed_sub.roll_deg) < 0.01f);
         assert((set.sheathed_sub.back_depth - set.sheathed_main.back_depth) >= 0.025f);
     }
 
-    // 2. Exhaustive 66-Soul + unsocketed + unknown Soul exclusivity (local actor).
+    // 3. Exhaustive 66-Soul + unsocketed + unknown Soul exclusivity (local actor).
     uint32_t active_local_souls = 0;
     for (uint8_t j = 1; j <= 22; ++j) {
         ActorPresentationQuery base{};
@@ -1148,11 +1215,9 @@ static void weapon_presentation_checks() {
 
         for (uint8_t b = 1; b <= 3; ++b) {
             base.job = j; base.branch = b;
-            // Unknown / unsynchronized identity fails closed
             base.soul_known = false;
             assert(mgr.evaluate(base).state == WeaponPresentationState::Vanilla);
 
-            // Confirmed Soul identity
             base.soul_known = true;
             base.is_engaged = false;
             const auto sheathed = mgr.evaluate(base);
@@ -1161,7 +1226,8 @@ static void weapon_presentation_checks() {
             if (j == 1 && b == 2) {
                 assert(sheathed.state == WeaponPresentationState::SheathedCrossX);
                 assert(drawn.state == WeaponPresentationState::DrawnDual2H);
-                // Independently preserves each equipped Great Axe's actual model ID!
+                assert(std::strcmp(sheathed.soul_id, "war_dps") == 0);
+                assert(std::strcmp(sheathed.profile_id, "dual_2h_crossed_back_x") == 0);
                 assert(sheathed.main_model_id == 94 && sheathed.sub_model_id == 93);
                 assert(drawn.main_model_id == 94 && drawn.sub_model_id == 93);
                 ++active_local_souls;
@@ -1173,7 +1239,7 @@ static void weapon_presentation_checks() {
     }
     assert(active_local_souls == 1u);
 
-    // 3. Death, level sync < 10, non-distinct item, or non-Great-Axe fail closed immediately.
+    // 4. Death, level sync < 10, non-distinct item, or non-Great-Axe fail closed immediately.
     ActorPresentationQuery ber{};
     ber.actor_id = 1001; ber.is_local = true; ber.soul_known = true;
     ber.job = 1; ber.branch = 2; ber.effective_level = 75;
@@ -1192,10 +1258,9 @@ static void weapon_presentation_checks() {
     ber.distinct_items = true; ber.sub_skill = 3; // 1H Sword
     assert(mgr.evaluate(ber).state == WeaponPresentationState::Vanilla);
 
-    // 4. Remote player rendering strictly evaluates the observed character's peer Soul, NEVER local Soul.
+    // 5. Remote player rendering strictly evaluates the observed character's peer Soul, NEVER local Soul.
     ActorPresentationQuery remote{};
     remote.actor_id = 2002; remote.is_local = false; remote.soul_known = true;
-    // Even if caller passes local Berserker fields on remote query, remote path MUST ignore them!
     remote.job = 1; remote.branch = 2; remote.effective_level = 75;
     remote.race = PlayableRace::Mithra; remote.is_engaged = false;
     remote.main_item_id = 16704; remote.main_skill = 6; remote.main_model_id = 94;
@@ -1203,35 +1268,71 @@ static void weapon_presentation_checks() {
     remote.now_ms = 1000;
     assert(mgr.evaluate(remote).state == WeaponPresentationState::Vanilla);
 
-    // Register remote actor 2002 as WAR Commander (1,1) -> stays Vanilla.
     assert(mgr.peers().upsert(2002, 1, 1, 75, 1000));
     assert(mgr.evaluate(remote).state == WeaponPresentationState::Vanilla);
 
-    // Update remote actor 2002 to WAR Berserker (1,2) -> activates SheathedCrossX with its own models.
     assert(mgr.peers().upsert(2002, 1, 2, 75, 1000));
     const auto rem_dec = mgr.evaluate(remote);
     assert(rem_dec.state == WeaponPresentationState::SheathedCrossX);
     assert(rem_dec.main_model_id == 94 && rem_dec.sub_model_id == 93);
 
-    // Expired TTL (>120s) fails closed; revoke fails closed.
     remote.now_ms = 1000 + PeerSoulRegistry::kTtlMs + 1u;
     assert(mgr.evaluate(remote).state == WeaponPresentationState::Vanilla);
     remote.now_ms = 2000;
     mgr.peers().revoke(2002);
     assert(mgr.evaluate(remote).state == WeaponPresentationState::Vanilla);
 
-    // 5. Dev diagnostics overrides are disabled by default and support independent Main/Sub tuning when enabled.
-    WeaponAttachmentTransform custom = mgr.transforms_for(PlayableRace::ElvaanFemale).sheathed_sub;
+    // 6. Dev diagnostics & calibration overrides are disabled by default and reversible.
+    const RaceWeaponTransformSet* ef = mgr.transforms_for("dual_2h_crossed_back_x", PlayableRace::ElvaanFemale);
+    assert(ef != nullptr);
+    WeaponAttachmentTransform custom = ef->sheathed_sub;
     custom.back_depth = 0.210f;
     custom.tz = 0.210f;
-    assert(!mgr.set_race_transform_override(PlayableRace::ElvaanFemale, true, true, custom));
+    assert(!mgr.set_profile_race_transform_override("dual_2h_crossed_back_x", PlayableRace::ElvaanFemale, true, true, custom));
     mgr.set_diagnostics_enabled(true);
-    assert(mgr.set_race_transform_override(PlayableRace::ElvaanFemale, true, true, custom));
-    assert(std::fabs(mgr.transforms_for(PlayableRace::ElvaanFemale).sheathed_sub.back_depth - 0.210f) < 0.0001f);
-    assert(std::fabs(mgr.transforms_for(PlayableRace::ElvaanFemale).sheathed_main.back_depth - 0.145f) < 0.0001f);
-    mgr.reset_transforms();
-    assert(std::fabs(mgr.transforms_for(PlayableRace::ElvaanFemale).sheathed_sub.back_depth - 0.183f) < 0.0001f);
+    assert(mgr.set_profile_race_transform_override("dual_2h_crossed_back_x", PlayableRace::ElvaanFemale, true, true, custom));
+    ef = mgr.transforms_for("dual_2h_crossed_back_x", PlayableRace::ElvaanFemale);
+    assert(std::fabs(ef->sheathed_sub.back_depth - 0.210f) < 0.0001f);
+    assert(std::fabs(ef->sheathed_main.back_depth - 0.145f) < 0.0001f);
+    mgr.reset_calibration_overrides();
+    ef = mgr.transforms_for("dual_2h_crossed_back_x", PlayableRace::ElvaanFemale);
+    assert(std::fabs(ef->sheathed_sub.back_depth - 0.183f) < 0.0001f);
     mgr.set_diagnostics_enabled(false);
+
+    // 7. Zero-recompile extensibility proof: add a brand-new Soul binding (DRK job=8 branch=2,
+    // dual Scythe skill=7) dynamically via config without modifying any C++ hook logic!
+    {
+        auto ext_bindings = parsed.bindings;
+        SoulWeaponBinding new_soul{};
+        std::snprintf(new_soul.soul_id, sizeof(new_soul.soul_id), "drk_dps");
+        new_soul.job = 8;
+        new_soul.branch = 2;
+        new_soul.min_effective_level = 10;
+        new_soul.mode = SOULSPIRE_NATIVE_WEAPON_MODE_DUAL_2H;
+        new_soul.main_skill_mask = 1u << 7; // Scythe
+        new_soul.sub_skill_mask  = 1u << 7; // Scythe
+        new_soul.presentation_profile_index = mgr.find_profile_index("dual_2h_crossed_back_x");
+        assert(new_soul.presentation_profile_index >= 0);
+        ext_bindings.push_back(new_soul);
+
+        WeaponPresentationManager ext_mgr;
+        assert(ext_mgr.replace_config(ext_bindings, parsed.profiles, parsed.registry_hash, "ext_proof_hash"));
+
+        ActorPresentationQuery drk{};
+        drk.actor_id = 3003; drk.is_local = true; drk.soul_known = true;
+        drk.job = 8; drk.branch = 2; drk.effective_level = 75;
+        drk.race = PlayableRace::ElvaanMale; drk.is_engaged = false;
+        drk.main_item_id = 16770; drk.main_skill = 7; drk.main_model_id = 110;
+        drk.sub_item_id  = 16771; drk.sub_skill  = 7; drk.sub_model_id  = 111;
+        const auto dec = ext_mgr.evaluate(drk);
+        assert(dec.state == WeaponPresentationState::SheathedCrossX);
+        assert(std::strcmp(dec.soul_id, "drk_dps") == 0);
+        assert(dec.main_model_id == 110 && dec.sub_model_id == 111);
+
+        // Verify original WAR Berserker still works and DRK branch=1 stays Vanilla.
+        drk.branch = 1;
+        assert(ext_mgr.evaluate(drk).state == WeaponPresentationState::Vanilla);
+    }
 }
 
 int main() {
