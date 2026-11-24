@@ -462,6 +462,54 @@ public sealed class ManagedUpdateAndChannelTests
     }
 
     [Fact]
+    public async Task FetchManifestDetailedAsync_StableRejectedByUnverifiedDllDoesNotSilentlyFallback()
+    {
+        var unverifiedStableJson = """
+            {
+              "schemaVersion": 1,
+              "channel": "stable",
+              "manifestVersion": "2.2.0",
+              "registry": {
+                "version": "1.0.0",
+                "hash": "cf86aa59ff8d16c6",
+                "nativeDllSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "nativeDllCompiledHash": "cf86aa59ff8d16c6",
+                "nativeDllClientVerified": false
+              },
+              "files": [
+                {
+                  "category": "plugin",
+                  "sourcePath": "plugins/ashita4/soulspire_native.dll",
+                  "targetPath": "plugins/soulspire_native.dll",
+                  "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "size": 1024
+                }
+              ]
+            }
+            """;
+        var handler = new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(unverifiedStableJson, Encoding.UTF8, "application/json")
+        });
+        var service = new ManifestUpdateService(new HttpClient(handler));
+        var bundledStable = new LauncherManifest
+        {
+            Channel = "stable",
+            ManifestVersion = "2.1.0",
+            Repo = new ManifestRepo { RawBaseUrl = "https://updates.soulspirexi.test" },
+            Files = [new ManifestFileEntry { Category = "plugin", SourcePath = "a", TargetPath = "a", Sha256 = new string('a', 64) }]
+        };
+
+        var result = await service.FetchManifestDetailedAsync(bundledStable, localOverride: null, UpdateChannel.Stable);
+
+        Assert.Null(result.Manifest);
+        Assert.False(result.FromRemote);
+        Assert.False(result.UsedBundledFallback);
+        Assert.Contains("nativeDllClientVerified=false", result.ErrorMessage);
+        Assert.Contains("Testing channel", result.ErrorMessage);
+    }
+
+    [Fact]
     public async Task FetchManifestDetailedAsync_RejectsIncorrectChannelMetadataAndInvalidJson()
     {
         var bundledStable = new LauncherManifest

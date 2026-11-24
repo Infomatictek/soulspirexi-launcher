@@ -189,9 +189,11 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    public string UpdateBadgeText => PendingUpdatesCount == 0
-        ? "Client files up to date"
-        : $"{PendingUpdatesCount} file update(s) ready";
+    public string UpdateBadgeText => !string.IsNullOrWhiteSpace(_manifestUnavailableError)
+        ? "Update blocked — switch channel"
+        : (PendingUpdatesCount == 0
+            ? "Client files up to date"
+            : $"{PendingUpdatesCount} file update(s) ready");
 
     public ServerStatus ServerStatus
     {
@@ -626,7 +628,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public string ChannelDescriptionText => _settings.UpdateChannel switch
     {
-        UpdateChannel.Testing => "Testing channel delivers verified 27-hook weapon-template preview DLLs, addons, and DAT overlays without affecting Stable players.",
+        UpdateChannel.Testing => "Testing channel delivers verified 31-hook canonical test-server DLLs (Commands menu + registry weapon engine), addons, and DAT overlays without affecting Stable players.",
         UpdateChannel.TestingRegistry24Hook => "Candidate B (Control): Current 24-hook menu2fon sprite Search renderer (2.1.4-testing.registry24). Switch back to Stable anytime.",
         UpdateChannel.TestingSearchLegacyText => "Candidate A (Historical 4f0fdb3): 24-hook 66-Soul registry with legacy single-call 0.75x native_text Search labels (zero sprite mutation).",
         UpdateChannel.TestingSearchAlignedText => "Candidate C (Repair): 24-hook 66-Soul registry with fixed-column aligned native_text Search labels (readable first, zero sprite mutation).",
@@ -822,12 +824,14 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 _manifestUnavailableError = result.ErrorMessage ?? $"Could not load remote manifest for {_settings.UpdateChannel}.";
                 PendingUpdatesCount = 0;
                 OnPropertyChanged(nameof(ManifestVersionText));
+                OnPropertyChanged(nameof(UpdateBadgeText));
                 StatusMessage = _manifestUnavailableError;
                 Log(StatusMessage);
                 return;
             }
 
             _manifestUnavailableError = null;
+            OnPropertyChanged(nameof(UpdateBadgeText));
             _manifest = result.Manifest;
             ApplyManifest(result.Manifest);
 

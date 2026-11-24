@@ -145,6 +145,7 @@ public sealed class ManifestUpdateService
         string? lastUrl = null;
         int? lastStatusCode = null;
         string? lastError = null;
+        var rejectedByValidation = false;
 
         if (!string.IsNullOrWhiteSpace(rawBase))
         {
@@ -196,6 +197,7 @@ public sealed class ManifestUpdateService
                     }
 
                     lastError = validationError;
+                    rejectedByValidation = true;
                 }
             }
 
@@ -227,6 +229,7 @@ public sealed class ManifestUpdateService
                 }
 
                 lastError = validationError;
+                rejectedByValidation = true;
             }
         }
         else
@@ -234,9 +237,9 @@ public sealed class ManifestUpdateService
             lastError = "No remote repository RawBaseUrl configured.";
         }
 
-        // Only Stable may fall back to the bundled Stable manifest.json when offline.
-        // Never display or apply the bundled Stable manifest as though it belongs to Testing or Registry Testing.
-        if (channel == UpdateChannel.Stable)
+        // Only Stable may fall back to the bundled Stable manifest.json when offline (network/HTTP failure).
+        // Never silently fall back when a remote manifest was explicitly rejected by channel/verification policy!
+        if (channel == UpdateChannel.Stable && !rejectedByValidation)
         {
             ApplyLocalOverride(fallback, localOverride);
             return new ManifestFetchResult
@@ -251,12 +254,28 @@ public sealed class ManifestUpdateService
             };
         }
 
+        if (channel == UpdateChannel.Stable && rejectedByValidation)
+        {
+            return new ManifestFetchResult
+            {
+                Manifest = null,
+                FromRemote = false,
+                UsedBundledFallback = false,
+                RequestedChannel = channel,
+                RequestedUrl = lastUrl,
+                HttpStatusCode = lastStatusCode,
+                ErrorMessage = string.IsNullOrWhiteSpace(lastError)
+                    ? "Stable channel update was rejected by verification policy. Switch to the Testing channel in Settings to playtest the current build."
+                    : lastError
+            };
+        }
+
         var channelLabel = channel switch
         {
             UpdateChannel.TestingRegistry24Hook => "Testing B — Registry 24-Hook (Current menu2fon)",
             UpdateChannel.TestingSearchLegacyText => "Testing A — Search Legacy native_text (4f0fdb3)",
             UpdateChannel.TestingSearchAlignedText => "Testing C — Search Aligned native_text (Repair)",
-            _ => "Testing (27-Hook)"
+            _ => "Testing (31-Hook)"
         };
         var statusDetail = lastStatusCode.HasValue ? $"HTTP {lastStatusCode.Value}: " : string.Empty;
         var reason = string.IsNullOrWhiteSpace(lastError) ? "Remote manifest could not be retrieved." : lastError;
@@ -389,7 +408,7 @@ public sealed class ManifestUpdateService
             !reg.NativeDllClientVerified)
         {
             var dllName = dllEntry?.TargetPath ?? "soulspire_native.dll";
-            error = $"Refusing Stable manifest: {dllName} is not marked client-verified (nativeDllClientVerified=false).";
+            error = $"Refusing Stable manifest: {dllName} is not marked client-verified (nativeDllClientVerified=false). Switch to the Testing channel in Settings to receive this build for playtesting.";
             return false;
         }
 

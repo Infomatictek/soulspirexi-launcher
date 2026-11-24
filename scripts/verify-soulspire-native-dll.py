@@ -35,6 +35,11 @@ REQUIRED_CANONICAL_EXPORTS = (
     "SoulspireNativeGetInterfaceInfo",
 )
 
+REQUIRED_COMMANDS_MENU_EXPORTS = (
+    "SoulspireNativeGetMainMenuStatus",
+    "SoulspireNativeConsumeCoreOpenRequest",
+)
+
 REQUIRED_COMPAT_EXPORTS = (
     "CrystalJobsInitialize",
     "CrystalJobsShutdown",
@@ -70,6 +75,11 @@ HOOK_24_SIG_PREFIX = bytes([0x68, 0x8B, 0x00, 0x00, 0x00, 0xE8, 0x60, 0x75, 0xFF
 HOOK_25_SIG_PREFIX = bytes([0x85, 0x46, 0xF4, 0x74, 0x5F, 0x8B, 0x42, 0x0C])              # RVA 0x21DF85
 HOOK_26_SIG_PREFIX = bytes([0x68, 0x99, 0x00, 0x00, 0x00, 0xE8, 0xE3, 0x74, 0xFF, 0xFF])  # RVA 0x133DD3
 HOOK_27_SIG_PREFIX = bytes([0xE8, 0x48, 0xF7, 0xFF, 0xFF, 0x84, 0xC0, 0x75, 0x24, 0xFE])  # RVA 0x133E33
+# Binary-verified FFXiMain.dll signature prefixes for native Commands menu hooks (#28-#31)
+HOOK_28_SIG_PREFIX = bytes([0xE8, 0x43, 0xA3, 0xFB, 0xFF, 0x83, 0x7E, 0x10, 0x0E, 0x74])  # RVA 0x15F9B8
+HOOK_29_SIG_PREFIX = bytes([0xE8, 0x6B, 0xA2, 0xFB, 0xFF, 0x8B, 0x4E, 0x0C, 0x85, 0xC9])  # RVA 0x15FA90
+HOOK_30_SIG_PREFIX = bytes([0xE8, 0x0F, 0x2F, 0x00, 0x00, 0x8B, 0xF8, 0x66, 0x85, 0xFF])  # RVA 0x11979C
+HOOK_31_SIG_PREFIX = bytes([0x0F, 0xBF, 0x44, 0x24, 0x04, 0x83, 0xC0, 0xFD, 0x56, 0x83])  # RVA 0x141800
 
 
 def _rva_to_offset(rva: int, sections: list[tuple[int, int, int, int]]) -> int:
@@ -139,6 +149,7 @@ def verify_dll(
     dll_path: Path,
     *,
     require_27_hooks: bool = True,
+    require_31_hooks: bool = True,
     build_info_path: Path | None = None,
     expected_commit: str | None = None,
     manifest_path: Path | None = None,
@@ -154,7 +165,10 @@ def verify_dll(
     sha256 = hashlib.sha256(data).hexdigest().lower()
     exports = parse_pe32_dll_exports(data)
 
-    missing_exports = [name for name in REQUIRED_EXPORTS if name not in exports]
+    required_exports = list(REQUIRED_EXPORTS)
+    if require_31_hooks:
+        required_exports.extend(REQUIRED_COMMANDS_MENU_EXPORTS)
+    missing_exports = [name for name in required_exports if name not in exports]
     if missing_exports:
         raise ValueError(f"Missing required PE exports ({len(missing_exports)}): {', '.join(missing_exports)}")
 
@@ -172,6 +186,17 @@ def verify_dll(
             "DLL does not contain all 27-hook signatures "
             f"(hook_24_0x133D56={has_hook_24}, hook_25_0x21DF85={has_hook_25}, "
             f"hook_26_0x133DD3={has_hook_26}, hook_27_0x133E33={has_hook_27})"
+        )
+
+    has_hook_28 = HOOK_28_SIG_PREFIX in data
+    has_hook_29 = HOOK_29_SIG_PREFIX in data
+    has_hook_30 = HOOK_30_SIG_PREFIX in data
+    has_hook_31 = HOOK_31_SIG_PREFIX in data
+    if require_31_hooks and not (has_hook_28 and has_hook_29 and has_hook_30 and has_hook_31):
+        raise ValueError(
+            "DLL does not contain all 31-hook Commands menu signatures "
+            f"(hook_28_0x15F9B8={has_hook_28}, hook_29_0x15FA90={has_hook_29}, "
+            f"hook_30_0x11979C={has_hook_30}, hook_31_0x141800={has_hook_31})"
         )
 
     commit_sha: str | None = None
@@ -215,6 +240,7 @@ def verify_dll(
         "sha256": sha256,
         "export_count": len(exports),
         "has_27_hook_sigs": has_hook_24 and has_hook_25 and has_hook_26 and has_hook_27,
+        "has_31_hook_sigs": has_hook_28 and has_hook_29 and has_hook_30 and has_hook_31,
         "commit_sha": commit_sha,
     }
 

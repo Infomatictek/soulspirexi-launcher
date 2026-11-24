@@ -85,6 +85,7 @@ def build_testing_manifest(
             dll_verifier.verify_dll(
                 crystaljobs_dll,
                 require_27_hooks=(crystaljobs_hooks >= 27),
+                require_31_hooks=(crystaljobs_hooks >= 31),
                 build_info_path=build_info,
                 manifest_path=None,
             )
