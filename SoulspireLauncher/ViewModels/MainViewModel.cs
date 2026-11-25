@@ -582,6 +582,46 @@ public sealed class MainViewModel : INotifyPropertyChanged
         set { if (_settings.AutoUpdateLauncher != value) { _settings.AutoUpdateLauncher = value; OnPropertyChanged(); } }
     }
 
+    public bool EnableAutomaticTestingQolSettings
+    {
+        get => _settings.EnableAutomaticTestingQolSettings;
+        set
+        {
+            if (_settings.EnableAutomaticTestingQolSettings != value)
+            {
+                _settings.EnableAutomaticTestingQolSettings = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(TestingQolStatusText));
+                _settingsService.Save(_settings, PlainPassword);
+                Log($"Automatic Testing Quality of Life Settings {(value ? "enabled" : "disabled")}.");
+            }
+        }
+    }
+
+    public string TestingQolStatusText
+    {
+        get
+        {
+            var resolved = TestingEnvironmentQolPolicy.ResolveInputSettings(
+                _settings,
+                EffectiveHost,
+                _manifest.Channel,
+                _manifest.ServerName);
+
+            if (resolved.TestingQolApplied)
+            {
+                return $"Active ({resolved.Reason}): Allow Binds During Input & Allow Windows Key will be applied before launch.";
+            }
+
+            if (!_settings.EnableAutomaticTestingQolSettings)
+            {
+                return "Disabled: original Ashita input preferences will be used.";
+            }
+
+            return "Standby (Stable production server): original Ashita input preferences will be preserved.";
+        }
+    }
+
     public string LauncherVersionText => $"v{LauncherSelfUpdateService.GetCurrentVersion()}";
 
     public IReadOnlyList<UpdateChannel> UpdateChannelOptions { get; } =
@@ -605,6 +645,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(IsTestingChannel));
                 OnPropertyChanged(nameof(ChannelBadgeText));
                 OnPropertyChanged(nameof(ChannelDescriptionText));
+                OnPropertyChanged(nameof(TestingQolStatusText));
                 _settingsService.Save(_settings, PlainPassword);
                 Log($"Switched update channel to {value}. Checking manifest...");
                 _ = CheckUpdatesOnlyAsync();
@@ -1194,13 +1235,31 @@ public sealed class MainViewModel : INotifyPropertyChanged
             }
 
             StatusMessage = "Writing Ashita v4 & Pivot configurations...";
+            if (_configGenerator.CapturePlayerInputPreferencesIfUnmanaged(_settings.AshitaPath, _settings))
+            {
+                _settingsService.Save(_settings, PlainPassword);
+            }
+
+            var effectiveInput = TestingEnvironmentQolPolicy.ResolveInputSettings(
+                _settings,
+                EffectiveHost,
+                _manifest.Channel,
+                _manifest.ServerName);
+
             _configGenerator.WriteAllConfigs(
                 _settings.AshitaPath,
                 _settings,
                 EffectiveHost,
                 EffectiveUseHairpin,
                 PlainPassword,
-                xiloaderPath);
+                xiloaderPath,
+                manifestChannel: _manifest.Channel,
+                serverName: _manifest.ServerName);
+
+            if (effectiveInput.TestingQolApplied)
+            {
+                Log($"Applied Automatic Testing QoL settings ({effectiveInput.Reason}): Allow Binds During Input + Allow Windows Key enabled.");
+            }
 
             RefreshDiagnostics();
 
@@ -1531,6 +1590,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(EnableXInput));
         OnPropertyChanged(nameof(GamepadSummaryText));
         OnPropertyChanged(nameof(ImportedSettingsSourceText));
+        OnPropertyChanged(nameof(EnableAutomaticTestingQolSettings));
+        OnPropertyChanged(nameof(TestingQolStatusText));
     }
 
     private void NotifyEffectiveServerChanged()
@@ -1539,6 +1600,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(EffectiveUseHairpin));
         OnPropertyChanged(nameof(EffectiveLobbyPort));
         OnPropertyChanged(nameof(EffectiveSearchPort));
+        OnPropertyChanged(nameof(TestingQolStatusText));
     }
 
     private void Log(string message)
