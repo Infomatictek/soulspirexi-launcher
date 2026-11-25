@@ -119,9 +119,10 @@ public sealed class LauncherAutoSelfUpdaterTests
             Assert.Equal("testing-core-ui", state.Channel);
             Assert.Equal("2.2.0-testing.core-ui.1", state.CurrentVersion);
 
-            // Existing portable Ashita path and user preferences MUST be preserved
+            // Existing portable Ashita path and user preferences MUST be preserved;
+            // legacy TestingCoreUi channel migrates cleanly to canonical Testing (DEC-025).
             var reloaded = new SettingsService(installRoot, appDataDir).Load();
-            Assert.Equal(UpdateChannel.TestingCoreUi, reloaded.UpdateChannel);
+            Assert.Equal(UpdateChannel.Testing, reloaded.UpdateChannel);
             Assert.Equal(ServerTargetMode.Staging, reloaded.ServerTarget);
             Assert.True(reloaded.UseCustomAshitaPath);
             Assert.Equal(portableAshita, reloaded.AshitaPath);
@@ -691,7 +692,8 @@ public sealed class LauncherAutoSelfUpdaterTests
             Assert.True(postRecovery.ClearedPendingVerification);
 
             var after = new SettingsService(installRoot, appDataDir).Load();
-            Assert.Equal(UpdateChannel.TestingCoreUi, after.UpdateChannel);
+            // Legacy TestingCoreUi migrates to canonical Testing (DEC-025) while preserving all other settings
+            Assert.Equal(UpdateChannel.Testing, after.UpdateChannel);
             Assert.Equal(ServerTargetMode.Staging, after.ServerTarget);
             Assert.Equal("192.168.86.117", after.StagingServerHost);
             Assert.Equal(51241, after.StagingProfileIrcPort);
