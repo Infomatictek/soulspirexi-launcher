@@ -1,19 +1,19 @@
 {
   "dllPath": "plugins/ashita4/soulspire_native.dll",
-  "dllSha256": "c2fd15cb0a634ce12bde7d2d5b215d7f0638adaba513683fce157d26faab2226",
+  "dllSha256": "86b9115976d2bc96b2a5c931df4f1043090a10f97e20eb7f7fef4a359907cfe1",
   "compiledRegistryHash": "cf86aa59ff8d16c6",
   "runtimeIdentityLoader": true,
   "identitySchemaVersion": 1,
-  "nativeHooks": 31,
-  "sourceCommit": "de65cd0fe5cb8e3ee0039ad07baeecfc207fea3f",
+  "nativeHooks": 32,
+  "sourceCommit": "febe72d849d06c1d0411cbc7d3da2fe4a1ce1c4f",
   "buildTarget": "Win32-x86-MSVC",
-  "ciRunId": "45484416271",
-  "ciRunUrl": "https://github.com/Infomatictek/soulspirexi-launcher/actions/runs/45484416271",
+  "ciRunId": "45538768125",
+  "ciRunUrl": "https://github.com/Infomatictek/soulspirexi-launcher/actions/runs/45538768125",
   "ciVerified": true,
   "clientVerified": false,
-  "notes": "CI-built 31-hook soulspire_native.dll (native Commands menu entry) synced from GitHub Actions windows-latest MSVC x86 build. Client verification requires manual Windows Ashita v4 playtesting.",
-  "dllSize": 224256,
-  "expectedHooks": 31,
+  "notes": "CI-built 32-hook soulspire_native.dll (runtime PC Sub->Main FTABLE model resolver + native Commands menu entry) synced from GitHub Actions windows-latest MSVC x86 build. Client verification requires manual Windows Ashita v4 playtesting.",
+  "dllSize": 226304,
+  "expectedHooks": 32,
   "abiVersion": 2,
-  "branch": "fix/ws3-weap-002-hook27-allow-resume"
+  "branch": "feat/ws3-weap-002-render-xref-probe"
 }
