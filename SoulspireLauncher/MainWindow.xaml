@@ -444,6 +444,13 @@
                                                 </ComboBox>
                                                 <TextBlock Text="{Binding ChannelDescriptionText}" FontSize="11.5" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" Margin="0,0,0,4" />
                                                 <TextBlock Text="{Binding ManifestVersionText}" FontSize="11.5" Foreground="{StaticResource CyanAccent}" TextTrimming="CharacterEllipsis" />
+                                                <CheckBox Content="Automatic Testing Quality of Life Settings"
+                                                          IsChecked="{Binding EnableAutomaticTestingQolSettings}"
+                                                          Margin="0,10,0,2" />
+                                                <TextBlock Text="Automatically enables Windows key access and input bindings when using testing environments."
+                                                           FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" Margin="22,0,0,4" />
+                                                <TextBlock Text="{Binding TestingQolStatusText}"
+                                                           FontSize="11" Foreground="{StaticResource CyanAccent}" TextWrapping="Wrap" Margin="22,0,0,0" />
                                             </StackPanel>
                                         </Border>
                                     </StackPanel>

@@ -151,6 +151,7 @@ public sealed class ManifestUpdateService
         string? lastUrl = null;
         int? lastStatusCode = null;
         string? lastError = null;
+        var rejectedByValidation = false;
 
         if (!string.IsNullOrWhiteSpace(rawBase))
         {
@@ -202,6 +203,7 @@ public sealed class ManifestUpdateService
                     }
 
                     lastError = validationError;
+                    rejectedByValidation = true;
                 }
             }
 
@@ -233,6 +235,7 @@ public sealed class ManifestUpdateService
                 }
 
                 lastError = validationError;
+                rejectedByValidation = true;
             }
         }
         else
@@ -240,9 +243,9 @@ public sealed class ManifestUpdateService
             lastError = "No remote repository RawBaseUrl configured.";
         }
 
-        // Only Stable may fall back to the bundled Stable manifest.json when offline.
-        // Never display or apply the bundled Stable manifest as though it belongs to Testing or Registry Testing.
-        if (channel == UpdateChannel.Stable)
+        // Only Stable may fall back to the bundled Stable manifest.json when offline (network/HTTP failure).
+        // Never silently fall back when a remote manifest was explicitly rejected by channel/verification policy (DEC-019).
+        if (channel == UpdateChannel.Stable && !rejectedByValidation)
         {
             ApplyLocalOverride(fallback, localOverride);
             return new ManifestFetchResult
@@ -254,6 +257,22 @@ public sealed class ManifestUpdateService
                 RequestedUrl = lastUrl,
                 HttpStatusCode = lastStatusCode,
                 ErrorMessage = lastError
+            };
+        }
+
+        if (channel == UpdateChannel.Stable && rejectedByValidation)
+        {
+            return new ManifestFetchResult
+            {
+                Manifest = null,
+                FromRemote = false,
+                UsedBundledFallback = false,
+                RequestedChannel = channel,
+                RequestedUrl = lastUrl,
+                HttpStatusCode = lastStatusCode,
+                ErrorMessage = string.IsNullOrWhiteSpace(lastError)
+                    ? "Stable channel update was rejected by verification policy. Switch to the Testing channel in Settings to playtest the current build."
+                    : lastError
             };
         }
 
@@ -589,7 +608,9 @@ public sealed class ManifestUpdateService
             normalized.Equals("soulspire-server.json", StringComparison.Ordinal) ||
             normalized.Equals("overlords-server.json", StringComparison.Ordinal) ||
             normalized.StartsWith("config/addons/", StringComparison.Ordinal) ||
-            normalized.StartsWith("config/boot/", StringComparison.Ordinal))
+            normalized.StartsWith("config/boot/", StringComparison.Ordinal) ||
+            normalized.Equals("scripts/soulspirexi.txt", StringComparison.Ordinal) ||
+            normalized.Equals("scripts/default.txt", StringComparison.Ordinal))
         {
             return true;
         }

@@ -61,7 +61,9 @@ public sealed class SettingsImportService
             return false;
         }
 
-        var sections = ParseIni(File.ReadAllText(iniPath));
+        var rawContent = File.ReadAllText(iniPath);
+        var isTestingQolManagedIni = rawContent.Contains(AshitaConfigGenerator.TestingQolIniMarker, StringComparison.OrdinalIgnoreCase);
+        var sections = ParseIni(rawContent);
         var changed = false;
 
         if (sections.TryGetValue("ashita.input", out var inputSec))
@@ -76,6 +78,21 @@ public sealed class SettingsImportService
             {
                 settings.GamepadDisableEnumeration = disableEnum;
                 changed = true;
+            }
+
+            if (!gamepadOnly && !isTestingQolManagedIni)
+            {
+                if (TryReadBool(inputSec, "keyboard.blockbindsduringinput", out var blockBinds))
+                {
+                    settings.KeyboardBlockBindsDuringInput = blockBinds;
+                    changed = true;
+                }
+
+                if (TryReadBool(inputSec, "keyboard.windowskeyenabled", out var winKeyEnabled))
+                {
+                    settings.KeyboardWindowsKeyEnabled = winKeyEnabled;
+                    changed = true;
+                }
             }
         }
 

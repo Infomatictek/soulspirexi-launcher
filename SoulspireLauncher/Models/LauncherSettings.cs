@@ -188,9 +188,14 @@ public sealed class LauncherSettings
     public bool AutoCloseOnLaunch { get; set; }
     public bool AutoCheckUpdatesOnStartup { get; set; } = true;
     public bool AutoUpdateLauncher { get; set; } = true;
+    public bool EnableAutomaticTestingQolSettings { get; set; } = true;
 
     public bool HasImportedSystemSettings { get; set; }
     public string ImportedSettingsSource { get; set; } = string.Empty;
+
+    // Preserved original Ashita v4 [ashita.input] keyboard preferences (restored on Stable or when Testing QoL is disabled).
+    public bool KeyboardBlockBindsDuringInput { get; set; } = true;
+    public bool KeyboardWindowsKeyEnabled { get; set; }
 
     public bool GamepadAllowBackground { get; set; } = true;
     public bool GamepadDisableEnumeration { get; set; }
