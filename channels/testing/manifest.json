@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.2.3-testing.1",
+  "manifestVersion": "2.2.3-testing.2",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
     "version": "main (Stage 2A Perf + 32-Hook Dual-Host Native + Opt-In Modern VanaCore)",
@@ -9,7 +9,7 @@
     "commit": "989ca6e",
     "dockerImage": "soulspirexi/server:main-ws3-weap-002-989ca6e",
     "crystalJobsHooks": 32,
-    "notes": "Unified canonical Testing payload (2.2.3-testing.1): Stage 2A Perf, Testing QoL, Core UI & Soulforge, ECDSA self-updater, dual-host 32-hook Soulspire Native (Ashita + VanaCore), v19 weapon render probe, and opt-in experimental Modern (VanaCore Baseline & Soulspire Compatibility) client engine."
+    "notes": "Unified canonical Testing payload (2.2.3-testing.2): Stage 2A Perf, Testing QoL, Core UI & Soulforge, ECDSA self-updater, dual-host 32-hook Soulspire Native (Ashita + VanaCore), v19 weapon render probe, and opt-in experimental Modern (VanaCore Baseline & Soulspire Compatibility) client engine."
   },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
@@ -6206,7 +6206,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/weapon_render_probe.lua",
       "targetPath": "soulspire_core/core/weapon_render_probe.lua",
-      "sha256": "b686c54b467a5bda543ff324c470f2c215ede9bd77152805cb46a806a997e6bd",
+      "sha256": "1fdaf09a922452ce0084b81d2b5e26c200428b399259b0bddeadc65ccf428afd",
       "size": 61092
     },
     {
