@@ -204,6 +204,16 @@ inline bool valid_playable_race(PlayableRace race) noexcept {
     return id >= 1u && id <= 8u;
 }
 
+// Exact vanilla FFXiMain.dll (0xD3CB2..0xD3CF1) Sub-slot shield model ranges.
+// Shields must ALWAYS resolve from the Sub-slot FTABLE namespace (slot 7).
+inline bool is_vanilla_shield_model_id(uint16_t model_id) noexcept {
+    return (model_id <= 0x003Fu) ||
+           (model_id >= 0x0075u && model_id <= 0x008Fu) ||
+           (model_id >= 0x01D7u && model_id <= 0x01FFu) ||
+           (model_id >= 0x0280u && model_id <= 0x02BFu) ||
+           (model_id >= 0x049Cu && model_id <= 0x04ABu);
+}
+
 class WeaponPresentationManager {
 public:
     static constexpr size_t kMaxBindings = 256;
@@ -317,6 +327,68 @@ public:
 
     PeerSoulRegistry& peers() noexcept { return peers_; }
     const PeerSoulRegistry& peers() const noexcept { return peers_; }
+
+    // Registry-driven runtime authorization for resolving an actor's Sub-slot
+    // weapon model (slot 7) from the original Main-slot FTABLE namespace (slot 6).
+    //
+    // Guarantees:
+    //   * Fails closed when config is unloaded or Soul identity is unknown/expired.
+    //   * Never remaps empty models (0) or vanilla shield model ranges.
+    //   * Local actor requires an active Dual2HAttachments binding AND matching
+    //     equipped Main/Sub weapon skills (preserving vanilla 1H dual-wield even
+    //     when a Dual2H Soul equips 1H weapons).
+    //   * Remote actor uses strictly the remote peer's own OXSI Soul identity.
+    bool authorizes_sub_main_namespace(uint32_t actor_id, bool is_local, bool soul_known,
+                                       uint8_t job, uint8_t branch, uint8_t effective_level,
+                                       uint16_t sub_model_id, uint32_t now_ms,
+                                       bool has_equipped_skills, uint16_t main_skill,
+                                       uint16_t main_item_id, uint16_t sub_skill,
+                                       uint16_t sub_item_id) const noexcept {
+        if (!loaded_ || sub_model_id == 0 || is_vanilla_shield_model_id(sub_model_id)) {
+            return false;
+        }
+        uint8_t resolved_job = 0;
+        uint8_t resolved_branch = 0;
+        uint8_t resolved_level = 0;
+        if (is_local) {
+            if (!soul_known) return false;
+            resolved_job = job;
+            resolved_branch = branch;
+            resolved_level = effective_level;
+        } else {
+            PeerSoulRecord peer{};
+            if (!peers_.lookup(actor_id, now_ms, peer)) {
+                return false;
+            }
+            resolved_job = peer.job;
+            resolved_branch = peer.branch;
+            resolved_level = peer.effective_level;
+        }
+
+        const uint32_t main_bit = (main_skill > 0 && main_skill < 32u) ? (1u << main_skill) : 0u;
+        const uint32_t sub_bit  = (sub_skill > 0 && sub_skill < 32u) ? (1u << sub_skill) : 0u;
+        for (const auto& b : bindings_) {
+            if (b.job != resolved_job || b.branch != resolved_branch) continue;
+            if (resolved_level < b.min_effective_level) continue;
+            if (b.presentation_profile_index < 0 ||
+                static_cast<size_t>(b.presentation_profile_index) >= profiles_.size()) {
+                continue;
+            }
+            if (profiles_[static_cast<size_t>(b.presentation_profile_index)].kind !=
+                PresentationProfileKind::Dual2HAttachments) {
+                continue;
+            }
+            if (has_equipped_skills) {
+                if ((b.main_skill_mask & main_bit) == 0 || (b.sub_skill_mask & sub_bit) == 0) {
+                    continue;
+                }
+                if (b.main_item_id != 0 && b.main_item_id != main_item_id) continue;
+                if (b.sub_item_id != 0 && b.sub_item_id != sub_item_id) continue;
+            }
+            return true;
+        }
+        return false;
+    }
 
     ActorPresentationDecision evaluate(const ActorPresentationQuery& q) const noexcept {
         ActorPresentationDecision out{};

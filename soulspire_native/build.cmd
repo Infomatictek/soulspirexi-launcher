@@ -55,6 +55,8 @@ if not "%VCVARS%"=="" (
         echo     SoulspireNativeReplaceWeaponRules=SoulspireNativeReplaceWeaponRules@8
         echo     SoulspireNativeClearWeaponRules=SoulspireNativeClearWeaponRules@0
         echo     SoulspireNativeGetWeaponStatus=SoulspireNativeGetWeaponStatus@8
+        echo     SoulspireNativeSetLocalEquippedWeapons=SoulspireNativeSetLocalEquippedWeapons@16
+        echo     SoulspireNativeUpsertPeerSoul=SoulspireNativeUpsertPeerSoul@16
         echo     SoulspireNativeGetHookDiagnostics=SoulspireNativeGetHookDiagnostics@8
         echo     SoulspireNativeGetIdentityDiagnostics=SoulspireNativeGetIdentityDiagnostics@8
         echo     SoulspireNativeGetInterfaceInfo=SoulspireNativeGetInterfaceInfo@8

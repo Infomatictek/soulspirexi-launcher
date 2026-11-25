@@ -5,7 +5,7 @@ local NativeBridge = {}
 NativeBridge.EXPECTED_ABI_VERSION = 2
 
 local ok_ffi, ffi = pcall(require, 'ffi')
-local iface_info_t, status_t, weapon_status_t, hook_diag_t, ident_diag_t, get_info_fn_t
+local iface_info_t, status_t, weapon_status_t, hook_diag_t, ident_diag_t, get_info_fn_t, set_u32x4_fn_t
 local cache = { module = nil, addr = nil, fn = nil }
 
 NativeBridge.ABI_SIZES = {
@@ -71,6 +71,8 @@ if ok_ffi and ffi then
 
     local ok2, t2 = pcall(ffi.typeof, 'uint32_t (__stdcall *)(void*, uint32_t)')
     if ok2 then get_info_fn_t = t2 end
+    local ok3, t3 = pcall(ffi.typeof, 'uint32_t (__stdcall *)(uint32_t, uint32_t, uint32_t, uint32_t)')
+    if ok3 then set_u32x4_fn_t = t3 end
 end
 
 function NativeBridge.verify_abi_sizes()
@@ -99,6 +101,34 @@ local function read_cstr(arr, cap)
         out[#out + 1] = string.char(b)
     end
     return table.concat(out)
+end
+
+local function call_u32x4_export(export_name, a, b, c, d)
+    if not (ok_ffi and ffi and set_u32x4_fn_t) then return false end
+    local ok, res = pcall(function()
+        local handle = ffi.C.GetModuleHandleA('soulspire_native.dll')
+        if handle == nil then return false end
+        local addr = ffi.C.GetProcAddress(handle, export_name)
+        if addr == nil then return false end
+        local fn = ffi.cast(set_u32x4_fn_t, addr)
+        return tonumber(fn(tonumber(a) or 0, tonumber(b) or 0, tonumber(c) or 0, tonumber(d) or 0)) == 0
+    end)
+    return ok and res == true
+end
+
+function NativeBridge.set_local_equipped_weapons(main_item_id, main_skill, sub_item_id, sub_skill)
+    return call_u32x4_export('SoulspireNativeSetLocalEquippedWeapons', main_item_id, main_skill, sub_item_id, sub_skill)
+end
+
+function NativeBridge.upsert_peer_soul(actor_id, job, branch, effective_level)
+    return call_u32x4_export('SoulspireNativeUpsertPeerSoul', actor_id, job, branch, effective_level)
+end
+
+function NativeBridge.has_weapon_model_resolve_capability()
+    local info = NativeBridge.query()
+    if not info or type(info.capabilities) ~= 'number' then return false end
+    local bit = require('bit')
+    return bit.band(info.capabilities, bit.lshift(1, 17)) ~= 0
 end
 
 function NativeBridge.query()

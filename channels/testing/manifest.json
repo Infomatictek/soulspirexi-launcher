@@ -6017,8 +6017,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/native_bridge.lua",
       "targetPath": "soulspire_core/core/native_bridge.lua",
-      "sha256": "e84bc6a709c6a8342ad7f928af03e7f1a3a7a6f398c1ad0b0d569bbdf351caff",
-      "size": 9788
+      "sha256": "df36aec4697d4955572d62b1e79197e26847f5c856d66a2b6c5378a0f614026a",
+      "size": 11221
     },
     {
       "category": "addon",
@@ -6073,8 +6073,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/soulspire_core.lua",
       "targetPath": "soulspire_core/soulspire_core.lua",
-      "sha256": "eb65193c1dee775943577fb384c03c0a55c68445151d8c08d96528eaca1b00f5",
-      "size": 17444
+      "sha256": "cb2888ef7353fa3bf020b79688c6dcaf8c6b55a5ee086d5dbacc5737879c28a5",
+      "size": 19979
     },
     {
       "category": "addon",
@@ -6108,8 +6108,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/tests/weapon_render_probe_test.lua",
       "targetPath": "soulspire_core/tests/weapon_render_probe_test.lua",
-      "sha256": "87404fcdadefbea24a6107b36a35da755a7b06081b8e9873ecac933a837d4c97",
-      "size": 5434
+      "sha256": "c13c3b1395407abc916d683c268ce3eacce746e6f88bacc9be18bb0aa17e9093",
+      "size": 7694
     },
     {
       "category": "addon",

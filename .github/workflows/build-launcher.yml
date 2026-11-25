@@ -195,7 +195,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Build and self-test Soulspire Native (Win32 / x86, 31 hooks)
+      - name: Build and self-test Soulspire Native (Win32 / x86, 32 hooks)
         shell: pwsh
         env:
           SOULSPIRE_NATIVE_KEEP_SELFTEST: "1"
@@ -237,7 +237,7 @@ jobs:
             dllPath               = "plugins/ashita4/soulspire_native.dll"
             dllSha256             = $dllHash
             dllSize               = $dllBytes.Length
-            expectedHooks         = 31
+            expectedHooks         = 32
             abiVersion            = 2
             compiledRegistryHash  = $regHash
             runtimeIdentityLoader = $true
@@ -260,7 +260,7 @@ jobs:
             "branch=${{ github.ref_name }}"
             "run_id=${{ github.run_id }}"
             "registry_hash=$regHash"
-            "expected_hooks=31"
+            "expected_hooks=32"
             "abi_version=2"
             "soulspire_native_dll_size=$($dllBytes.Length)"
             "soulspire_native_dll_sha256=$dllHash"
@@ -338,7 +338,7 @@ jobs:
             --server-commit "${{ github.sha }}" `
             --server-image "soulspirexi/server:main" `
             --repo-branch "${{ github.ref_name }}" `
-            --native-hooks 31
+            --native-hooks 32
 
           python scripts/verify-launcher-manifest.py --manifest channels/testing/manifest.json
 
@@ -397,7 +397,7 @@ jobs:
               "dllSha256": prov["dllSha256"],
               "dllSize": prov["dllSize"],
               "compiledRegistryHash": prov["compiledRegistryHash"],
-              "expectedHooks": 31,
+              "expectedHooks": 32,
               "abiVersion": 2,
               "runtimeIdentityLoader": True,
               "identitySchemaVersion": 1,
