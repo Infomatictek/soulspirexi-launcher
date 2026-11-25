@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.2.0-testing.13",
+  "manifestVersion": "2.2.0-testing.14",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
     "version": "main (989ca6e)",
@@ -9,7 +9,7 @@
     "commit": "989ca6e",
     "dockerImage": "soulspirexi/server:main-ws3-weap-002-989ca6e",
     "crystalJobsHooks": 32,
-    "notes": "WS3-WEAP-002: Fix /say !soulhud cap capability handshake, immediate 0x050 pre-model equipment sync, and mainlook restore on compact_dual_axe clear."
+    "notes": "WS3-WEAP-002: Verified 32-hook Soulspire Native with consolidated Hook #32 runtime stage counters and last-call trace (SoulspireNativeGetWeaponModelDiag)."
   },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
@@ -116,8 +116,8 @@
       "category": "plugin",
       "sourcePath": "channels/testing/payload/plugins/ashita4/soulspire_native.dll",
       "targetPath": "soulspire_native.dll",
-      "sha256": "86b9115976d2bc96b2a5c931df4f1043090a10f97e20eb7f7fef4a359907cfe1",
-      "size": 226304
+      "sha256": "2944449c8d868e3a7218df4c9a8471803a8262a66b4c82ab36394c9e7023b5bb",
+      "size": 226816
     },
     {
       "category": "addon",
@@ -6017,8 +6017,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/native_bridge.lua",
       "targetPath": "soulspire_core/core/native_bridge.lua",
-      "sha256": "df36aec4697d4955572d62b1e79197e26847f5c856d66a2b6c5378a0f614026a",
-      "size": 11221
+      "sha256": "c537a25a4e7fb1e812e0e213e3cf0b355c6d9c3e581b8a1410a9106e0215bc25",
+      "size": 14206
     },
     {
       "category": "addon",
@@ -6073,8 +6073,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/soulspire_core.lua",
       "targetPath": "soulspire_core/soulspire_core.lua",
-      "sha256": "69a5dd4bd322adeea6194d537a6a835c6558221a81550a7ff2638985f95bbd7e",
-      "size": 24490
+      "sha256": "05dd4a53c16bbc311bd7647794f694c68727304a086f8090270c4ee126ef7a8a",
+      "size": 25640
     },
     {
       "category": "addon",
@@ -10036,7 +10036,7 @@
     "hash": "cf86aa59ff8d16c6",
     "idLockStatus": "locked",
     "nativeDllCompiledHash": "cf86aa59ff8d16c6",
-    "nativeDllSha256": "86b9115976d2bc96b2a5c931df4f1043090a10f97e20eb7f7fef4a359907cfe1",
+    "nativeDllSha256": "2944449c8d868e3a7218df4c9a8471803a8262a66b4c82ab36394c9e7023b5bb",
     "nativeDllClientVerified": false,
     "nativeHooks": 32,
     "crystalJobsHooks": 32
