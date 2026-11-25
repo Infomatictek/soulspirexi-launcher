@@ -200,9 +200,9 @@ public sealed class ModernClientIntegrationTests
 
         var boot = ModernClientConfigGenerator.BuildBootScriptContent(settings, ClientEngineMode.ModernCompat);
         Assert.DoesNotContain("/plugin load soulspire_native", boot);
-        Assert.Contains("/addon load crystalsocket ashita", boot);
-        Assert.Contains("/addon load soulspire_core ashita", boot);
-        Assert.Contains("/addon load soulspire_flintlock ashita", boot);
+        Assert.Contains("/addon load soulspire_core", boot);
+        Assert.DoesNotContain("/addon load soulspire_core ashita", boot);
+        Assert.DoesNotContain("/addon load crystalsocket ashita", boot);
         Assert.Contains("/addon load soulspire_gear ashita", boot);
     }
 
