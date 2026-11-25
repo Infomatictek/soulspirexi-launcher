@@ -7,6 +7,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CORE_DIR = ROOT / "addons" / "ashita4" / "soulspire_core"
+TALENTS_DIR = ROOT / "addons" / "ashita4" / "soulspire_talents"
 LAUNCHER_CREST = ROOT / "SoulspireLauncher" / "Assets" / "app.png"
 CORE_CREST = CORE_DIR / "assets" / "soulspire_crest.png"
 
@@ -45,7 +46,7 @@ class SoulspireCorePhase1ATests(unittest.TestCase):
             0,
             f"soulspire_core LuaJIT tests failed:\nSTDOUT:\n{proc.stdout}\nSTDERR:\n{proc.stderr}",
         )
-        self.assertIn("SoulspireXI Core Phase 1A tests passed.", proc.stdout)
+        self.assertIn("SoulspireXI Core Unified UI & Gamepad tests passed.", proc.stdout)
 
     def test_verified_crest_asset_matches_launcher_app_png(self):
         self.assertTrue(LAUNCHER_CREST.is_file(), "Missing SoulspireLauncher/Assets/app.png")
@@ -72,13 +73,48 @@ class SoulspireCorePhase1ATests(unittest.TestCase):
         ):
             self.assertIn(required, gen, f"AshitaConfigGenerator.cs missing {required}")
 
-    def test_phase1a_audit_doc_exists_and_identifies_fallback_honestly(self):
-        doc = ROOT / "docs" / "phase1a-native-menu-audit.md"
-        self.assertTrue(doc.is_file(), "Missing docs/phase1a-native-menu-audit.md")
-        text = doc.read_text(encoding="utf-8")
-        self.assertIn("FFXiMain.dll", text)
-        self.assertIn("native-styled fallback", text.lower())
-        self.assertIn("crystaljobs.dll", text)
+    def test_phase1a_and_core_native_menu_audit_docs_identify_fallback_honestly(self):
+        for rel in ("docs/phase1a-native-menu-audit.md", "docs/core-native-menu-integration.md"):
+            doc = ROOT / rel
+            self.assertTrue(doc.is_file(), f"Missing {rel}")
+            text = doc.read_text(encoding="utf-8")
+            self.assertIn("FFXiMain.dll", text)
+            self.assertIn("native-styled fallback", text.lower())
+            self.assertIn("crystaljobs.dll", text)
+
+    def test_core_modules_and_shared_soulforge_state_present(self):
+        for path in (
+            CORE_DIR / "modules" / "character.lua",
+            CORE_DIR / "modules" / "weapon_mastery.lua",
+            CORE_DIR / "modules" / "soul_talents.lua",
+            TALENTS_DIR / "soulforge_state.lua",
+            TALENTS_DIR / "soulforge_ui.lua",
+        ):
+            self.assertTrue(path.is_file(), f"Missing required module file: {path}")
+
+    def test_ashita4_addon_syntax_compiles_under_luajit(self):
+        luajit_bin = shutil.which("luajit")
+        if not luajit_bin:
+            self.skipTest("luajit binary unavailable")
+
+        lua_files = sorted(CORE_DIR.rglob("*.lua")) + [
+            TALENTS_DIR / "soulforge_state.lua",
+            TALENTS_DIR / "soulforge_ui.lua",
+            TALENTS_DIR / "soulspire_talents.lua",
+            TALENTS_DIR / "art.lua",
+        ]
+        for lua_path in lua_files:
+            proc = subprocess.run(
+                [luajit_bin, "-bl", str(lua_path), "/dev/null"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(
+                proc.returncode,
+                0,
+                f"LuaJIT syntax check failed for {lua_path}:\n{proc.stderr}",
+            )
 
 
 if __name__ == "__main__":

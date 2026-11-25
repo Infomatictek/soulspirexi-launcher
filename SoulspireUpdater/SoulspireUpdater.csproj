@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>SoulspireUpdater</AssemblyName>
+    <RootNamespace>SoulspireUpdater</RootNamespace>
+    <Version>2.2.0</Version>
+    <FileVersion>2.2.0.0</FileVersion>
+    <AssemblyVersion>2.2.0.0</AssemblyVersion>
+    <AssemblyTitle>SoulspireXI Launcher Updater</AssemblyTitle>
+    <Product>SoulspireXI Launcher</Product>
+    <Company>SoulspireXI</Company>
+    <Authors>SoulspireXI</Authors>
+    <Copyright>Copyright © SoulspireXI</Copyright>
+    <Description>Standalone atomic updater and rollback helper for SoulspireXI Launcher.</Description>
+  </PropertyGroup>
+
+</Project>

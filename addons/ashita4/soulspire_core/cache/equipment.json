@@ -1,0 +1,204 @@
+{
+  "contentVersion": "2026.11.22-66-souls-approved+cf86aa59.59e26a02047c",
+  "entitiesVersion": "2026.11.22-phase4-complete",
+  "idLockStatus": "locked",
+  "items": [
+    {
+      "category": "chakram",
+      "description": "",
+      "id": "item_dnc_chakram_aureole_jinx_discus",
+      "itemId": 0,
+      "name": "Aureole / Jinx Discus",
+      "soulId": null
+    },
+    {
+      "category": "chakram",
+      "description": "",
+      "id": "item_dnc_chakram_besta_s_bane_aeonic",
+      "itemId": 0,
+      "name": "Besta's Bane (Aeonic)",
+      "soulId": null
+    },
+    {
+      "category": "chakram",
+      "description": "",
+      "id": "item_dnc_chakram_chakram_chakram_1",
+      "itemId": 0,
+      "name": "Chakram / Chakram +1",
+      "soulId": null
+    },
+    {
+      "category": "chakram",
+      "description": "",
+      "id": "item_dnc_chakram_death_chakram",
+      "itemId": 0,
+      "name": "Death Chakram",
+      "soulId": null
+    },
+    {
+      "category": "chakram",
+      "description": "",
+      "id": "item_dnc_chakram_halakaala_aliyat_chakram",
+      "itemId": 0,
+      "name": "Halakaala / Aliyat Chakram",
+      "soulId": null
+    },
+    {
+      "category": "chakram",
+      "description": "",
+      "id": "item_dnc_chakram_lamiabane_mythic",
+      "itemId": 0,
+      "name": "Lamiabane (Mythic)",
+      "soulId": null
+    },
+    {
+      "category": "chakram",
+      "description": "",
+      "id": "item_dnc_chakram_mamoolbane_relic",
+      "itemId": 0,
+      "name": "Mamoolbane (Relic)",
+      "soulId": null
+    },
+    {
+      "category": "chakram",
+      "description": "",
+      "id": "item_dnc_chakram_moonring_blade_1",
+      "itemId": 0,
+      "name": "Moonring Blade / +1",
+      "soulId": null
+    },
+    {
+      "category": "chakram",
+      "description": "",
+      "id": "item_dnc_chakram_platoon_disc",
+      "itemId": 0,
+      "name": "Platoon Disc",
+      "soulId": null
+    },
+    {
+      "category": "chakram",
+      "description": "",
+      "id": "item_dnc_chakram_rising_sun_1",
+      "itemId": 0,
+      "name": "Rising Sun / +1",
+      "soulId": null
+    },
+    {
+      "category": "chakram",
+      "description": "",
+      "id": "item_dnc_chakram_rogetsurin",
+      "itemId": 0,
+      "name": "Rogetsurin",
+      "soulId": null
+    },
+    {
+      "category": "chakram",
+      "description": "",
+      "id": "item_dnc_chakram_trollbane_empyrean",
+      "itemId": 0,
+      "name": "Trollbane (Empyrean)",
+      "soulId": null
+    },
+    {
+      "category": "chakram",
+      "description": "",
+      "id": "item_dnc_chakram_war_hoop_jr_msk_chakram_1_2",
+      "itemId": 0,
+      "name": "War Hoop / Jr.Msk. Chakram (+1/+2)",
+      "soulId": null
+    }
+  ],
+  "minCoreSchemaVersion": 1,
+  "packageId": "equipment",
+  "registryHash": "cf86aa59ff8d16c6",
+  "registryVersion": "2026.11.22-66-souls-approved",
+  "schemaVersion": 1,
+  "soulWeaponModes": [],
+  "weaponFamilies": [
+    {
+      "id": -1,
+      "key": "equipped",
+      "name": "Equipped"
+    },
+    {
+      "id": 0,
+      "key": "all",
+      "name": "All Weapons"
+    },
+    {
+      "id": 1,
+      "key": "h2h",
+      "name": "Hand-to-Hand"
+    },
+    {
+      "id": 2,
+      "key": "dagger",
+      "name": "Dagger"
+    },
+    {
+      "id": 3,
+      "key": "sword",
+      "name": "Sword"
+    },
+    {
+      "id": 4,
+      "key": "great_sword",
+      "name": "Great Sword"
+    },
+    {
+      "id": 5,
+      "key": "axe",
+      "name": "Axe"
+    },
+    {
+      "id": 6,
+      "key": "great_axe",
+      "name": "Great Axe"
+    },
+    {
+      "id": 7,
+      "key": "scythe",
+      "name": "Scythe"
+    },
+    {
+      "id": 8,
+      "key": "polearm",
+      "name": "Polearm"
+    },
+    {
+      "id": 9,
+      "key": "katana",
+      "name": "Katana"
+    },
+    {
+      "id": 10,
+      "key": "great_katana",
+      "name": "Great Katana"
+    },
+    {
+      "id": 11,
+      "key": "club",
+      "name": "Club"
+    },
+    {
+      "id": 12,
+      "key": "staff",
+      "name": "Staff"
+    },
+    {
+      "id": 25,
+      "key": "archery",
+      "name": "Archery"
+    },
+    {
+      "id": 26,
+      "key": "marksmanship",
+      "name": "Marksmanship"
+    },
+    {
+      "id": 27,
+      "key": "throwing",
+      "name": "Throwing"
+    }
+  ]
+}

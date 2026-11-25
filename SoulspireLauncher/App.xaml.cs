@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Threading;
 
@@ -6,6 +7,7 @@ namespace SoulspireLauncher;
 public partial class App : Application
 {
     public const string ApplicationTitle = "SoulspireXI Launcher";
+    public static Stopwatch StartupStopwatch { get; } = Stopwatch.StartNew();
 
     protected override void OnStartup(StartupEventArgs e)
     {

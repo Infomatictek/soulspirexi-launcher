@@ -179,6 +179,29 @@ public sealed class ShortcutMigrationService
         return File.Exists(shortcutPath);
     }
 
+    public bool CreateStartMenuShortcut(string canonicalExePath, string? programsDirOverride = null)
+    {
+        if (!OperatingSystem.IsWindows() ||
+            string.IsNullOrWhiteSpace(canonicalExePath) ||
+            !File.Exists(canonicalExePath))
+        {
+            return false;
+        }
+
+        var programsDir = programsDirOverride ?? Environment.GetFolderPath(Environment.SpecialFolder.Programs);
+        if (string.IsNullOrWhiteSpace(programsDir))
+        {
+            return false;
+        }
+
+        var folder = Path.Combine(programsDir, "SoulspireXI");
+        Directory.CreateDirectory(folder);
+        var shortcutPath = Path.Combine(folder, CanonicalShortcutName);
+        var script = BuildCreateShortcutPowerShellScript(shortcutPath, canonicalExePath);
+        RunEncodedPowerShell(script);
+        return File.Exists(shortcutPath);
+    }
+
     private static string RunEncodedPowerShell(string script)
     {
         var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));

@@ -59,6 +59,7 @@ public sealed class TestingQolSettingsTests
 
     [Theory]
     [InlineData(UpdateChannel.Testing)]
+    [InlineData(UpdateChannel.TestingCoreUi)]
     [InlineData(UpdateChannel.TestingRegistry24Hook)]
     [InlineData(UpdateChannel.TestingSearchLegacyText)]
     [InlineData(UpdateChannel.TestingSearchAlignedText)]
@@ -492,5 +493,38 @@ public sealed class TestingQolSettingsTests
         {
             if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, recursive: true);
         }
+    }
+
+    [Fact]
+    public void ServerTargetModeStaging_EnablesTestingQolOnStableChannel()
+    {
+        var settings = new LauncherSettings
+        {
+            UpdateChannel = UpdateChannel.Stable,
+            ServerTarget = ServerTargetMode.Staging,
+            EnableAutomaticTestingQolSettings = true
+        };
+
+        var ini = _generator.BuildBootIniContent(
+            settings,
+            serverHost: "192.168.86.117",
+            useHairpin: false,
+            password: null,
+            xiloaderPath: "xiloader.exe",
+            manifestChannel: "stable",
+            serverName: "SoulspireXI");
+
+        Assert.Contains(AshitaConfigGenerator.TestingQolIniMarker, ini);
+        Assert.Contains("keyboard.blockbindsduringinput = 0", ini);
+        Assert.Contains("keyboard.windowskeyenabled = 1", ini);
+    }
+
+    [Fact]
+    public void TestingSelfUpdate_DiscoverV221TestingFromV220TestingCoreUi6()
+    {
+        Assert.True(LauncherSelfUpdateService.CompareVersionTags("v2.2.1-testing.1", "v2.2.0-testing.core-ui.6") > 0);
+        Assert.True(LauncherSelfUpdateService.CompareVersionTags("v2.1.8", "v2.2.0-testing.core-ui.6") < 0);
+        Assert.True(LauncherSelfUpdateService.IsNewerVersion("2.2.0-testing.core-ui.6", "v2.2.1-testing.1", out var latest));
+        Assert.Equal(new Version(2, 2, 1), latest);
     }
 }

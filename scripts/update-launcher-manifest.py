@@ -230,6 +230,24 @@ def main(argv: list[str] | None = None) -> int:
             "crystalJobsHooks": expected_hooks,
         }
 
+    # Embed verified client data cache summary when soulspire_core/cache/manifest.json exists.
+    cache_manifest_path = repo_root / "addons" / "ashita4" / "soulspire_core" / "cache" / "manifest.json"
+    if cache_manifest_path.is_file():
+        cache_manifest = json.loads(cache_manifest_path.read_text(encoding="utf-8"))
+        cache_manifest_sha, _ = sha256_file(cache_manifest_path)
+        manifest["clientDataCache"] = {
+            "schemaVersion": int(cache_manifest.get("schemaVersion") or 1),
+            "protocolVersion": int(cache_manifest.get("protocolVersion") or 2),
+            "contentVersion": str(cache_manifest.get("contentVersion") or ""),
+            "contentHash": str(cache_manifest.get("contentHash") or ""),
+            "registryHash": str(cache_manifest.get("registryHash") or ""),
+            "manifestTargetPath": "soulspire_core/cache/manifest.json",
+            "manifestSha256": cache_manifest_sha,
+            "packageCount": len(cache_manifest.get("packages") or {}),
+        }
+    else:
+        manifest.pop("clientDataCache", None)
+
     with manifest_path.open("w", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(manifest, indent=2) + "\n")
     opt_count = sum(len(o["files"]) for o in optional_overlays)  # type: ignore[arg-type]

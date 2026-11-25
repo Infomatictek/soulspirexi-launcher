@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
@@ -33,8 +34,18 @@ public sealed class ManifestUpdateService
     public const string TestingRegistry24HookManifestRelativePath = "channels/testing-registry-24hook/manifest.json";
     public const string TestingSearchLegacyTextManifestRelativePath = "channels/testing-search-legacy-text/manifest.json";
     public const string TestingSearchAlignedTextManifestRelativePath = "channels/testing-search-aligned-text/manifest.json";
+    public const string TestingCoreUiManifestRelativePath = "channels/testing-core-ui/manifest.json";
+    public const string TestingBranch = "main";
     public const string TestingRegistry24HookBranch = "feat/runtime-soul-identity-and-spacing";
+    public const string TestingCoreUiBranch = "feat/client-data-cache-overhaul";
     public const string InstalledStateFileName = ".soulspire-state.json";
+
+    /// <summary>
+    /// Consolidates legacy/experimental Testing channel enum values into the single
+    /// authoritative canonical Testing channel without resetting any other user settings.
+    /// </summary>
+    public static UpdateChannel NormalizeUserFacingChannel(UpdateChannel channel) =>
+        channel == UpdateChannel.Stable ? UpdateChannel.Stable : UpdateChannel.Testing;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -55,15 +66,20 @@ public sealed class ManifestUpdateService
         UpdateChannel.TestingRegistry24Hook => TestingRegistry24HookManifestRelativePath,
         UpdateChannel.TestingSearchLegacyText => TestingSearchLegacyTextManifestRelativePath,
         UpdateChannel.TestingSearchAlignedText => TestingSearchAlignedTextManifestRelativePath,
+        UpdateChannel.TestingCoreUi => TestingCoreUiManifestRelativePath,
         _ => StableManifestRelativePath
     };
 
     public static string GetManifestBranch(LauncherManifest fallback, UpdateChannel channel) =>
-        channel is UpdateChannel.TestingRegistry24Hook
-            or UpdateChannel.TestingSearchLegacyText
-            or UpdateChannel.TestingSearchAlignedText
-            ? TestingRegistry24HookBranch
-            : (string.IsNullOrWhiteSpace(fallback.Repo.Branch) ? "main" : fallback.Repo.Branch.Trim());
+        channel switch
+        {
+            UpdateChannel.Testing => TestingBranch,
+            UpdateChannel.TestingCoreUi => TestingCoreUiBranch,
+            UpdateChannel.TestingRegistry24Hook
+                or UpdateChannel.TestingSearchLegacyText
+                or UpdateChannel.TestingSearchAlignedText => TestingRegistry24HookBranch,
+            _ => string.IsNullOrWhiteSpace(fallback.Repo.Branch) ? "main" : fallback.Repo.Branch.Trim()
+        };
 
     public static HttpClient CreateDefaultHttpClient()
     {
@@ -128,8 +144,12 @@ public sealed class ManifestUpdateService
         LauncherManifest fallback,
         LocalServerOverride? localOverride,
         UpdateChannel channel,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        PerformanceDiagnosticsService? perf = null,
+        bool perfEnabled = false,
+        bool isColdCheck = true)
     {
+        var checkSw = PerformanceDiagnosticsService.StartSpanIfEnabled(perfEnabled);
         var manifestRelativePath = GetManifestRelativePath(channel);
         var manifestBranch = GetManifestBranch(fallback, channel);
 
@@ -185,6 +205,7 @@ public sealed class ManifestUpdateService
                                 ? attempt.Manifest.Repo.RawBaseUrl.TrimEnd('/')
                                 : pinnedRawBase;
                         ApplyLocalOverride(attempt.Manifest, localOverride);
+                        perf?.RecordSpan(perfEnabled, "manifest_fetch", checkSw, isColdCheck, "complete", "client_plus_server_rtt");
                         return new ManifestFetchResult
                         {
                             Manifest = attempt.Manifest,
@@ -217,6 +238,7 @@ public sealed class ManifestUpdateService
                             ? directAttempt.Manifest.Repo.RawBaseUrl.TrimEnd('/')
                             : rawBase;
                     ApplyLocalOverride(directAttempt.Manifest, localOverride);
+                    perf?.RecordSpan(perfEnabled, "manifest_fetch", checkSw, isColdCheck, "complete", "client_plus_server_rtt");
                     return new ManifestFetchResult
                     {
                         Manifest = directAttempt.Manifest,
@@ -238,10 +260,11 @@ public sealed class ManifestUpdateService
         }
 
         // Only Stable may fall back to the bundled Stable manifest.json when offline (network/HTTP failure).
-        // Never silently fall back when a remote manifest was explicitly rejected by channel/verification policy!
+        // Never silently fall back when a remote manifest was explicitly rejected by channel/verification policy (DEC-019).
         if (channel == UpdateChannel.Stable && !rejectedByValidation)
         {
             ApplyLocalOverride(fallback, localOverride);
+            perf?.RecordSpan(perfEnabled, "manifest_fetch", checkSw, isColdCheck, "failed", "client_plus_server_rtt");
             return new ManifestFetchResult
             {
                 Manifest = fallback,
@@ -272,6 +295,7 @@ public sealed class ManifestUpdateService
 
         var channelLabel = channel switch
         {
+            UpdateChannel.TestingCoreUi => "Testing — SoulspireXI Core UI & Gamepad",
             UpdateChannel.TestingRegistry24Hook => "Testing B — Registry 24-Hook (Current menu2fon)",
             UpdateChannel.TestingSearchLegacyText => "Testing A — Search Legacy native_text (4f0fdb3)",
             UpdateChannel.TestingSearchAlignedText => "Testing C — Search Aligned native_text (Repair)",
@@ -329,7 +353,8 @@ public sealed class ManifestUpdateService
 
             if (candidateId.Equals("registry-24hook", StringComparison.OrdinalIgnoreCase) ||
                 candidateId.Equals("search-legacy-text", StringComparison.OrdinalIgnoreCase) ||
-                candidateId.Equals("search-aligned-text", StringComparison.OrdinalIgnoreCase))
+                candidateId.Equals("search-aligned-text", StringComparison.OrdinalIgnoreCase) ||
+                candidateId.Equals("core-ui-24hook", StringComparison.OrdinalIgnoreCase))
             {
                 error = "Refusing isolated 24-hook candidate on 27-hook Testing channel.";
                 return false;
@@ -337,13 +362,15 @@ public sealed class ManifestUpdateService
         }
         else if (requestedChannel is UpdateChannel.TestingRegistry24Hook
                  or UpdateChannel.TestingSearchLegacyText
-                 or UpdateChannel.TestingSearchAlignedText)
+                 or UpdateChannel.TestingSearchAlignedText
+                 or UpdateChannel.TestingCoreUi)
         {
             var expectedCandidateId = requestedChannel switch
             {
                 UpdateChannel.TestingRegistry24Hook => "registry-24hook",
                 UpdateChannel.TestingSearchLegacyText => "search-legacy-text",
                 UpdateChannel.TestingSearchAlignedText => "search-aligned-text",
+                UpdateChannel.TestingCoreUi => "core-ui-24hook",
                 _ => string.Empty
             };
 
@@ -410,6 +437,29 @@ public sealed class ManifestUpdateService
             var dllName = dllEntry?.TargetPath ?? "soulspire_native.dll";
             error = $"Refusing Stable manifest: {dllName} is not marked client-verified (nativeDllClientVerified=false). Switch to the Testing channel in Settings to receive this build for playtesting.";
             return false;
+        }
+
+        // Verify clientDataCache manifest entry integrity when declared.
+        var cacheMeta = manifest.ClientDataCache;
+        if (cacheMeta is not null)
+        {
+            var targetPath = string.IsNullOrWhiteSpace(cacheMeta.ManifestTargetPath)
+                ? "soulspire_core/cache/manifest.json"
+                : cacheMeta.ManifestTargetPath.Replace('\\', '/');
+            var cacheEntry = manifest.Files.FirstOrDefault(f =>
+                f.Category.Equals("addon", StringComparison.OrdinalIgnoreCase) &&
+                f.TargetPath.Replace('\\', '/').Equals(targetPath, StringComparison.OrdinalIgnoreCase));
+            if (cacheEntry is null)
+            {
+                error = $"Manifest declares clientDataCache but is missing file entry '{targetPath}'.";
+                return false;
+            }
+            if (!string.IsNullOrWhiteSpace(cacheMeta.ManifestSha256) &&
+                !cacheEntry.Sha256.Equals(cacheMeta.ManifestSha256, StringComparison.OrdinalIgnoreCase))
+            {
+                error = $"Manifest clientDataCache.manifestSha256 ({cacheMeta.ManifestSha256}) does not match {targetPath} ({cacheEntry.Sha256}).";
+                return false;
+            }
         }
 
         return true;
@@ -576,6 +626,9 @@ public sealed class ManifestUpdateService
             normalized.Equals("overlords-server.json", StringComparison.Ordinal) ||
             normalized.StartsWith("config/addons/", StringComparison.Ordinal) ||
             normalized.StartsWith("config/boot/", StringComparison.Ordinal) ||
+            normalized.Equals("config/soulspire_perf_diag.json", StringComparison.Ordinal) ||
+            normalized.EndsWith("/config/soulspire_perf_diag.json", StringComparison.Ordinal) ||
+            normalized.Contains("soulspire_perf/", StringComparison.Ordinal) ||
             normalized.Equals("scripts/soulspirexi.txt", StringComparison.Ordinal) ||
             normalized.Equals("scripts/default.txt", StringComparison.Ordinal))
         {
@@ -584,8 +637,10 @@ public sealed class ManifestUpdateService
 
         if (category.Equals("addon", StringComparison.OrdinalIgnoreCase) &&
             (normalized.Contains("/settings/", StringComparison.Ordinal) ||
+             normalized.Contains("soulspire_perf/", StringComparison.Ordinal) ||
              normalized.EndsWith("/settings.lua", StringComparison.Ordinal) ||
-             normalized.EndsWith("/settings.json", StringComparison.Ordinal)))
+             normalized.EndsWith("/settings.json", StringComparison.Ordinal) ||
+             normalized.EndsWith("soulspire_perf_diag.json", StringComparison.Ordinal)))
         {
             return true;
         }
@@ -675,11 +730,17 @@ public sealed class ManifestUpdateService
     public List<ManifestFileEntry> GetOutdatedFiles(
         LauncherManifest manifest,
         LauncherSettings settings,
-        bool forceAll = false)
+        bool forceAll = false,
+        PerformanceDiagnosticsService? perf = null,
+        bool perfEnabled = false,
+        bool isCold = true)
     {
+        var hashSw = PerformanceDiagnosticsService.StartSpanIfEnabled(perfEnabled);
+        var checkedCount = 0;
         var pending = new List<ManifestFileEntry>();
         foreach (var entry in EnumerateActiveFiles(manifest, settings))
         {
+            checkedCount++;
             var dest = ResolveTargetFilePath(settings, entry);
             if (forceAll || !FileMatchesHash(dest, entry.Sha256))
             {
@@ -699,6 +760,7 @@ public sealed class ManifestUpdateService
             }
         }
 
+        perf?.RecordSpan(perfEnabled, "file_hash", hashSw, isCold, "complete", "client_only", files: checkedCount);
         return pending;
     }
 
@@ -928,13 +990,17 @@ public sealed class ManifestUpdateService
         bool forceAll,
         IProgress<SyncProgress>? progress = null,
         CancellationToken cancellationToken = default,
-        Action<ManifestFileEntry, string>? beforeCommitFile = null)
+        Action<ManifestFileEntry, string>? beforeCommitFile = null,
+        PerformanceDiagnosticsService? perf = null,
+        bool perfEnabled = false,
+        bool isCold = true)
     {
+        var syncSw = PerformanceDiagnosticsService.StartSpanIfEnabled(perfEnabled);
         Directory.CreateDirectory(settings.AshitaPath);
         RemoveRetiredAddons(settings);
 
         var previousState = LoadInstalledState(settings.AshitaPath);
-        var pending = GetOutdatedFiles(manifest, settings, forceAll)
+        var pending = GetOutdatedFiles(manifest, settings, forceAll, perf, perfEnabled, isCold)
             .Where(e => !IsProtectedPlayerConfigPath(e.Category, e.TargetPath))
             .ToList();
 
@@ -944,11 +1010,13 @@ public sealed class ManifestUpdateService
             RemoveRetiredPlugins(manifest, settings);
             SaveInstalledState(settings.AshitaPath, manifest, settings);
             progress?.Report(new SyncProgress { Message = "All SoulspireXI client files are up to date.", Percent = 100 });
+            perf?.RecordSpan(perfEnabled, "sync", syncSw, isCold, "complete", "client_only", files: 0, bytes: 0);
             return 0;
         }
 
         if (!ValidateRegistryBundle(manifest, settings.UpdateChannel, out var bundleError))
         {
+            perf?.RecordSpan(perfEnabled, "sync", syncSw, isCold, "failed", "client_only");
             throw new InvalidDataException(bundleError);
         }
 
@@ -969,6 +1037,8 @@ public sealed class ManifestUpdateService
 
         try
         {
+            var dlSw = PerformanceDiagnosticsService.StartSpanIfEnabled(perfEnabled);
+            long totalDlBytes = 0;
             // Phase 1: Download & verify ALL pending files in staging before modifying any live file.
             for (var i = 0; i < pending.Count; i++)
             {
@@ -1008,8 +1078,14 @@ public sealed class ManifestUpdateService
                     }
                 }
 
+                if (File.Exists(stagedPath))
+                {
+                    totalDlBytes += new FileInfo(stagedPath).Length;
+                }
                 stagedFiles.Add((entry, stagedPath, destPath));
             }
+
+            perf?.RecordSpan(perfEnabled, "download_install", dlSw, isCold, "complete", "client_plus_server_rtt", files: stagedFiles.Count, bytes: totalDlBytes);
 
             // Phase 2: Back up existing files and swap staged files into place with full rollback on error.
             var backupIndex = 0;
@@ -1071,10 +1147,18 @@ public sealed class ManifestUpdateService
                 Percent = 100
             });
 
+            perf?.RecordSpan(perfEnabled, "sync", syncSw, isCold, "complete", "client_only", files: stagedFiles.Count, bytes: totalDlBytes);
             return stagedFiles.Count;
+        }
+        catch (OperationCanceledException)
+        {
+            perf?.RecordSpan(perfEnabled, "sync", syncSw, isCold, "cancelled", "client_only");
+            RollbackAppliedFiles(appliedBackups);
+            throw;
         }
         catch
         {
+            perf?.RecordSpan(perfEnabled, "sync", syncSw, isCold, "failed", "client_only");
             RollbackAppliedFiles(appliedBackups);
             throw;
         }

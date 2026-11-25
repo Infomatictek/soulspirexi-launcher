@@ -25,6 +25,9 @@ public sealed class LauncherManifest
     [JsonPropertyName("registry")]
     public ManifestRegistryMetadata? Registry { get; set; }
 
+    [JsonPropertyName("clientDataCache")]
+    public ManifestClientDataCache? ClientDataCache { get; set; }
+
     [JsonPropertyName("serverName")]
     public string ServerName { get; set; } = "SoulspireXI";
 
@@ -39,6 +42,9 @@ public sealed class LauncherManifest
 
     [JsonPropertyName("ports")]
     public ManifestPorts Ports { get; set; } = new();
+
+    [JsonPropertyName("stagingServer")]
+    public ManifestStagingServer? StagingServer { get; set; }
 
     [JsonPropertyName("repo")]
     public ManifestRepo Repo { get; set; } = new();
@@ -69,6 +75,51 @@ public sealed class ManifestPorts
 
     [JsonPropertyName("search")]
     public int Search { get; set; } = 54002;
+}
+
+public sealed class ManifestStagingServer
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "SoulspireXI Staging";
+
+    [JsonPropertyName("host")]
+    public string Host { get; set; } = LauncherSettings.DefaultStagingHost;
+
+    [JsonPropertyName("useHairpin")]
+    public bool UseHairpin { get; set; }
+
+    [JsonPropertyName("localLoopbackHost")]
+    public string LocalLoopbackHost { get; set; } = "127.0.0.1";
+
+    [JsonPropertyName("ports")]
+    public ManifestStagingPorts Ports { get; set; } = new();
+
+    [JsonPropertyName("notes")]
+    public string Notes { get; set; } = string.Empty;
+}
+
+public sealed class ManifestStagingPorts
+{
+    [JsonPropertyName("auth")]
+    public int Auth { get; set; } = LauncherSettings.DefaultStagingAuthPort;
+
+    [JsonPropertyName("data")]
+    public int Data { get; set; } = LauncherSettings.DefaultStagingDataPort;
+
+    [JsonPropertyName("view")]
+    public int View { get; set; } = LauncherSettings.DefaultStagingViewPort;
+
+    [JsonPropertyName("search")]
+    public int Search { get; set; } = LauncherSettings.DefaultStagingSearchPort;
+
+    [JsonPropertyName("profile")]
+    public int Profile { get; set; } = LauncherSettings.DefaultStagingProfilePort;
+
+    [JsonPropertyName("profileIrc")]
+    public int ProfileIrc { get; set; } = LauncherSettings.DefaultStagingProfileIrcPort;
+
+    [JsonPropertyName("map")]
+    public int Map { get; set; } = LauncherSettings.DefaultStagingMapPort;
 }
 
 public sealed class ManifestRepo
@@ -270,4 +321,31 @@ public sealed class ManifestNewsItem
 
     [JsonPropertyName("body")]
     public string Body { get; set; } = string.Empty;
+}
+
+public sealed class ManifestClientDataCache
+{
+    [JsonPropertyName("schemaVersion")]
+    public int SchemaVersion { get; set; } = 1;
+
+    [JsonPropertyName("protocolVersion")]
+    public int ProtocolVersion { get; set; } = 2;
+
+    [JsonPropertyName("contentVersion")]
+    public string ContentVersion { get; set; } = string.Empty;
+
+    [JsonPropertyName("contentHash")]
+    public string ContentHash { get; set; } = string.Empty;
+
+    [JsonPropertyName("registryHash")]
+    public string RegistryHash { get; set; } = string.Empty;
+
+    [JsonPropertyName("manifestTargetPath")]
+    public string ManifestTargetPath { get; set; } = "soulspire_core/cache/manifest.json";
+
+    [JsonPropertyName("manifestSha256")]
+    public string ManifestSha256 { get; set; } = string.Empty;
+
+    [JsonPropertyName("packageCount")]
+    public int PackageCount { get; set; }
 }

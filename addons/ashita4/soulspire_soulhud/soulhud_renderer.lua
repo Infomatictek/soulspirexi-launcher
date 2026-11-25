@@ -1,7 +1,7 @@
 --[[
-* SoulspireXI Soul HUD - settings window (opened from the gauge's quick options or /soulhud config).
-* The HUD itself is drawn by soulhud_gauge.lua (Crystal Job Gauge); this file only hosts the
-* optional per-element configuration panel, styled with the same navy/gold palette.
+* SoulspireXI Universal Soul HUD — Settings Window
+* Styled with SoulspireXI Core UI Foundations (Abyss #0B1019, Midnight #151928,
+* Soul Gold #E8BD70, Aether Cyan #39CFE5, Crystal Violet #8063BC).
 --]]
 
 local M = {}
@@ -15,22 +15,35 @@ function M.renderConfig(imgui, soulDef, cfg, settingsMod, callbacks)
     local function pc(idx, v)
         if idx ~= nil then imgui.PushStyleColor(idx, v); pushed = pushed + 1 end
     end
-    pc(ImGuiCol_WindowBg, { 0.07, 0.085, 0.15, 0.96 })
-    pc(ImGuiCol_Border, { 0.85, 0.68, 0.31, 1.0 })
-    pc(ImGuiCol_TitleBg, { 0.09, 0.12, 0.22, 1.0 })
-    pc(ImGuiCol_TitleBgActive, { 0.15, 0.2, 0.36, 1.0 })
+    pc(ImGuiCol_WindowBg,       { 0.043, 0.063, 0.098, 0.97 }) -- Abyss #0B1019
+    pc(ImGuiCol_ChildBg,        { 0.082, 0.098, 0.157, 0.96 }) -- Midnight #151928
+    pc(ImGuiCol_Border,         { 0.910, 0.741, 0.439, 0.90 }) -- Soul Gold #E8BD70
+    pc(ImGuiCol_TitleBg,        { 0.063, 0.078, 0.133, 1.00 })
+    pc(ImGuiCol_TitleBgActive,  { 0.094, 0.118, 0.200, 1.00 })
+    pc(ImGuiCol_FrameBg,        { 0.082, 0.098, 0.157, 1.00 })
+    pc(ImGuiCol_FrameBgHovered, { 0.125, 0.157, 0.247, 1.00 })
+    pc(ImGuiCol_CheckMark,      { 0.910, 0.741, 0.439, 1.00 })
+    pc(ImGuiCol_SliderGrab,     { 0.224, 0.812, 0.898, 1.00 }) -- Aether Cyan #39CFE5
+    pc(ImGuiCol_HeaderHovered,  { 0.224, 0.812, 0.898, 0.30 })
+    pc(ImGuiCol_HeaderActive,   { 0.910, 0.741, 0.439, 0.38 })
+    pc(ImGuiCol_Text,           { 0.945, 0.961, 0.976, 1.00 })
 
-    imgui.SetNextWindowSize({ 320, 360 }, ImGuiCond_FirstUseEver or 4)
+    imgui.SetNextWindowSize({ 340, 420 }, ImGuiCond_FirstUseEver or 4)
     local open = { true }
-    if imgui.Begin('Soulspire Soul HUD Config', open, 0) then
-        if imgui.Checkbox('Lock Position', { cfg.locked }) then
-            cfg.locked = not cfg.locked
-            settingsMod.save(cfg)
-        end
+    if imgui.Begin('SoulspireXI — Universal Soul HUD Config', open, 0) then
+        imgui.TextColored({ 0.910, 0.741, 0.439, 1.0 }, 'DISPLAY MODE & LAYOUT')
+        imgui.Separator()
 
-        if imgui.Checkbox('Show Shared Party Buffs', { cfg.showShared ~= false }) then
-            cfg.showShared = not (cfg.showShared ~= false)
-            settingsMod.save(cfg)
+        local layouts = { 'minimal', 'standard', 'expanded' }
+        local curLayout = (cfg.layout == 'compact') and 'standard' or (cfg.layout or 'standard')
+        if imgui.BeginCombo('Display Mode', curLayout) then
+            for _, l in ipairs(layouts) do
+                if imgui.Selectable(l, curLayout == l) then
+                    cfg.layout = l
+                    settingsMod.save(cfg)
+                end
+            end
+            imgui.EndCombo()
         end
 
         local modes = { 'auto', 'show', 'hide' }
@@ -45,7 +58,7 @@ function M.renderConfig(imgui, soulDef, cfg, settingsMod, callbacks)
         end
 
         local scaleArr = { cfg.scale }
-        if imgui.SliderFloat('Scale', scaleArr, 0.75, 2.0, '%.2f') then
+        if imgui.SliderFloat('HUD Scale', scaleArr, 0.75, 2.0, '%.2f') then
             cfg.scale = scaleArr[1]
             settingsMod.save(cfg)
         end
@@ -56,13 +69,30 @@ function M.renderConfig(imgui, soulDef, cfg, settingsMod, callbacks)
             settingsMod.save(cfg)
         end
 
+        if imgui.Checkbox('Lock Position', { cfg.locked }) then
+            cfg.locked = not cfg.locked
+            settingsMod.save(cfg)
+        end
+        if imgui.Checkbox('Auto-Hide in FFXI Menus / Cutscenes', { cfg.autoHideOnMenu ~= false }) then
+            cfg.autoHideOnMenu = not (cfg.autoHideOnMenu ~= false)
+            settingsMod.save(cfg)
+        end
+        if imgui.Checkbox('Show Shared Party Buffs', { cfg.showShared ~= false }) then
+            cfg.showShared = not (cfg.showShared ~= false)
+            settingsMod.save(cfg)
+        end
+        if imgui.Checkbox('Show Soul Identity Pill (Inactive Providers)', { cfg.pill ~= false }) then
+            cfg.pill = not (cfg.pill ~= false)
+            settingsMod.save(cfg)
+        end
+
         imgui.Separator()
-        imgui.Text('Preview without combat:')
+        imgui.TextColored({ 0.224, 0.812, 0.898, 1.0 }, 'PREVIEW WITHOUT COMBAT')
         imgui.Text('/soulhud demo <soulKey|cycle|off>')
 
         if soulDef and #(soulDef.resources or {}) > 0 then
             imgui.Separator()
-            imgui.Text(('Elements (%s):'):format(soulDef.name))
+            imgui.TextColored({ 0.655, 0.549, 0.878, 1.0 }, ('TRACKERS (%s):'):format(soulDef.name))
             for _, res in ipairs(soulDef.resources or {}) do
                 local vis = settingsMod.isElementVisible(cfg, soulDef.key, res.id)
                 if imgui.Checkbox(res.label .. '##' .. res.id, { vis }) then

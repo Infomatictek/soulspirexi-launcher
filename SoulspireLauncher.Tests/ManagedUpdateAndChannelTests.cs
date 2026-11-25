@@ -286,7 +286,7 @@ public sealed class ManagedUpdateAndChannelTests
 
         var fallback = new LauncherManifest();
         Assert.Equal("main", ManifestUpdateService.GetManifestBranch(fallback, UpdateChannel.Stable));
-        Assert.Equal("main", ManifestUpdateService.GetManifestBranch(fallback, UpdateChannel.Testing));
+        Assert.Equal(ManifestUpdateService.TestingBranch, ManifestUpdateService.GetManifestBranch(fallback, UpdateChannel.Testing));
         Assert.Equal(
             ManifestUpdateService.TestingRegistry24HookBranch,
             ManifestUpdateService.GetManifestBranch(fallback, UpdateChannel.TestingRegistry24Hook));
@@ -704,6 +704,44 @@ public sealed class ManagedUpdateAndChannelTests
     }
 
     [Fact]
+    public void TestingCoreUiChannel_IsIsolatedFromStableAndOtherTestingChannels()
+    {
+        var fallback = new LauncherManifest
+        {
+            Repo = new ManifestRepo { Owner = "Infomatictek", Name = "soulspirexi-launcher", Branch = "main" }
+        };
+
+        Assert.Equal(
+            "channels/testing-core-ui/manifest.json",
+            ManifestUpdateService.GetManifestRelativePath(UpdateChannel.TestingCoreUi));
+        Assert.Equal(
+            ManifestUpdateService.TestingCoreUiBranch,
+            ManifestUpdateService.GetManifestBranch(fallback, UpdateChannel.TestingCoreUi));
+        Assert.Equal("main", ManifestUpdateService.GetManifestBranch(fallback, UpdateChannel.Stable));
+
+        var coreManifest = new LauncherManifest
+        {
+            Channel = "testing",
+            CandidateId = "core-ui-24hook",
+            Files =
+            [
+                new ManifestFileEntry
+                {
+                    Category = "addon",
+                    SourcePath = "addons/ashita4/soulspire_core/soulspire_core.lua",
+                    TargetPath = "soulspire_core/soulspire_core.lua",
+                    Sha256 = new string('a', 64)
+                }
+            ]
+        };
+
+        Assert.True(ManifestUpdateService.IsValidManifestForChannel(coreManifest, UpdateChannel.TestingCoreUi));
+        Assert.False(ManifestUpdateService.IsValidManifestForChannel(coreManifest, UpdateChannel.Stable));
+        Assert.False(ManifestUpdateService.IsValidManifestForChannel(coreManifest, UpdateChannel.Testing));
+        Assert.False(ManifestUpdateService.IsValidManifestForChannel(coreManifest, UpdateChannel.TestingRegistry24Hook));
+    }
+
+    [Fact]
     public void RemoveRetiredPlugins_CleansUpObsoleteCrystalJobsWhenSoulspireNativeActive()
     {
         var tempRoot = Path.Combine(Path.GetTempPath(), $"soulspire_mig_{Guid.NewGuid():N}");
@@ -745,6 +783,59 @@ public sealed class ManagedUpdateAndChannelTests
         finally
         {
             if (Directory.Exists(tempRoot)) Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void TestingBranch_PointsToCanonicalMainAndNormalizesLegacyTestingChannels()
+    {
+        Assert.Equal("main", ManifestUpdateService.TestingBranch);
+
+        var fallback = new LauncherManifest
+        {
+            Repo = new ManifestRepo { Owner = "Infomatictek", Name = "soulspirexi-launcher", Branch = "main" }
+        };
+        Assert.Equal("main", ManifestUpdateService.GetManifestBranch(fallback, UpdateChannel.Testing));
+
+        Assert.Equal(UpdateChannel.Stable, ManifestUpdateService.NormalizeUserFacingChannel(UpdateChannel.Stable));
+        Assert.Equal(UpdateChannel.Testing, ManifestUpdateService.NormalizeUserFacingChannel(UpdateChannel.Testing));
+        Assert.Equal(UpdateChannel.Testing, ManifestUpdateService.NormalizeUserFacingChannel(UpdateChannel.TestingCoreUi));
+        Assert.Equal(UpdateChannel.Testing, ManifestUpdateService.NormalizeUserFacingChannel(UpdateChannel.TestingRegistry24Hook));
+        Assert.Equal(UpdateChannel.Testing, ManifestUpdateService.NormalizeUserFacingChannel(UpdateChannel.TestingSearchLegacyText));
+        Assert.Equal(UpdateChannel.Testing, ManifestUpdateService.NormalizeUserFacingChannel(UpdateChannel.TestingSearchAlignedText));
+    }
+
+    [Fact]
+    public void SettingsService_Load_MigratesLegacyTestingChannelWithoutResettingOtherSettings()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), $"soulspire_chan_mig_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            var settingsPath = Path.Combine(tempDir, "settings.json");
+            var legacyJson = """
+            {
+              "UpdateChannel": 5,
+              "AshitaPath": "D:\\Soulspire\\Ashita",
+              "WindowWidth": 2560,
+              "WindowHeight": 1440,
+              "EnableAutomaticTestingQolSettings": true
+            }
+            """;
+            File.WriteAllText(settingsPath, legacyJson);
+
+            var svc = new SettingsService(settingsPath);
+            var loaded = svc.Load();
+
+            Assert.Equal(UpdateChannel.Testing, loaded.UpdateChannel);
+            Assert.Equal(@"D:\Soulspire\Ashita", loaded.AshitaPath);
+            Assert.Equal(2560, loaded.WindowWidth);
+            Assert.Equal(1440, loaded.WindowHeight);
+            Assert.True(loaded.EnableAutomaticTestingQolSettings);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
         }
     }
 }

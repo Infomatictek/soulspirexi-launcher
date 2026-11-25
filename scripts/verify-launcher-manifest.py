@@ -222,6 +222,7 @@ def verify_manifest(repo_root: Path, manifest_path: Path | None = None) -> list[
             "registry-24hook": "channels/testing-registry-24hook/payload/",
             "search-legacy-text": "channels/testing-search-legacy-text/payload/",
             "search-aligned-text": "channels/testing-search-aligned-text/payload/",
+            "core-ui-24hook": "channels/testing-core-ui/payload/",
         }
         allowed_testing_prefix = candidate_prefixes.get(candidate_id, "channels/testing/payload/")
         for src, (cat, tgt) in sorted(manifest_sources.items()):
@@ -417,7 +418,7 @@ def verify_manifest(repo_root: Path, manifest_path: Path | None = None) -> list[
             errors.append(
                 f"manifest.json registry.nativeDllSha256 ({reg_meta.get('nativeDllSha256')}) != {dll_entry.get('targetPath')} sha256 ({dll_entry.get('sha256')})"
             )
-        if declared_channel == "testing" and str(manifest.get("candidateId") or "").strip() in ("registry-24hook", "search-legacy-text", "search-aligned-text"):
+        if declared_channel == "testing" and str(manifest.get("candidateId") or "").strip() in ("registry-24hook", "search-legacy-text", "search-aligned-text", "core-ui-24hook"):
             prov_path = (manifest_path or (repo_root / "manifest.json")).parent / "crystaljobs-provenance.json"
             runtime_loader = False
             if prov_path.is_file():
@@ -450,6 +451,48 @@ def verify_manifest(repo_root: Path, manifest_path: Path | None = None) -> list[
                 errors.append(
                     f"manifest.json registry.nativeDllCompiledHash ({reg_meta.get('nativeDllCompiledHash')!r}) != dll_sync_state.json ({dll_state.get('compiledRegistryHash')!r})"
                 )
+
+    # 8. Verify client data cache manifest & package SHA-256 parity when cache is present
+    cache_dir = repo_root / "addons" / "ashita4" / "soulspire_core" / "cache"
+    cache_manifest_path = cache_dir / "manifest.json"
+    if cache_manifest_path.is_file():
+        try:
+            cache_m = json.loads(cache_manifest_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            errors.append(f"Invalid JSON in soulspire_core/cache/manifest.json: {exc}")
+            cache_m = None
+        if isinstance(cache_m, dict):
+            pkgs = cache_m.get("packages")
+            if not isinstance(pkgs, dict) or len(pkgs) == 0:
+                errors.append("soulspire_core/cache/manifest.json must declare a non-empty packages map")
+            else:
+                for pkg_name, pkg_info in sorted(pkgs.items()):
+                    fname = str((pkg_info or {}).get("file") or f"{pkg_name}.json")
+                    fpath = cache_dir / fname
+                    if not fpath.is_file():
+                        errors.append(f"Missing client cache package file: {fpath.relative_to(repo_root).as_posix()}")
+                        continue
+                    raw_pkg = fpath.read_bytes()
+                    actual_sha = hashlib.sha256(raw_pkg).hexdigest()
+                    if actual_sha != (pkg_info or {}).get("sha256") or len(raw_pkg) != (pkg_info or {}).get("size"):
+                        errors.append(
+                            f"Client cache integrity mismatch for {fname}: "
+                            f"cache/manifest.json != disk ({actual_sha[:12]}..., {len(raw_pkg)}B)"
+                        )
+                    rel_src = fpath.relative_to(repo_root).as_posix()
+                    if rel_src not in manifest_sources:
+                        errors.append(f"Client cache package missing from launcher manifest: {rel_src}")
+            cdc = manifest.get("clientDataCache")
+            if isinstance(cdc, dict):
+                disk_m_sha = hashlib.sha256(cache_manifest_path.read_bytes()).hexdigest()
+                if cdc.get("manifestSha256") != disk_m_sha:
+                    errors.append(
+                        f"manifest clientDataCache.manifestSha256 ({cdc.get('manifestSha256')}) != disk ({disk_m_sha})"
+                    )
+                if cdc.get("contentVersion") != cache_m.get("contentVersion"):
+                    errors.append(
+                        f"manifest clientDataCache.contentVersion ({cdc.get('contentVersion')}) != cache/manifest.json ({cache_m.get('contentVersion')})"
+                    )
 
     return errors
 

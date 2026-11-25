@@ -302,6 +302,162 @@ class TestingChannelPublishTests(unittest.TestCase):
             self.assertFalse((tmp_repo / "channels" / "testing-registry-24hook" / "manifest.json").exists())
             self.assertFalse((tmp_repo / "channels" / "testing" / "manifest.json").exists())
 
+    def test_core_ui_testing_channel_is_isolated_verified_and_preserves_stable(self) -> None:
+        stable_path = REPO_ROOT / "manifest.json"
+        core_manifest_path = REPO_ROOT / "channels" / "testing-core-ui" / "manifest.json"
+        self.assertTrue(core_manifest_path.is_file(), "Missing channels/testing-core-ui/manifest.json")
+
+        stable = json.loads(stable_path.read_text(encoding="utf-8"))
+        core = json.loads(core_manifest_path.read_text(encoding="utf-8"))
+
+        # Stable remains pinned to main; Core testing candidate is isolated on its feature branch
+        self.assertEqual(stable["channel"], "stable")
+        self.assertEqual(stable["repo"]["branch"], "main")
+        self.assertEqual(core["channel"], "testing")
+        self.assertEqual(core["candidateId"], "core-ui-24hook")
+        self.assertEqual(core["repo"]["branch"], "feat/client-data-cache-overhaul")
+        self.assertEqual(
+            core["repo"]["rawBaseUrl"],
+            "https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/feat/client-data-cache-overhaul",
+        )
+
+        # Verify all required Core, Cache, CharacterState, Soulforge, bespoke art, and native DLL files are included
+        targets = {f["targetPath"]: f for f in core["files"]}
+        for required_target in (
+            "soulspire_core/soulspire_core.lua",
+            "soulspire_core/core/foundations.lua",
+            "soulspire_core/core/registry.lua",
+            "soulspire_core/core/data_service.lua",
+            "soulspire_core/core/character_state.lua",
+            "soulspire_core/core/json.lua",
+            "soulspire_core/core/sha256.lua",
+            "soulspire_core/core/ipc.lua",
+            "soulspire_core/core/native_bridge.lua",
+            "soulspire_core/core/menu_bridge.lua",
+            "soulspire_core/core/input.lua",
+            "soulspire_core/core/mouse_lifecycle.lua",
+            "soulspire_core/core/focus.lua",
+            "soulspire_core/core/ui.lua",
+            "soulspire_core/cache/manifest.json",
+            "soulspire_core/cache/souls.json",
+            "soulspire_core/cache/weapon_skills.json",
+            "soulspire_core/cache/talents.json",
+            "soulspire_core/cache/abilities.json",
+            "soulspire_core/cache/equipment.json",
+            "soulspire_core/cache/ui_metadata.json",
+            "soulspire_core/modules/character.lua",
+            "soulspire_core/modules/weapon_mastery.lua",
+            "soulspire_core/modules/soul_talents.lua",
+            "soulspire_core/assets/soulspire_crest.png",
+            "soulspire_core/assets/soulforge_backdrop.png",
+            "soulspire_core/assets/soulforge_banner_bg.png",
+            "soulspire_core/assets/soulforge_chamber_center.png",
+            "soulspire_core/assets/character_chamber_bg.png",
+            "soulspire_core/ASSET_SPECIFICATION.md",
+            "soulspire_talents/soulforge_state.lua",
+            "soulspire_talents/soulforge_ui.lua",
+            "soulspire_talents/soulspire_talents.lua",
+            "soulspire_native.dll",
+        ):
+            self.assertIn(required_target, targets, f"Missing {required_target} in testing-core-ui manifest")
+
+        self.assertEqual(
+            targets["soulspire_native.dll"]["sourcePath"],
+            "channels/testing-core-ui/payload/plugins/ashita4/soulspire_native.dll",
+        )
+        self.assertNotIn("crystaljobs.dll", targets)
+        # Strict read-only SHA-256 verification on both Stable and Core Testing manifests
+        self.assertEqual([], verify_manifest.verify_manifest(REPO_ROOT, manifest_path=stable_path))
+        self.assertEqual([], verify_manifest.verify_manifest(REPO_ROOT, manifest_path=core_manifest_path))
+
+    def test_canonical_testing_enforces_main_branch_and_monotonic_semver(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="soulspire_gov_test_") as tmp:
+            tmp_repo = Path(tmp)
+            shutil.copytree(REPO_ROOT / "scripts", tmp_repo / "scripts")
+            stable_manifest = {
+                "schemaVersion": 1,
+                "channel": "stable",
+                "manifestVersion": "2.1.0",
+                "serverName": "SoulspireXI",
+                "defaultHost": "play.soulspirexi.com",
+                "useHairpin": False,
+                "ports": {"lobby": 54231, "auth": 54001, "search": 54002},
+                "repo": {
+                    "owner": "Infomatictek",
+                    "name": "soulspirexi-launcher",
+                    "branch": "main",
+                    "rawBaseUrl": "https://raw.githubusercontent.com/Infomatictek/soulspirexi-launcher/main",
+                },
+                "bootstrap": {},
+                "files": [],
+            }
+            (tmp_repo / "manifest.json").write_text(json.dumps(stable_manifest, indent=2) + "\n", encoding="utf-8")
+
+            # Feature branch MUST be rejected for canonical Testing
+            with self.assertRaisesRegex(ValueError, "non-main branch"):
+                publish_testing.build_testing_manifest(
+                    tmp_repo,
+                    crystaljobs_dll=None,
+                    build_info=None,
+                    manifest_version="2.2.2-testing.1",
+                    server_version="main",
+                    server_branch="main",
+                    server_commit="56f0dfd",
+                    server_image="soulspirexi/server:main",
+                    crystaljobs_hooks=32,
+                    testing_notes="Should fail",
+                    repo_branch="feat/ws8-infra-014-perf-diagnostics",
+                )
+
+            # Seed existing 2.2.2-testing.1 on main
+            publish_testing.build_testing_manifest(
+                tmp_repo,
+                crystaljobs_dll=None,
+                build_info=None,
+                manifest_version="2.2.2-testing.1",
+                server_version="main",
+                server_branch="main",
+                server_commit="56f0dfd",
+                server_image="soulspirexi/server:main",
+                crystaljobs_hooks=32,
+                testing_notes="Baseline",
+                repo_branch="main",
+            )
+
+            # Downgrade (2.2.0-testing.19 <= 2.2.2-testing.1) MUST be rejected
+            with self.assertRaisesRegex(ValueError, "non-monotonic"):
+                publish_testing.build_testing_manifest(
+                    tmp_repo,
+                    crystaljobs_dll=None,
+                    build_info=None,
+                    manifest_version="2.2.0-testing.19",
+                    server_version="main",
+                    server_branch="main",
+                    server_commit="989ca6e",
+                    server_image="soulspirexi/server:main",
+                    crystaljobs_hooks=32,
+                    testing_notes="Should fail downgrade",
+                    repo_branch="main",
+                )
+
+            # Strictly higher SemVer (2.2.2-testing.2 > 2.2.2-testing.1) MUST succeed
+            out = publish_testing.build_testing_manifest(
+                tmp_repo,
+                crystaljobs_dll=None,
+                build_info=None,
+                manifest_version="2.2.2-testing.2",
+                server_version="main",
+                server_branch="main",
+                server_commit="989ca6e",
+                server_image="soulspirexi/server:main",
+                crystaljobs_hooks=32,
+                testing_notes="Unified canonical payload",
+                repo_branch="main",
+            )
+            data = json.loads(out.read_text(encoding="utf-8"))
+            self.assertEqual(data["manifestVersion"], "2.2.2-testing.2")
+            self.assertEqual(data["repo"]["branch"], "main")
+
 
 if __name__ == "__main__":
     unittest.main()

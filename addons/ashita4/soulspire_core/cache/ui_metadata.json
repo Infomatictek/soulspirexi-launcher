@@ -1,0 +1,401 @@
+{
+  "assets": {
+    "crystalsocket": [
+      "crystalsocket/assets/aegistemplar.png",
+      "crystalsocket/assets/alphawarden.png",
+      "crystalsocket/assets/animist.png",
+      "crystalsocket/assets/azurebastion.png",
+      "crystalsocket/assets/berserker.png",
+      "crystalsocket/assets/bishop.png",
+      "crystalsocket/assets/blackbelt.png",
+      "crystalsocket/assets/bladewheel.png",
+      "crystalsocket/assets/buccaneer.png",
+      "crystalsocket/assets/celestial.png",
+      "crystalsocket/assets/chiweaver.png",
+      "crystalsocket/assets/commander.png",
+      "crystalsocket/assets/crimsonduelist.png",
+      "crystalsocket/assets/dreadnought.png",
+      "crystalsocket/assets/flintlock.png",
+      "crystalsocket/assets/gambler.png",
+      "crystalsocket/assets/gladiator.png",
+      "crystalsocket/assets/huntsman.png",
+      "crystalsocket/assets/imperialarcher.png",
+      "crystalsocket/assets/inquisitor.png",
+      "crystalsocket/assets/kagemusha.png",
+      "crystalsocket/assets/kurogane.png",
+      "crystalsocket/assets/lifebinder.png",
+      "crystalsocket/assets/magus.png",
+      "crystalsocket/assets/medic.png",
+      "crystalsocket/assets/miragesentinel.png",
+      "crystalsocket/assets/necromancer.png",
+      "crystalsocket/assets/pugilist.png",
+      "crystalsocket/assets/ronin.png",
+      "crystalsocket/assets/sage.png",
+      "crystalsocket/assets/sensei.png",
+      "crystalsocket/assets/spartan.png",
+      "crystalsocket/assets/spellblade.png",
+      "crystalsocket/assets/templar.png",
+      "crystalsocket/assets/vampire.png",
+      "crystalsocket/assets/vanguard.png",
+      "crystalsocket/assets/verdant.png",
+      "crystalsocket/assets/warlord.png",
+      "crystalsocket/assets/wyvernheart.png"
+    ],
+    "soulspire_core": [
+      "soulspire_core/assets/soulspire_crest.png"
+    ],
+    "soulspire_talents": [
+      "soulspire_talents/assets/background_main.png",
+      "soulspire_talents/assets/card_frame.png",
+      "soulspire_talents/assets/card_selected.png",
+      "soulspire_talents/assets/detail_art.png",
+      "soulspire_talents/assets/header_ornament.png",
+      "soulspire_talents/assets/hero_1.png",
+      "soulspire_talents/assets/hero_47.png",
+      "soulspire_talents/assets/hero_frame.png",
+      "soulspire_talents/assets/node_e_co_break.png",
+      "soulspire_talents/assets/node_e_co_edge.png",
+      "soulspire_talents/assets/node_e_co_flow.png",
+      "soulspire_talents/assets/node_e_co_focus.png",
+      "soulspire_talents/assets/node_e_co_force.png",
+      "soulspire_talents/assets/node_e_co_hits.png",
+      "soulspire_talents/assets/node_e_co_open.png",
+      "soulspire_talents/assets/node_e_co_storm.png",
+      "soulspire_talents/assets/node_e_co_tempo.png",
+      "soulspire_talents/assets/node_e_co_window.png",
+      "soulspire_talents/assets/node_e_sg_arcane.png",
+      "soulspire_talents/assets/node_e_sg_blood.png",
+      "soulspire_talents/assets/node_e_sg_control.png",
+      "soulspire_talents/assets/node_e_sg_eclipse.png",
+      "soulspire_talents/assets/node_e_sg_focus.png",
+      "soulspire_talents/assets/node_e_sg_force.png",
+      "soulspire_talents/assets/node_e_sg_hunger.png",
+      "soulspire_talents/assets/node_e_sg_mana.png",
+      "soulspire_talents/assets/node_e_sg_pressure.png",
+      "soulspire_talents/assets/node_e_sg_surge.png",
+      "soulspire_talents/assets/panel_browser.png",
+      "soulspire_talents/assets/panel_inspector.png",
+      "soulspire_talents/assets/stage_1.png",
+      "soulspire_talents/assets/stage_2.png",
+      "soulspire_talents/assets/stage_3.png",
+      "soulspire_talents/assets/stage_4.png",
+      "soulspire_talents/assets/stage_5.png",
+      "soulspire_talents/assets/tier_panel.png",
+      "soulspire_talents/assets/ws_1.png",
+      "soulspire_talents/assets/ws_47.png"
+    ]
+  },
+  "callings": [
+    {
+      "id": "vanguard",
+      "order": 1,
+      "roleFocus": "Frontline Presence & Guardianship",
+      "subtitle": "Unyielding protectors & frontline stalwarts",
+      "title": "Vanguard & Bastions"
+    },
+    {
+      "id": "strikers",
+      "order": 2,
+      "roleFocus": "Relentless Offense & Arcane Mastery",
+      "subtitle": "Relentless blades & arcane conduits",
+      "title": "Unbound Strikers"
+    },
+    {
+      "id": "tacticians",
+      "order": 3,
+      "roleFocus": "Harmony, Restoration & Command",
+      "subtitle": "Battlefield conductors & life-weavers",
+      "title": "Tacticians & Menders"
+    }
+  ],
+  "contentVersion": "2026.11.22-66-souls-approved+cf86aa59.59e26a02047c",
+  "entitiesVersion": "2026.11.22-phase4-complete",
+  "idLockStatus": "locked",
+  "minCoreSchemaVersion": 1,
+  "modules": [
+    {
+      "accent": "violet",
+      "cachePackages": [
+        "souls",
+        "ui_metadata"
+      ],
+      "id": "character",
+      "label": "Character",
+      "order": 10
+    },
+    {
+      "accent": "gold",
+      "cachePackages": [
+        "weapon_skills",
+        "talents",
+        "ui_metadata"
+      ],
+      "id": "weapon_mastery",
+      "label": "Weapon Mastery",
+      "order": 20
+    },
+    {
+      "accent": "cyan",
+      "cachePackages": [
+        "souls",
+        "weapon_skills",
+        "talents"
+      ],
+      "id": "soul_talents",
+      "label": "Soul Talents",
+      "order": 30
+    },
+    {
+      "accent": "cyan",
+      "cachePackages": [
+        "souls",
+        "abilities"
+      ],
+      "id": "abilities",
+      "label": "Abilities",
+      "order": 40
+    },
+    {
+      "accent": "gold",
+      "cachePackages": [
+        "souls",
+        "equipment"
+      ],
+      "id": "equipment",
+      "label": "Equipment",
+      "order": 50
+    },
+    {
+      "accent": "violet",
+      "cachePackages": [
+        "souls",
+        "ui_metadata"
+      ],
+      "id": "journal",
+      "label": "Journal",
+      "order": 60
+    }
+  ],
+  "packageId": "ui_metadata",
+  "registryHash": "cf86aa59ff8d16c6",
+  "registryVersion": "2026.11.22-66-souls-approved",
+  "schemaVersion": 1,
+  "skillFamilies": [
+    {
+      "id": -1,
+      "key": "equipped",
+      "name": "Equipped"
+    },
+    {
+      "id": 0,
+      "key": "all",
+      "name": "All Weapons"
+    },
+    {
+      "id": 1,
+      "key": "h2h",
+      "name": "Hand-to-Hand"
+    },
+    {
+      "id": 2,
+      "key": "dagger",
+      "name": "Dagger"
+    },
+    {
+      "id": 3,
+      "key": "sword",
+      "name": "Sword"
+    },
+    {
+      "id": 4,
+      "key": "great_sword",
+      "name": "Great Sword"
+    },
+    {
+      "id": 5,
+      "key": "axe",
+      "name": "Axe"
+    },
+    {
+      "id": 6,
+      "key": "great_axe",
+      "name": "Great Axe"
+    },
+    {
+      "id": 7,
+      "key": "scythe",
+      "name": "Scythe"
+    },
+    {
+      "id": 8,
+      "key": "polearm",
+      "name": "Polearm"
+    },
+    {
+      "id": 9,
+      "key": "katana",
+      "name": "Katana"
+    },
+    {
+      "id": 10,
+      "key": "great_katana",
+      "name": "Great Katana"
+    },
+    {
+      "id": 11,
+      "key": "club",
+      "name": "Club"
+    },
+    {
+      "id": 12,
+      "key": "staff",
+      "name": "Staff"
+    },
+    {
+      "id": 25,
+      "key": "archery",
+      "name": "Archery"
+    },
+    {
+      "id": 26,
+      "key": "marksmanship",
+      "name": "Marksmanship"
+    },
+    {
+      "id": 27,
+      "key": "throwing",
+      "name": "Throwing"
+    }
+  ],
+  "skillchainMeta": {
+    "properties": [
+      {
+        "id": 0,
+        "key": "none",
+        "level": 0,
+        "name": "None",
+        "short": "OFF"
+      },
+      {
+        "id": 1,
+        "key": "transfixion",
+        "level": 1,
+        "name": "Transfixion",
+        "short": "Trn"
+      },
+      {
+        "id": 2,
+        "key": "compression",
+        "level": 1,
+        "name": "Compression",
+        "short": "Cmp"
+      },
+      {
+        "id": 3,
+        "key": "liquefaction",
+        "level": 1,
+        "name": "Liquefaction",
+        "short": "Liq"
+      },
+      {
+        "id": 4,
+        "key": "scission",
+        "level": 1,
+        "name": "Scission",
+        "short": "Sci"
+      },
+      {
+        "id": 5,
+        "key": "reverberation",
+        "level": 1,
+        "name": "Reverberation",
+        "short": "Rev"
+      },
+      {
+        "id": 6,
+        "key": "detonation",
+        "level": 1,
+        "name": "Detonation",
+        "short": "Det"
+      },
+      {
+        "id": 7,
+        "key": "induration",
+        "level": 1,
+        "name": "Induration",
+        "short": "Ind"
+      },
+      {
+        "id": 8,
+        "key": "impaction",
+        "level": 1,
+        "name": "Impaction",
+        "short": "Imp"
+      },
+      {
+        "id": 9,
+        "key": "gravitation",
+        "level": 2,
+        "name": "Gravitation",
+        "short": "Grv"
+      },
+      {
+        "id": 10,
+        "key": "distortion",
+        "level": 2,
+        "name": "Distortion",
+        "short": "Dst"
+      },
+      {
+        "id": 11,
+        "key": "fusion",
+        "level": 2,
+        "name": "Fusion",
+        "short": "Fus"
+      },
+      {
+        "id": 12,
+        "key": "fragmentation",
+        "level": 2,
+        "name": "Fragmentation",
+        "short": "Frg"
+      },
+      {
+        "id": 13,
+        "key": "light",
+        "level": 3,
+        "name": "Light",
+        "short": "Lgt"
+      },
+      {
+        "id": 14,
+        "key": "darkness",
+        "level": 3,
+        "name": "Darkness",
+        "short": "Drk"
+      }
+    ],
+    "tiers": [
+      {
+        "label": "Lv1",
+        "name": "Primary SC",
+        "tier": 1
+      },
+      {
+        "label": "Lv1",
+        "name": "Secondary SC",
+        "tier": 2
+      },
+      {
+        "label": "Lv2",
+        "name": "Advanced SC",
+        "tier": 3
+      },
+      {
+        "label": "Lv3",
+        "name": "Final SC",
+        "tier": 4
+      }
+    ]
+  }
+}

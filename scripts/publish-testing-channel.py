@@ -10,6 +10,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -18,6 +19,93 @@ TEXT_LF_SUFFIXES = {
     ".lua", ".md", ".json", ".yml", ".yaml", ".py", ".cs", ".xaml",
     ".csproj", ".tsv", ".txt", ".csv", ".cfg", ".ini", ".conf",
 }
+
+TESTING_SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)-testing\.(\d+)$")
+
+
+def parse_testing_semver(version: str) -> tuple[int, int, int, int] | None:
+    m = TESTING_SEMVER_RE.match(version.strip())
+    if not m:
+        return None
+    return tuple(int(part) for part in m.groups())
+
+
+def validate_canonical_testing_governance(
+    repo_root: Path,
+    testing_dir: Path,
+    *,
+    manifest_version: str,
+    repo_branch: str | None,
+    allow_non_main_branch: bool = False,
+    allow_same_version: bool = False,
+) -> None:
+    """Enforce single authoritative Testing manifest governance:
+    - Canonical Testing must target `main` (prevents feature-branch manifest collisions).
+    - Canonical Testing manifest versions must be strictly monotonically increasing SemVer.
+    - No stale addon override for the render probe may exist under channels/testing/payload/addons/.
+    - Canonical probe Lua (when present) must include mandatory provenance fields.
+    """
+    effective_branch = (repo_branch or "main").strip()
+    if not allow_non_main_branch and effective_branch != "main":
+        raise ValueError(
+            f"Refusing to publish canonical Testing manifest from non-main branch {effective_branch!r}. "
+            "Merge changes into 'main' first so all Testing clients receive one unified canonical payload."
+        )
+
+    new_ver = parse_testing_semver(manifest_version)
+    if new_ver is None:
+        raise ValueError(
+            f"Canonical Testing manifestVersion {manifest_version!r} must match "
+            "'MAJOR.MINOR.PATCH-testing.N' (e.g. '2.2.2-testing.2')."
+        )
+
+    existing_manifest_path = testing_dir / "manifest.json"
+    if existing_manifest_path.is_file():
+        try:
+            existing_data = json.loads(existing_manifest_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            existing_data = None
+        if isinstance(existing_data, dict):
+            existing_ver_str = str(existing_data.get("manifestVersion") or "").strip()
+            existing_ver = parse_testing_semver(existing_ver_str)
+            if existing_ver is not None:
+                if allow_same_version:
+                    if new_ver < existing_ver:
+                        raise ValueError(
+                            f"Refusing non-monotonic Testing manifest version {manifest_version!r} "
+                            f"< existing {existing_ver_str!r}."
+                        )
+                elif new_ver <= existing_ver:
+                    raise ValueError(
+                        f"Refusing non-monotonic Testing manifest version {manifest_version!r} "
+                        f"<= existing {existing_ver_str!r}. Increment the testing revision."
+                    )
+
+    stale_probe_override = (
+        testing_dir
+        / "payload"
+        / "addons"
+        / "ashita4"
+        / "soulspire_core"
+        / "core"
+        / "weapon_render_probe.lua"
+    )
+    if stale_probe_override.exists():
+        raise ValueError(
+            f"Stale probe override detected at {stale_probe_override}. "
+            "Canonical Testing must inherit addons/ashita4/soulspire_core/core/weapon_render_probe.lua."
+        )
+
+    canonical_probe = (
+        repo_root / "addons" / "ashita4" / "soulspire_core" / "core" / "weapon_render_probe.lua"
+    )
+    if canonical_probe.is_file():
+        probe_text = canonical_probe.read_text(encoding="utf-8")
+        for required in ("M.PROBE_VERSION", '"captureId"', '"generatedAtUtc"', '"loadedLuaPath"'):
+            if required not in probe_text:
+                raise ValueError(
+                    f"Canonical weapon render probe is missing required provenance token: {required}"
+                )
 
 
 def sha256_file(path: Path) -> tuple[str, int]:
@@ -52,6 +140,8 @@ def build_testing_manifest(
     repo_branch: str | None = None,
     candidate: str = "default-27hook",
     provenance_json: Path | None = None,
+    allow_non_main_branch: bool = False,
+    allow_same_version: bool = False,
 ) -> Path:
     repo_root = repo_root.resolve()
     stable_manifest_path = repo_root / "manifest.json"
@@ -63,6 +153,7 @@ def build_testing_manifest(
         "registry-24hook": repo_root / "channels" / "testing-registry-24hook",
         "search-legacy-text": repo_root / "channels" / "testing-search-legacy-text",
         "search-aligned-text": repo_root / "channels" / "testing-search-aligned-text",
+        "core-ui-24hook": repo_root / "channels" / "testing-core-ui",
     }
     if candidate not in candidate_dirs:
         raise ValueError(f"Unknown Testing candidate {candidate!r}; expected one of {tuple(candidate_dirs)}")
@@ -73,6 +164,17 @@ def build_testing_manifest(
         )
 
     testing_dir = candidate_dirs[candidate]
+    if candidate == "default-27hook":
+        validate_canonical_testing_governance(
+            repo_root,
+            testing_dir,
+            manifest_version=manifest_version,
+            repo_branch=repo_branch,
+            allow_non_main_branch=allow_non_main_branch,
+            allow_same_version=allow_same_version,
+        )
+        if not repo_branch and not allow_non_main_branch:
+            repo_branch = "main"
     payload_root = testing_dir / "payload"
     payload_root.mkdir(parents=True, exist_ok=True)
 
@@ -105,7 +207,9 @@ def build_testing_manifest(
         staged_dll_sha, _ = sha256_file(dest_dll)
 
     if provenance_json is not None and provenance_json.is_file():
-        shutil.copy2(provenance_json, testing_dir / "crystaljobs-provenance.json")
+        dest_prov = testing_dir / "crystaljobs-provenance.json"
+        if provenance_json.resolve() != dest_prov.resolve():
+            shutil.copy2(provenance_json, dest_prov)
 
     stable_manifest = json.loads(stable_manifest_path.read_text(encoding="utf-8"))
     testing_manifest = copy.deepcopy(stable_manifest)
@@ -122,8 +226,29 @@ def build_testing_manifest(
         "crystalJobsHooks": crystaljobs_hooks,
         "notes": testing_notes,
     }
+    if candidate == "core-ui-24hook":
+        testing_manifest["stagingServer"] = {
+            "name": "SoulspireXI Staging",
+            "host": "192.168.86.117",
+            "useHairpin": False,
+            "localLoopbackHost": "127.0.0.1",
+            "ports": {
+                "auth": 55231,
+                "data": 55230,
+                "view": 55001,
+                "search": 55002,
+                "profile": 51221,
+                "profileIrc": 51241,
+                "map": 55230,
+            },
+            "notes": (
+                "Isolated SoulspireXI Staging server (+1000 alternate ports). "
+                "Managed in-process loopback TCP relay requires no administrator privileges "
+                "and never modifies Windows netsh portproxy rules."
+            ),
+        }
 
-    if candidate in ("registry-24hook", "search-legacy-text", "search-aligned-text"):
+    if candidate in ("registry-24hook", "search-legacy-text", "search-aligned-text", "core-ui-24hook"):
         reg_sync_path = repo_root / "registry_sync.json"
         reg_sync = json.loads(reg_sync_path.read_text(encoding="utf-8")) if reg_sync_path.is_file() else {}
         prov = json.loads(provenance_json.read_text(encoding="utf-8-sig")) if (provenance_json and provenance_json.is_file()) else {}
@@ -134,10 +259,12 @@ def build_testing_manifest(
             "nativeDllCompiledHash": str(prov.get("compiledRegistryHash") or reg_sync.get("registryHash") or ""),
             "nativeDllSha256": staged_dll_sha or str(prov.get("dllSha256") or ""),
             "nativeDllClientVerified": False,  # Never mark client-verified from CI alone
-            "crystalJobsHooks": 24,
+            "nativeHooks": crystaljobs_hooks,
+            "crystalJobsHooks": crystaljobs_hooks,
         }
     elif staged_dll_sha and isinstance(testing_manifest.get("registry"), dict):
         testing_manifest["registry"]["nativeDllSha256"] = staged_dll_sha
+        testing_manifest["registry"]["nativeDllClientVerified"] = False
         testing_manifest["registry"]["nativeHooks"] = crystaljobs_hooks
         testing_manifest["registry"]["crystalJobsHooks"] = crystaljobs_hooks
 
@@ -213,7 +340,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo-branch", default=None, help="Optional branch override for testing manifest rawBaseUrl")
     parser.add_argument(
         "--candidate",
-        choices=("default-27hook", "registry-24hook", "search-legacy-text", "search-aligned-text"),
+        choices=("default-27hook", "registry-24hook", "search-legacy-text", "search-aligned-text", "core-ui-24hook"),
         default="default-27hook",
         help="Explicit Testing candidate track (preserves 27-hook channel and isolates each 24-hook Search/Registry candidate).",
     )

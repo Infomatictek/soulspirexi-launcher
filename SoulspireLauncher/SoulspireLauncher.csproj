@@ -8,9 +8,9 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>SoulspireLauncher</AssemblyName>
     <RootNamespace>SoulspireLauncher</RootNamespace>
-    <Version>2.1.8</Version>
-    <FileVersion>2.1.8.0</FileVersion>
-    <AssemblyVersion>2.1.8.0</AssemblyVersion>
+    <Version>2.2.2</Version>
+    <FileVersion>2.2.2.0</FileVersion>
+    <AssemblyVersion>2.2.2.0</AssemblyVersion>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <AssemblyTitle>SoulspireXI Launcher</AssemblyTitle>
     <Product>SoulspireXI Launcher</Product>
@@ -26,6 +26,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="..\manifest.json" Link="Resources\manifest.json" />
+    <EmbeddedResource Include="..\keys\soulspire-launcher-release-v1.pub.pem" LogicalName="SoulspireLauncher.Resources.release-signing-public.pem" />
     <Resource Include="Assets\app.ico" />
     <Resource Include="Assets\app.png" />
   </ItemGroup>

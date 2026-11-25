@@ -40,7 +40,8 @@ class WeaponRenderProbeDeliveryTest(unittest.TestCase):
         text = PROBE_LUA.read_text(encoding="utf-8")
         testing_manifest = json.loads(TESTING_MANIFEST.read_text(encoding="utf-8"))
         testing_ver = testing_manifest.get("manifestVersion", "")
-        self.assertTrue(testing_ver.startswith("2.2.0-testing."), f"unexpected testing manifestVersion: {testing_ver}")
+        self.assertRegex(testing_ver, r"^2\.2\.\d+-testing\.\d+$", f"unexpected testing manifestVersion: {testing_ver}")
+        self.assertEqual(testing_manifest.get("repo", {}).get("branch"), "main")
 
         required_tokens = [
             "M.PROBE_VERSION",
@@ -65,9 +66,19 @@ class WeaponRenderProbeDeliveryTest(unittest.TestCase):
         for tok in required_tokens:
             self.assertIn(tok, text, f"weapon_render_probe.lua missing required token: {tok}")
 
-    def test_publish_testing_script_has_no_probe_override(self) -> None:
-        script_text = PUBLISH_TESTING_SCRIPT.read_text(encoding="utf-8")
-        self.assertNotIn("weapon_render_probe", script_text)
+    def test_testing_payload_has_no_stale_probe_override(self) -> None:
+        stale_override = (
+            REPO_ROOT
+            / "channels"
+            / "testing"
+            / "payload"
+            / "addons"
+            / "ashita4"
+            / "soulspire_core"
+            / "core"
+            / "weapon_render_probe.lua"
+        )
+        self.assertFalse(stale_override.exists(), "channels/testing/payload must not override weapon_render_probe.lua")
 
 
 if __name__ == "__main__":
