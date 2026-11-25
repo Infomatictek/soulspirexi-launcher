@@ -14,13 +14,25 @@
 
 local M = {}
 
-M.SCHEMA_VERSION        = 1
+M.SCHEMA_VERSION        = 2
 M.EXPECTED_TIMESTAMP    = 0x6AE818B4
 M.EXPECTED_IMAGE_SIZE   = 0x00C17000
 M.NORMALIZED_IMAGE_BASE = 0x10000000
 M.WINDOW_BEFORE         = 64
 M.WINDOW_AFTER          = 192
 M.MAX_MATCHES_PER_RULE  = 24
+M.MAX_SNAPSHOTS         = 12
+
+-- Accumulated in-memory comparative snapshots for the active developer session.
+local comparative_snapshots = {}
+
+function M.clear_snapshots()
+    comparative_snapshots = {}
+end
+
+function M.snapshot_count()
+    return #comparative_snapshots
+end
 
 -- Subset of already-verified layout.h RVAs (TS=0x6AE818B4) used strictly as
 -- read-only alignment anchors on the live loaded FFXiMain.dll `.text` section.
@@ -469,27 +481,125 @@ function M.scan_text_buffer(text_bytes, text_rva, pe_info, actor_summary, extra_
         }
     end
 
+    -- 2g. Targeted FTABLE model DAT resolver slice (0xC51C0..0xC5540) + direct callers.
+    do
+        local slice_start = 0xC51C0
+        local slice_len   = 0x380
+        local matches = {}
+        if slice_start >= text_rva and (slice_start + slice_len) <= text_end_rva then
+            local sbytes = {}
+            local s0 = (slice_start - text_rva) + 1
+            for p = s0, s0 + slice_len - 1 do
+                sbytes[#sbytes + 1] = text_bytes[p]
+            end
+            matches[#matches + 1] = {
+                rva              = string.format('0x%X', slice_start),
+                va_normalized    = string.format('0x%08X', M.NORMALIZED_IMAGE_BASE + slice_start),
+                window_start_rva = string.format('0x%X', slice_start),
+                window_len       = #sbytes,
+                code_hex         = bytes_to_hex(sbytes),
+            }
+        end
+        findings[#findings + 1] = {
+            id          = 'ftable_model_resolver_slice',
+            description = 'Full .text slice for FTABLE model DAT resolver 0xC51C0..0xC5540 (incl. 0xC5260..0xC5290)',
+            match_count = #matches,
+            matches     = matches,
+        }
+    end
+
+    -- 2h. Direct callers of FTABLE model DAT resolver 0xC51C0 and its sub-tables 0xC5260..0xC5290.
+    do
+        local targets = {
+            [0xC51C0] = true,
+            [0xC5260] = true,
+            [0xC5270] = true,
+            [0xC5280] = true,
+            [0xC5290] = true,
+        }
+        local matches = {}
+        for i = 1, text_len - 5 do
+            if #matches >= M.MAX_MATCHES_PER_RULE then break end
+            if text_bytes[i] == 0xE8 then
+                local rel = read_u32_le(text_bytes, i)
+                if rel then
+                    if rel >= 0x80000000 then rel = rel - 0x100000000 end
+                    local call_rva = text_rva + (i - 1)
+                    local dst = call_rva + 5 + rel
+                    if targets[dst] and (call_rva < 0xC51C0 or call_rva > 0xC5250) then
+                        matches[#matches + 1] = capture_window(call_rva)
+                    end
+                end
+            end
+        end
+        findings[#findings + 1] = {
+            id          = 'ftable_model_resolver_callers',
+            description = 'Direct callers of FTABLE model DAT resolver (0xC51C0 / 0xC5260..0xC5290)',
+            match_count = #matches,
+            matches     = matches,
+        }
+    end
+
+    -- 2i. CXiSkeletonActor weapon-mesh slot references (offsets 0x764 & 0x814) inside 0xC0000..0xE0000.
+    do
+        local matches = {}
+        local lo = math.max(1, (0xC0000 - text_rva) + 1)
+        local hi = math.min(text_len - 4, (0xE0000 - text_rva))
+        for i = lo, hi do
+            if #matches >= M.MAX_MATCHES_PER_RULE then break end
+            local b0, b1, b2, b3 = text_bytes[i], text_bytes[i + 1], text_bytes[i + 2], text_bytes[i + 3]
+            if (b0 == 0x64 and b1 == 0x07 and b2 == 0x00 and b3 == 0x00) or
+               (b0 == 0x14 and b1 == 0x08 and b2 == 0x00 and b3 == 0x00) then
+                matches[#matches + 1] = capture_window(text_rva + (i - 1))
+            end
+        end
+        findings[#findings + 1] = {
+            id          = 'actor_weapon_slot_764_814_refs',
+            description = 'CXiSkeletonActor .text references to sub-model offsets 0x764 / 0x814 (0xC0000..0xE0000)',
+            match_count = #matches,
+            matches     = matches,
+        }
+    end
+
     -- 3. Strictly non-PII numeric actor model summary (optional)
     local safe_actor = nil
     if type(actor_summary) == 'table' then
         safe_actor = {
             race_id        = tonumber(actor_summary.race_id) or 0,
+            look_face      = tonumber(actor_summary.look_face) or 0,
+            look_head      = tonumber(actor_summary.look_head) or 0,
+            look_body      = tonumber(actor_summary.look_body) or 0,
+            look_hands     = tonumber(actor_summary.look_hands) or 0,
+            look_legs      = tonumber(actor_summary.look_legs) or 0,
+            look_feet      = tonumber(actor_summary.look_feet) or 0,
             look_main      = tonumber(actor_summary.look_main) or 0,
             look_sub       = tonumber(actor_summary.look_sub) or 0,
+            look_ranged    = tonumber(actor_summary.look_ranged) or 0,
             status_id      = tonumber(actor_summary.status_id) or 0,
+            main_item_id   = tonumber(actor_summary.main_item_id) or 0,
+            main_skill     = tonumber(actor_summary.main_skill) or 0,
+            sub_item_id    = tonumber(actor_summary.sub_item_id) or 0,
+            sub_skill      = tonumber(actor_summary.sub_skill) or 0,
+            active_job     = tonumber(actor_summary.active_job) or 0,
+            active_branch  = tonumber(actor_summary.active_branch) or 0,
+            soul_known     = actor_summary.soul_known == true,
+            effective_level = tonumber(actor_summary.effective_level) or 0,
             has_render_ptr = actor_summary.has_render_ptr == true,
         }
     end
 
     return {
         schema_version        = M.SCHEMA_VERSION,
-        scope                 = 'narrow_text_code_windows_only_zero_pii',
+        scope                 = 'narrow_text_code_windows_and_non_pii_actor_comparative_diff',
         normalized_image_base = string.format('0x%08X', M.NORMALIZED_IMAGE_BASE),
         pe                    = pe_info,
         anchor_matched        = anchor_matched,
         anchor_total          = #anchors,
         anchors               = anchors,
         actor_model_summary   = safe_actor,
+        vtable_slot_rvas      = extra_opts.vtable_slot_rvas or {},
+        comparative_snapshots = extra_opts.comparative_snapshots or {},
+        comparative_diff      = extra_opts.comparative_diff or {},
         findings              = findings,
     }, nil
 end
@@ -524,14 +634,82 @@ function M.serialize_report_json(report)
         local ac = report.actor_model_summary
         lines[#lines + 1] = '  "actorModelSummary": {'
         lines[#lines + 1] = ('    "raceId": %d,'):format(ac.race_id)
+        lines[#lines + 1] = ('    "lookFace": %d,'):format(ac.look_face or 0)
+        lines[#lines + 1] = ('    "lookHead": %d,'):format(ac.look_head or 0)
+        lines[#lines + 1] = ('    "lookBody": %d,'):format(ac.look_body or 0)
+        lines[#lines + 1] = ('    "lookHands": %d,'):format(ac.look_hands or 0)
+        lines[#lines + 1] = ('    "lookLegs": %d,'):format(ac.look_legs or 0)
+        lines[#lines + 1] = ('    "lookFeet": %d,'):format(ac.look_feet or 0)
         lines[#lines + 1] = ('    "lookMain": %d,'):format(ac.look_main)
         lines[#lines + 1] = ('    "lookSub": %d,'):format(ac.look_sub)
+        lines[#lines + 1] = ('    "lookRanged": %d,'):format(ac.look_ranged or 0)
         lines[#lines + 1] = ('    "statusId": %d,'):format(ac.status_id)
+        lines[#lines + 1] = ('    "mainItemId": %d,'):format(ac.main_item_id or 0)
+        lines[#lines + 1] = ('    "mainSkill": %d,'):format(ac.main_skill or 0)
+        lines[#lines + 1] = ('    "subItemId": %d,'):format(ac.sub_item_id or 0)
+        lines[#lines + 1] = ('    "subSkill": %d,'):format(ac.sub_skill or 0)
+        lines[#lines + 1] = ('    "activeJob": %d,'):format(ac.active_job or 0)
+        lines[#lines + 1] = ('    "activeBranch": %d,'):format(ac.active_branch or 0)
+        lines[#lines + 1] = ('    "soulKnown": %s,'):format(ac.soul_known and 'true' or 'false')
+        lines[#lines + 1] = ('    "effectiveLevel": %d,'):format(ac.effective_level or 0)
         lines[#lines + 1] = ('    "hasRenderPtr": %s'):format(ac.has_render_ptr and 'true' or 'false')
         lines[#lines + 1] = '  },'
     else
         lines[#lines + 1] = '  "actorModelSummary": null,'
     end
+
+    -- Compact normalized vtable slot map (slots 0..95, code RVAs only)
+    local vslots = report.vtable_slot_rvas or {}
+    lines[#lines + 1] = '  "vtableSlotRvas": ['
+    for vi, vs in ipairs(vslots) do
+        local vcomma = (vi < #vslots) and ',' or ''
+        lines[#lines + 1] = ('    { "slot": %d, "offset": "0x%X", "rva": "%s" }%s'):format(
+            vs.slot, vs.slot * 4, json_escape(vs.rva), vcomma)
+    end
+    lines[#lines + 1] = '  ],'
+
+    -- Comparative labeled snapshots (zero PII, zero raw heap/ASLR pointers)
+    local snaps = report.comparative_snapshots or {}
+    lines[#lines + 1] = '  "comparativeSnapshots": ['
+    for si, sn in ipairs(snaps) do
+        lines[#lines + 1] = '    {'
+        lines[#lines + 1] = ('      "label": "%s",'):format(json_escape(sn.label))
+        local a = sn.actor or {}
+        lines[#lines + 1] = ('      "raceId": %d, "statusId": %d, "lookMain": %d, "lookSub": %d, "lookRanged": %d,'):format(
+            a.race_id or 0, a.status_id or 0, a.look_main or 0, a.look_sub or 0, a.look_ranged or 0)
+        lines[#lines + 1] = ('      "mainItemId": %d, "mainSkill": %d, "subItemId": %d, "subSkill": %d,'):format(
+            a.main_item_id or 0, a.main_skill or 0, a.sub_item_id or 0, a.sub_skill or 0)
+        lines[#lines + 1] = ('      "activeJob": %d, "activeBranch": %d, "soulKnown": %s, "effectiveLevel": %d,'):format(
+            a.active_job or 0, a.active_branch or 0, a.soul_known and 'true' or 'false', a.effective_level or 0)
+        local slots = sn.sub_model_slots or {}
+        lines[#lines + 1] = '      "subModelSlots": ['
+        for k, sm in ipairs(slots) do
+            local scomma = (k < #slots) and ',' or ''
+            local words_str = table.concat(sm.inner_u16 or {}, ',')
+            lines[#lines + 1] = ('        { "offset": "%s", "present": %s, "innerPresent": %s, "innerVtableRva": "%s", "innerU16": [%s] }%s'):format(
+                json_escape(sm.offset), sm.present and 'true' or 'false',
+                sm.inner_present and 'true' or 'false', json_escape(sm.inner_vtable_rva or ''),
+                words_str, scomma)
+        end
+        lines[#lines + 1] = '      ]'
+        local sncomma = (si < #snaps) and ',' or ''
+        lines[#lines + 1] = '    }' .. sncomma
+    end
+    lines[#lines + 1] = '  ],'
+
+    -- Automatic side-by-side diff of CXiSkeletonActor offsets (0x500..0xA00) across snapshots
+    local diffs = report.comparative_diff or {}
+    lines[#lines + 1] = '  "comparativeDiff": ['
+    for di, df in ipairs(diffs) do
+        local pairs_out = {}
+        for _, pair in ipairs(df.values or {}) do
+            pairs_out[#pairs_out + 1] = ('"%s": "%s"'):format(json_escape(pair.label), json_escape(pair.value))
+        end
+        local dcomma = (di < #diffs) and ',' or ''
+        lines[#lines + 1] = ('    { "offset": "%s", "values": { %s } }%s'):format(
+            json_escape(df.offset), table.concat(pairs_out, ', '), dcomma)
+    end
+    lines[#lines + 1] = '  ],'
 
     lines[#lines + 1] = '  "findings": ['
     local findings = report.findings or {}
@@ -556,6 +734,104 @@ function M.serialize_report_json(report)
     lines[#lines + 1] = '}'
     lines[#lines + 1] = ''
     return table.concat(lines, '\n')
+end
+
+-- Sanitize a bounded numeric slice of CXiSkeletonActor (offsets 0x500..0xA00)
+-- with STRICT zero-PII and zero-raw-pointer guarantees.
+function M.sanitize_actor_struct(actor_ptr, mem, module_base, image_size)
+    if not actor_ptr or actor_ptr == 0 or not mem or type(mem.read_uint32) ~= 'function' then
+        return {}, {}
+    end
+    local mod_lo = module_base or 0
+    local mod_hi = mod_lo + (image_size or 0)
+    local words = {}
+    for off = 0x500, 0x9FC, 4 do
+        local ok_r, val = pcall(mem.read_uint32, actor_ptr + off)
+        if ok_r and type(val) == 'number' then
+            if val == 0 then
+                words[off] = '0'
+            elseif val >= mod_lo and val < mod_hi then
+                words[off] = string.format('rva:0x%X', val - mod_lo)
+            elseif val <= 0xFFFF then
+                words[off] = string.format('u16:0x%04X', val)
+            elseif (val >= 0x38000000 and val <= 0x48000000) or (val >= 0xB8000000 and val <= 0xC8000000) then
+                words[off] = string.format('f32:0x%08X', val)
+            elseif val >= 0x01000000 and val < 0x7FFF0000 then
+                local tag = 'ptr:nonnull'
+                local ok_vt, vt = pcall(mem.read_uint32, val)
+                if ok_vt and type(vt) == 'number' and vt >= mod_lo and vt < mod_hi then
+                    tag = string.format('obj:vt=0x%X', vt - mod_lo)
+                end
+                words[off] = tag
+            else
+                words[off] = string.format('u32:0x%08X', val)
+            end
+        end
+    end
+
+    -- Inspect known sub-model handle slots (0x764, 0x814 from CXiSkeletonActor::0xD6370)
+    local sub_slots = {}
+    for _, slot_off in ipairs({ 0x764, 0x814 }) do
+        local rec = {
+            offset = string.format('0x%X', slot_off),
+            present = false,
+            inner_present = false,
+            inner_vtable_rva = '',
+            inner_u16 = {},
+        }
+        local ok_p, ptr = pcall(mem.read_uint32, actor_ptr + slot_off)
+        if ok_p and type(ptr) == 'number' and ptr >= 0x01000000 and ptr < 0x7FFF0000 then
+            rec.present = true
+            local ok_in, inner = pcall(mem.read_uint32, ptr)
+            if ok_in and type(inner) == 'number' and inner >= 0x01000000 and inner < 0x7FFF0000 then
+                rec.inner_present = true
+                local ok_vt, ivt = pcall(mem.read_uint32, inner)
+                if ok_vt and type(ivt) == 'number' and ivt >= mod_lo and ivt < mod_hi then
+                    rec.inner_vtable_rva = string.format('0x%X', ivt - mod_lo)
+                end
+                if type(mem.read_array) == 'function' then
+                    local ok_arr, raw = pcall(mem.read_array, inner, 64)
+                    if ok_arr and type(raw) == 'table' and #raw >= 32 then
+                        for w = 0, 15 do
+                            local u16 = (raw[w * 2 + 1] or 0) + (raw[w * 2 + 2] or 0) * 256
+                            rec.inner_u16[#rec.inner_u16 + 1] = u16
+                        end
+                    end
+                end
+            end
+        end
+        sub_slots[#sub_slots + 1] = rec
+    end
+    return words, sub_slots
+end
+
+-- Compute side-by-side diff of all sanitized CXiSkeletonActor offsets that differ across snapshots.
+function M.compute_comparative_diff(snapshots)
+    if type(snapshots) ~= 'table' or #snapshots < 2 then
+        return {}
+    end
+    local diffs = {}
+    for off = 0x500, 0x9FC, 4 do
+        local first = nil
+        local differs = false
+        local vals = {}
+        for _, sn in ipairs(snapshots) do
+            local v = (sn.words and sn.words[off]) or '0'
+            if first == nil then
+                first = v
+            elseif v ~= first then
+                differs = true
+            end
+            vals[#vals + 1] = { label = sn.label, value = v }
+        end
+        if differs then
+            diffs[#diffs + 1] = {
+                offset = string.format('0x%X', off),
+                values = vals,
+            }
+        end
+    end
+    return diffs
 end
 
 -- Run the live read-only probe inside Ashita v4.
@@ -616,12 +892,17 @@ function M.run_live_probe(opts)
     end
 
     local vtable_method_rvas = {}
+    local vtable_slot_rvas = {}
+    local actor_words = {}
+    local sub_model_slots = {}
     local actor_summary = opts.actor_summary
     if not actor_summary and AshitaCore and AshitaCore.GetMemoryManager then
         local ok_ent, summary = pcall(function()
             local mm = AshitaCore:GetMemoryManager()
             local party = mm:GetParty()
             local ent = mm:GetEntity()
+            local inv = mm:GetInventory()
+            local res = AshitaCore:GetResourceManager()
             local idx = party and party:GetMemberTargetIndex(0) or 0
             if not ent or not idx or idx == 0 then return nil end
             local function safe_get(fn_name)
@@ -634,34 +915,115 @@ function M.run_live_probe(opts)
                 local ok_vt, vtbl = pcall(mem.read_uint32, actor_ptr)
                 if ok_vt and type(vtbl) == 'number' and vtbl > base and vtbl < (base + pe_info.size_of_image) then
                     local seen = {}
-                    for slot = 0, 23 do
+                    for slot = 0, 95 do
                         local ok_fn, fn_va = pcall(mem.read_uint32, vtbl + slot * 4)
                         if ok_fn and type(fn_va) == 'number' and fn_va > base and fn_va < (base + pe_info.size_of_image) then
                             local rva = fn_va - base
-                            if not seen[rva] then
+                            vtable_slot_rvas[#vtable_slot_rvas + 1] = {
+                                slot = slot,
+                                rva = string.format('0x%X', rva),
+                            }
+                            if not seen[rva] and #vtable_method_rvas < 24 then
                                 seen[rva] = true
                                 vtable_method_rvas[#vtable_method_rvas + 1] = rva
                             end
                         end
                     end
                 end
+                actor_words, sub_model_slots = M.sanitize_actor_struct(actor_ptr, mem, base, pe_info.size_of_image)
             end
+
+            -- Strictly numeric equipped Main (slot 0) and Sub (slot 1) item ID & skill
+            local function read_equip_item(slot_idx)
+                if not inv or not res then return 0, 0 end
+                local ok_eq, eq = pcall(inv.GetEquippedItem, inv, slot_idx)
+                if not ok_eq or not eq or not eq.Index or eq.Index == 0 then return 0, 0 end
+                local cont = math.floor(eq.Index / 256)
+                local iidx = eq.Index % 256
+                if iidx == 0 then return 0, 0 end
+                local ok_ci, ci = pcall(inv.GetContainerItem, inv, cont, iidx)
+                if not ok_ci or not ci or not ci.Id or ci.Id == 0 then return 0, 0 end
+                local ok_ri, ri = pcall(res.GetItemById, res, ci.Id)
+                local sk = (ok_ri and ri and tonumber(ri.Skill)) or 0
+                return tonumber(ci.Id) or 0, sk
+            end
+            local main_id, main_sk = read_equip_item(0)
+            local sub_id, sub_sk = read_equip_item(1)
+
+            local active_job, active_branch, soul_known, eff_lvl = 0, 0, false, 0
+            local ok_nb, NativeBridge = pcall(require, 'core.native_bridge')
+            if ok_nb and NativeBridge and type(NativeBridge.query_equipment_runtime) == 'function' then
+                local ok_rt, rt = pcall(NativeBridge.query_equipment_runtime)
+                if ok_rt and type(rt) == 'table' then
+                    active_job = tonumber(rt.activeJob) or 0
+                    active_branch = tonumber(rt.activeBranch) or 0
+                    soul_known = rt.soulKnown == true
+                    eff_lvl = tonumber(rt.effectiveLevel) or 0
+                end
+            end
+
             return {
                 race_id        = safe_get('GetRace') or 0,
+                look_face      = safe_get('GetLookFace') or 0,
+                look_head      = safe_get('GetLookHead') or 0,
+                look_body      = safe_get('GetLookBody') or 0,
+                look_hands     = safe_get('GetLookHands') or 0,
+                look_legs      = safe_get('GetLookLegs') or 0,
+                look_feet      = safe_get('GetLookFeet') or 0,
                 look_main      = safe_get('GetLookMain') or safe_get('GetLookWeaponMain') or 0,
                 look_sub       = safe_get('GetLookSub') or safe_get('GetLookWeaponSub') or 0,
+                look_ranged    = safe_get('GetLookRanged') or 0,
                 status_id      = safe_get('GetStatus') or 0,
+                main_item_id   = main_id,
+                main_skill     = main_sk,
+                sub_item_id    = sub_id,
+                sub_skill      = sub_sk,
+                active_job     = active_job,
+                active_branch  = active_branch,
+                soul_known     = soul_known,
+                effective_level = eff_lvl,
                 has_render_ptr = actor_ptr ~= 0,
             }
         end)
         if ok_ent then actor_summary = summary end
     end
 
+    -- Record comparative snapshot (replace existing entry if same label is re-captured)
+    if type(opts.actor_words_override) == 'table' then
+        actor_words = opts.actor_words_override
+    end
+    local snap_label = (type(opts.label) == 'string' and opts.label ~= '')
+        and opts.label or ('snap_' .. tostring(#comparative_snapshots + 1))
+    local snap_entry = {
+        label = snap_label,
+        actor = actor_summary or {},
+        words = actor_words,
+        sub_model_slots = sub_model_slots,
+    }
+    local replaced = false
+    for i, existing in ipairs(comparative_snapshots) do
+        if existing.label == snap_label then
+            comparative_snapshots[i] = snap_entry
+            replaced = true
+            break
+        end
+    end
+    if not replaced then
+        if #comparative_snapshots >= M.MAX_SNAPSHOTS then
+            table.remove(comparative_snapshots, 1)
+        end
+        comparative_snapshots[#comparative_snapshots + 1] = snap_entry
+    end
+    local comp_diff = M.compute_comparative_diff(comparative_snapshots)
+
     local report, serr = M.scan_text_buffer(text_bytes, pe_info.text_rva, pe_info, actor_summary, {
-        rdata_bytes        = rdata_bytes,
-        rdata_rva          = pe_info.rdata_rva,
-        module_base        = base,
-        vtable_method_rvas = vtable_method_rvas,
+        rdata_bytes           = rdata_bytes,
+        rdata_rva             = pe_info.rdata_rva,
+        module_base           = base,
+        vtable_method_rvas    = vtable_method_rvas,
+        vtable_slot_rvas      = vtable_slot_rvas,
+        comparative_snapshots = comparative_snapshots,
+        comparative_diff      = comp_diff,
     })
     if not report then
         return false, serr
