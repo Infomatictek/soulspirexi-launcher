@@ -238,6 +238,11 @@ class NativeEquipmentHookTests(unittest.TestCase):
                 "SoulspireNativeGetMainMenuStatus",
                 "SoulspireNativeConsumeCoreOpenRequest",
             ])
+        if sync_hooks >= 32:
+            expected_exports.extend([
+                "SoulspireNativeSetLocalEquippedWeapons",
+                "SoulspireNativeUpsertPeerSoul",
+            ])
         self.assertEqual(len(exports), len(expected_exports), f"Expected {len(expected_exports)} PE exports, found {len(exports)}: {exports}")
         self.assertEqual(sorted(exports), sorted(expected_exports))
 

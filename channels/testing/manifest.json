@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.2.0-testing.11",
+  "manifestVersion": "2.2.0-testing.12",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
-    "version": "main (d6085d5)",
+    "version": "main (bc56df3)",
     "branch": "main",
-    "commit": "d6085d5",
-    "dockerImage": "soulspirexi/server:main-ws3-weap-002-d6085d5",
-    "crystalJobsHooks": 31,
-    "notes": "Testing channel build pairing verified 27-hook Soulspire Native (soulspire_native.dll) with server."
+    "commit": "bc56df3",
+    "dockerImage": "soulspirexi/server:main-ws3-weap-002-bc56df3",
+    "crystalJobsHooks": 32,
+    "notes": "WS3-WEAP-002: Verified 32-hook Soulspire Native (Hook #32 runtime PC Sub->Main FTABLE model namespace resolver + capability-aware compact_dual_axe server fallback)."
   },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
@@ -116,8 +116,8 @@
       "category": "plugin",
       "sourcePath": "channels/testing/payload/plugins/ashita4/soulspire_native.dll",
       "targetPath": "soulspire_native.dll",
-      "sha256": "c2fd15cb0a634ce12bde7d2d5b215d7f0638adaba513683fce157d26faab2226",
-      "size": 224256
+      "sha256": "86b9115976d2bc96b2a5c931df4f1043090a10f97e20eb7f7fef4a359907cfe1",
+      "size": 226304
     },
     {
       "category": "addon",
@@ -10036,10 +10036,10 @@
     "hash": "cf86aa59ff8d16c6",
     "idLockStatus": "locked",
     "nativeDllCompiledHash": "cf86aa59ff8d16c6",
-    "nativeDllSha256": "c2fd15cb0a634ce12bde7d2d5b215d7f0638adaba513683fce157d26faab2226",
+    "nativeDllSha256": "86b9115976d2bc96b2a5c931df4f1043090a10f97e20eb7f7fef4a359907cfe1",
     "nativeDllClientVerified": false,
-    "nativeHooks": 31,
-    "crystalJobsHooks": 31
+    "nativeHooks": 32,
+    "crystalJobsHooks": 32
   },
   "candidateId": "default-27hook"
 }
