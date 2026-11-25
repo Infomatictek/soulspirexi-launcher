@@ -6016,8 +6016,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/native_bridge.lua",
       "targetPath": "soulspire_core/core/native_bridge.lua",
-      "sha256": "df36aec4697d4955572d62b1e79197e26847f5c856d66a2b6c5378a0f614026a",
-      "size": 11221
+      "sha256": "c537a25a4e7fb1e812e0e213e3cf0b355c6d9c3e581b8a1410a9106e0215bc25",
+      "size": 14206
     },
     {
       "category": "addon",
@@ -6072,8 +6072,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/soulspire_core.lua",
       "targetPath": "soulspire_core/soulspire_core.lua",
-      "sha256": "69a5dd4bd322adeea6194d537a6a835c6558221a81550a7ff2638985f95bbd7e",
-      "size": 24490
+      "sha256": "05dd4a53c16bbc311bd7647794f694c68727304a086f8090270c4ee126ef7a8a",
+      "size": 25640
     },
     {
       "category": "addon",

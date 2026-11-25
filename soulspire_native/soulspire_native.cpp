@@ -137,7 +137,24 @@ static uintptr_t soul_sub_menu_skip_resume = 0;
 static uintptr_t soul_sub_2h_main_allow_resume = 0;
 static uintptr_t soul_sub_2h_main_deny_resume = 0;
 static uintptr_t soul_pc_sub_model_resume = 0;
+static std::atomic<uint32_t> pc_sub_model_calls{0};
 static std::atomic<uint32_t> pc_sub_model_remap_hits{0};
+static std::atomic<uint32_t> pc_sub_model_deny_disabled{0};
+static std::atomic<uint32_t> pc_sub_model_deny_zero_or_shield{0};
+static std::atomic<uint32_t> pc_sub_model_deny_actor_id{0};
+static std::atomic<uint32_t> pc_sub_model_deny_local_equip{0};
+static std::atomic<uint32_t> pc_sub_model_deny_fallback_84{0};
+static std::atomic<uint32_t> pc_sub_model_deny_auth{0};
+static std::atomic<uint32_t> pc_sub_model_last_actor_id{0};
+static std::atomic<uint32_t> pc_sub_model_last_local_char_id{0};
+static std::atomic<uint32_t> pc_sub_model_last_is_local{0};
+static std::atomic<uint32_t> pc_sub_model_last_look_word{0};
+static std::atomic<uint32_t> pc_sub_model_last_sub_model_id{0};
+static std::atomic<uint32_t> pc_sub_model_last_result_slot{7};
+static std::atomic<uint32_t> pc_sub_model_last_soul_known{0};
+static std::atomic<uint32_t> pc_sub_model_last_job{0};
+static std::atomic<uint32_t> pc_sub_model_last_branch{0};
+static std::atomic<uint32_t> pc_sub_model_last_eff_level{0};
 static std::atomic<uint32_t> local_equip_main_item_id{0};
 static std::atomic<uint32_t> local_equip_main_skill{0};
 static std::atomic<uint32_t> local_equip_sub_item_id{0};
@@ -1061,25 +1078,42 @@ static bool safe_read_actor_server_id(const uint8_t* actor, uint32_t& out_actor_
 }
 
 static uint32_t __stdcall soul_resolve_pc_sub_model_table_slot(const uint8_t* actor, uint32_t look_word) noexcept {
-    if (!module_enabled(SOULSPIRE_NATIVE_MOD_RENDERING)) return 7u;
-#if !defined(SOULSPIRE_NATIVE_SELFTEST) && !defined(CRYSTALJOBS_SELFTEST)
-    if (!enabled.load(std::memory_order_acquire)) return 7u;
-#endif
+    pc_sub_model_calls.fetch_add(1u, std::memory_order_relaxed);
     const uint16_t sub_model_id = static_cast<uint16_t>(look_word & 0x0FFFu);
+    pc_sub_model_last_look_word.store(look_word, std::memory_order_relaxed);
+    pc_sub_model_last_sub_model_id.store(sub_model_id, std::memory_order_relaxed);
+    pc_sub_model_last_result_slot.store(7u, std::memory_order_relaxed);
+
+    if (!module_enabled(SOULSPIRE_NATIVE_MOD_RENDERING)) {
+        pc_sub_model_deny_disabled.fetch_add(1u, std::memory_order_relaxed);
+        return 7u;
+    }
+#if !defined(SOULSPIRE_NATIVE_SELFTEST) && !defined(CRYSTALJOBS_SELFTEST)
+    if (!enabled.load(std::memory_order_acquire)) {
+        pc_sub_model_deny_disabled.fetch_add(1u, std::memory_order_relaxed);
+        return 7u;
+    }
+#endif
     if (sub_model_id == 0 || is_vanilla_shield_model_id(sub_model_id)) {
+        pc_sub_model_deny_zero_or_shield.fetch_add(1u, std::memory_order_relaxed);
         return 7u;
     }
 
     uint32_t actor_id = 0;
     if (!safe_read_actor_server_id(actor, actor_id)) {
+        pc_sub_model_deny_actor_id.fetch_add(1u, std::memory_order_relaxed);
+        pc_sub_model_last_actor_id.store(0u, std::memory_order_relaxed);
         return 7u;
     }
+    pc_sub_model_last_actor_id.store(actor_id, std::memory_order_relaxed);
 
     AcquireSRWLockShared(&state_lock);
     const uint32_t local_char_id = (transport.character != 0) ? transport.character : soul_override.character;
     ReleaseSRWLockShared(&state_lock);
+    pc_sub_model_last_local_char_id.store(local_char_id, std::memory_order_relaxed);
 
     const bool is_local = (local_char_id != 0 && actor_id == local_char_id);
+    pc_sub_model_last_is_local.store(is_local ? 1u : 0u, std::memory_order_relaxed);
     uint8_t job = 0, branch = 0;
     bool soul_known = false;
     uint8_t effective_level = 0;
@@ -1089,15 +1123,21 @@ static uint32_t __stdcall soul_resolve_pc_sub_model_table_slot(const uint8_t* ac
     if (is_local) {
         soul_known = active_action_soul(job, branch);
         effective_level = (main_lvl_slot != nullptr) ? *main_lvl_slot : 0u;
+        pc_sub_model_last_soul_known.store(soul_known ? 1u : 0u, std::memory_order_relaxed);
+        pc_sub_model_last_job.store(job, std::memory_order_relaxed);
+        pc_sub_model_last_branch.store(branch, std::memory_order_relaxed);
+        pc_sub_model_last_eff_level.store(effective_level, std::memory_order_relaxed);
         main_item_id = static_cast<uint16_t>(local_equip_main_item_id.load(std::memory_order_relaxed));
         main_skill   = static_cast<uint16_t>(local_equip_main_skill.load(std::memory_order_relaxed));
         sub_item_id  = static_cast<uint16_t>(local_equip_sub_item_id.load(std::memory_order_relaxed));
         sub_skill    = static_cast<uint16_t>(local_equip_sub_skill.load(std::memory_order_relaxed));
         if (main_skill == 0 || sub_skill == 0) {
+            pc_sub_model_deny_local_equip.fetch_add(1u, std::memory_order_relaxed);
             return 7u;
         }
         has_equipped_skills = true;
     } else if (sub_model_id == 84u) {
+        pc_sub_model_deny_fallback_84.fetch_add(1u, std::memory_order_relaxed);
         return 7u;
     }
 
@@ -1110,8 +1150,10 @@ static uint32_t __stdcall soul_resolve_pc_sub_model_table_slot(const uint8_t* ac
 
     if (remap) {
         pc_sub_model_remap_hits.fetch_add(1u, std::memory_order_relaxed);
+        pc_sub_model_last_result_slot.store(6u, std::memory_order_relaxed);
         return 6u;
     }
+    pc_sub_model_deny_auth.fetch_add(1u, std::memory_order_relaxed);
     return 7u;
 }
 
@@ -2766,6 +2808,47 @@ extern "C" uint32_t __stdcall SoulspireNativeGetMainMenuStatus(SoulspireNativeMa
 extern "C" uint32_t __stdcall SoulspireNativeConsumeCoreOpenRequest(void) {
     return g_commands_pending_open_requests.exchange(0u, std::memory_order_acq_rel);
 }
+
+extern "C" uint32_t __stdcall SoulspireNativeGetWeaponModelDiag(SoulspireNativeWeaponModelDiag* output, uint32_t size) {
+    if (output == nullptr || size < sizeof(SoulspireNativeWeaponModelDiag)) return 1;
+    SoulspireNativeWeaponModelDiag d{};
+    d.size                 = sizeof(SoulspireNativeWeaponModelDiag);
+    d.version              = 1u;
+    d.hook32_calls         = pc_sub_model_calls.load(std::memory_order_relaxed);
+    d.hook32_remaps        = pc_sub_model_remap_hits.load(std::memory_order_relaxed);
+    d.deny_disabled        = pc_sub_model_deny_disabled.load(std::memory_order_relaxed);
+    d.deny_zero_or_shield  = pc_sub_model_deny_zero_or_shield.load(std::memory_order_relaxed);
+    d.deny_actor_id        = pc_sub_model_deny_actor_id.load(std::memory_order_relaxed);
+    d.deny_local_equip     = pc_sub_model_deny_local_equip.load(std::memory_order_relaxed);
+    d.deny_fallback_84     = pc_sub_model_deny_fallback_84.load(std::memory_order_relaxed);
+    d.deny_auth            = pc_sub_model_deny_auth.load(std::memory_order_relaxed);
+    d.last_actor_id        = pc_sub_model_last_actor_id.load(std::memory_order_relaxed);
+    d.last_local_char_id   = pc_sub_model_last_local_char_id.load(std::memory_order_relaxed);
+    d.last_is_local        = pc_sub_model_last_is_local.load(std::memory_order_relaxed);
+    d.last_look_word       = pc_sub_model_last_look_word.load(std::memory_order_relaxed);
+    d.last_sub_model_id    = pc_sub_model_last_sub_model_id.load(std::memory_order_relaxed);
+    d.last_result_slot     = pc_sub_model_last_result_slot.load(std::memory_order_relaxed);
+    d.last_soul_known      = pc_sub_model_last_soul_known.load(std::memory_order_relaxed);
+    d.last_job             = pc_sub_model_last_job.load(std::memory_order_relaxed);
+    d.last_branch          = pc_sub_model_last_branch.load(std::memory_order_relaxed);
+    d.last_effective_level = pc_sub_model_last_eff_level.load(std::memory_order_relaxed);
+    const uint32_t m_id = local_equip_main_item_id.load(std::memory_order_relaxed) & 0xFFFFu;
+    const uint32_t m_sk = local_equip_main_skill.load(std::memory_order_relaxed) & 0xFFFFu;
+    const uint32_t s_id = local_equip_sub_item_id.load(std::memory_order_relaxed) & 0xFFFFu;
+    const uint32_t s_sk = local_equip_sub_skill.load(std::memory_order_relaxed) & 0xFFFFu;
+    d.local_main_packed = m_id | (m_sk << 16);
+    d.local_sub_packed  = s_id | (s_sk << 16);
+    AcquireSRWLockShared(&weapon_lock);
+    const uint32_t loaded_bit = weapon_presentation_mgr.loaded() ? 1u : 0u;
+    const uint32_t b_cnt = static_cast<uint32_t>(weapon_presentation_mgr.binding_count()) & 0xFFu;
+    const uint32_t p_cnt = static_cast<uint32_t>(weapon_presentation_mgr.profile_count()) & 0xFFu;
+    ReleaseSRWLockShared(&weapon_lock);
+    d.pres_summary_packed = loaded_bit | (b_cnt << 8) | (p_cnt << 16);
+    *output = d;
+    return 0;
+}
+
+static_assert(sizeof(SoulspireNativeWeaponModelDiag) == 92);
 
 static_assert(sizeof(SoulspireNativeStatus) == 68);
 static_assert(sizeof(SoulspireNativeActionEntry) == 288);

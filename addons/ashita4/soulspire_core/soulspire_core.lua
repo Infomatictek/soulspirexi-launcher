@@ -285,6 +285,20 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
                 tostring(eq_ok), tostring(cap_ok),
                 last_synced_equip.main_id, last_synced_equip.main_sk,
                 last_synced_equip.sub_id, last_synced_equip.sub_sk))
+            local wmd, wmd_err = NativeBridge.query_weapon_model_diag()
+            if wmd then
+                log(('Hook32 diag: calls=%d remaps=%d deny(dis=%d,sh=%d,aid=%d,eq=%d,f84=%d,auth=%d) last(aid=%u,lcid=%u,loc=%s,look=0x%04X,sub=%d->slot=%d) soul(known=%s,j=%d,b=%d,lvl=%d) nativeEq(m=%d/sk%d,s=%d/sk%d) pres(ld=%s,b=%d,p=%d)'):format(
+                    wmd.hook32_calls, wmd.hook32_remaps,
+                    wmd.deny_disabled, wmd.deny_zero_or_shield, wmd.deny_actor_id,
+                    wmd.deny_local_equip, wmd.deny_fallback_84, wmd.deny_auth,
+                    wmd.last_actor_id, wmd.last_local_char_id, tostring(wmd.last_is_local),
+                    wmd.last_look_word, wmd.last_sub_model_id, wmd.last_result_slot,
+                    tostring(wmd.last_soul_known), wmd.last_job, wmd.last_branch, wmd.last_effective_level,
+                    wmd.local_main_item_id, wmd.local_main_skill, wmd.local_sub_item_id, wmd.local_sub_skill,
+                    tostring(wmd.pres_loaded), wmd.pres_bindings, wmd.pres_profiles))
+            else
+                log('Hook32 diag unavailable: ' .. tostring(wmd_err))
+            end
             if AshitaCore and AshitaCore.GetChatManager then
                 local chat = AshitaCore:GetChatManager()
                 if chat and type(chat.QueueCommand) == 'function' then

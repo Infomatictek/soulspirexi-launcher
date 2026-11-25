@@ -276,6 +276,35 @@ typedef struct SoulspireNativeMainMenuStatus {
 uint32_t SOULSPIRE_NATIVE_CALL SoulspireNativeGetMainMenuStatus(SoulspireNativeMainMenuStatus* status, uint32_t size);
 uint32_t SOULSPIRE_NATIVE_CALL SoulspireNativeConsumeCoreOpenRequest(void);
 
+/* Consolidated Hook #32 (PC Sub->Main FTABLE model namespace resolver) runtime diagnostics. */
+typedef struct SoulspireNativeWeaponModelDiag {
+    uint32_t size;
+    uint32_t version;
+    uint32_t hook32_calls;
+    uint32_t hook32_remaps;
+    uint32_t deny_disabled;
+    uint32_t deny_zero_or_shield;
+    uint32_t deny_actor_id;
+    uint32_t deny_local_equip;
+    uint32_t deny_fallback_84;
+    uint32_t deny_auth;
+    uint32_t last_actor_id;
+    uint32_t last_local_char_id;
+    uint32_t last_is_local;
+    uint32_t last_look_word;
+    uint32_t last_sub_model_id;
+    uint32_t last_result_slot;
+    uint32_t last_soul_known;
+    uint32_t last_job;
+    uint32_t last_branch;
+    uint32_t last_effective_level;
+    uint32_t local_main_packed;     /* low16=item_id, high16=skill */
+    uint32_t local_sub_packed;      /* low16=item_id, high16=skill */
+    uint32_t pres_summary_packed;   /* bit0=loaded, bits8..15=bindings, bits16..23=profiles */
+} SoulspireNativeWeaponModelDiag;
+
+uint32_t SOULSPIRE_NATIVE_CALL SoulspireNativeGetWeaponModelDiag(SoulspireNativeWeaponModelDiag* diag, uint32_t size);
+
 #ifdef __cplusplus
 }
 #endif

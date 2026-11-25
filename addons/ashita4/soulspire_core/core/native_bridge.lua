@@ -5,7 +5,7 @@ local NativeBridge = {}
 NativeBridge.EXPECTED_ABI_VERSION = 2
 
 local ok_ffi, ffi = pcall(require, 'ffi')
-local iface_info_t, status_t, weapon_status_t, hook_diag_t, ident_diag_t, get_info_fn_t, set_u32x4_fn_t
+local iface_info_t, status_t, weapon_status_t, hook_diag_t, ident_diag_t, weapon_model_diag_t, get_info_fn_t, set_u32x4_fn_t
 local cache = { module = nil, addr = nil, fn = nil }
 
 NativeBridge.ABI_SIZES = {
@@ -14,6 +14,7 @@ NativeBridge.ABI_SIZES = {
     weapon_status = 36,
     hook_diag = 60,
     identity_diag = 216,
+    weapon_model_diag = 92,
 }
 
 if ok_ffi and ffi then
@@ -69,6 +70,18 @@ if ok_ffi and ffi then
     }[1]]=])
     if ok_id then ident_diag_t = t_id end
 
+    local ok_wmd, t_wmd = pcall(ffi.typeof, [=[struct {
+        uint32_t size, version;
+        uint32_t hook32_calls, hook32_remaps;
+        uint32_t deny_disabled, deny_zero_or_shield, deny_actor_id;
+        uint32_t deny_local_equip, deny_fallback_84, deny_auth;
+        uint32_t last_actor_id, last_local_char_id, last_is_local;
+        uint32_t last_look_word, last_sub_model_id, last_result_slot;
+        uint32_t last_soul_known, last_job, last_branch, last_effective_level;
+        uint32_t local_main_packed, local_sub_packed, pres_summary_packed;
+    }[1]]=])
+    if ok_wmd then weapon_model_diag_t = t_wmd end
+
     local ok2, t2 = pcall(ffi.typeof, 'uint32_t (__stdcall *)(void*, uint32_t)')
     if ok2 then get_info_fn_t = t2 end
     local ok3, t3 = pcall(ffi.typeof, 'uint32_t (__stdcall *)(uint32_t, uint32_t, uint32_t, uint32_t)')
@@ -83,6 +96,7 @@ function NativeBridge.verify_abi_sizes()
         { 'weapon_status', weapon_status_t, NativeBridge.ABI_SIZES.weapon_status },
         { 'hook_diag', hook_diag_t, NativeBridge.ABI_SIZES.hook_diag },
         { 'identity_diag', ident_diag_t, NativeBridge.ABI_SIZES.identity_diag },
+        { 'weapon_model_diag', weapon_model_diag_t, NativeBridge.ABI_SIZES.weapon_model_diag },
     }
     for _, c in ipairs(checks) do
         if not c[2] or ffi.sizeof(c[2]) ~= c[3] then
@@ -277,6 +291,50 @@ function NativeBridge.query_equipment_runtime()
     end
 
     return res
+end
+
+function NativeBridge.query_weapon_model_diag()
+    if not (ok_ffi and ffi and weapon_model_diag_t) then
+        return nil, 'FFI unavailable'
+    end
+    local ok_h, handle = pcall(function()
+        return ffi.C.GetModuleHandleA('soulspire_native.dll')
+    end)
+    if not ok_h or handle == nil then
+        return nil, 'soulspire_native.dll not loaded'
+    end
+    local d, err = call_struct_export(handle, 'SoulspireNativeGetWeaponModelDiag', weapon_model_diag_t)
+    if not d then return nil, err end
+    local mp = tonumber(d.local_main_packed) or 0
+    local sp = tonumber(d.local_sub_packed) or 0
+    local pp = tonumber(d.pres_summary_packed) or 0
+    return {
+        hook32_calls         = tonumber(d.hook32_calls) or 0,
+        hook32_remaps        = tonumber(d.hook32_remaps) or 0,
+        deny_disabled        = tonumber(d.deny_disabled) or 0,
+        deny_zero_or_shield  = tonumber(d.deny_zero_or_shield) or 0,
+        deny_actor_id        = tonumber(d.deny_actor_id) or 0,
+        deny_local_equip     = tonumber(d.deny_local_equip) or 0,
+        deny_fallback_84     = tonumber(d.deny_fallback_84) or 0,
+        deny_auth            = tonumber(d.deny_auth) or 0,
+        last_actor_id        = tonumber(d.last_actor_id) or 0,
+        last_local_char_id   = tonumber(d.last_local_char_id) or 0,
+        last_is_local        = (tonumber(d.last_is_local) or 0) == 1,
+        last_look_word       = tonumber(d.last_look_word) or 0,
+        last_sub_model_id    = tonumber(d.last_sub_model_id) or 0,
+        last_result_slot     = tonumber(d.last_result_slot) or 7,
+        last_soul_known      = (tonumber(d.last_soul_known) or 0) == 1,
+        last_job             = tonumber(d.last_job) or 0,
+        last_branch          = tonumber(d.last_branch) or 0,
+        last_effective_level = tonumber(d.last_effective_level) or 0,
+        local_main_item_id   = mp % 65536,
+        local_main_skill     = math.floor(mp / 65536),
+        local_sub_item_id    = sp % 65536,
+        local_sub_skill      = math.floor(sp / 65536),
+        pres_loaded          = (pp % 2) == 1,
+        pres_bindings        = math.floor(pp / 256) % 256,
+        pres_profiles        = math.floor(pp / 65536) % 256,
+    }, nil
 end
 
 return NativeBridge

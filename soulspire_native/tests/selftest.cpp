@@ -2023,6 +2023,12 @@ int main() {
     SoulspireNativeHookDiagnostics dll_diag{};
     assert(get_diag(&dll_diag, sizeof(dll_diag)) == 0 && dll_diag.expected_hooks == 32);
 
+    const auto get_wmd = reinterpret_cast<uint32_t(__stdcall*)(SoulspireNativeWeaponModelDiag*, uint32_t)>(
+        GetProcAddress(dll, "SoulspireNativeGetWeaponModelDiag"));
+    assert(get_wmd != nullptr);
+    SoulspireNativeWeaponModelDiag dll_wmd{};
+    assert(get_wmd(&dll_wmd, sizeof(dll_wmd)) == 0 && dll_wmd.size == sizeof(dll_wmd) && dll_wmd.version == 1u);
+
     const auto get_compat_diag = reinterpret_cast<uint32_t(__stdcall*)(CrystalJobsHookDiagnostics*, uint32_t)>(
         GetProcAddress(dll, "CrystalJobsGetHookDiagnostics"));
     CrystalJobsHookDiagnostics compat_diag{};

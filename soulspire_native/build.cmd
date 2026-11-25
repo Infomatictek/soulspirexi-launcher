@@ -62,6 +62,7 @@ if not "%VCVARS%"=="" (
         echo     SoulspireNativeGetInterfaceInfo=SoulspireNativeGetInterfaceInfo@8
         echo     SoulspireNativeGetMainMenuStatus=SoulspireNativeGetMainMenuStatus@8
         echo     SoulspireNativeConsumeCoreOpenRequest=SoulspireNativeConsumeCoreOpenRequest@0
+        echo     SoulspireNativeGetWeaponModelDiag=SoulspireNativeGetWeaponModelDiag@8
         echo     CrystalJobsInitialize=CrystalJobsInitialize@0
         echo     CrystalJobsShutdown=CrystalJobsShutdown@0
         echo     CrystalJobsGetStatus=CrystalJobsGetStatus@8
