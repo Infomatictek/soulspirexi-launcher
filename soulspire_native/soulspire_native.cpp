@@ -3231,6 +3231,7 @@ extern "C" uint32_t __stdcall SoulspireNativeGetWeaponModelDiag(SoulspireNativeW
 
 static_assert(sizeof(SoulspireNativeWeaponModelDiag) == 92);
 
+/* Dedicated WS3-WEAP-002 offhand bone attachment diagnostics export (unified dual-host + 32-hook build, 2.2.3-testing.3). */
 extern "C" uint32_t __stdcall SoulspireNativeGetWeaponOffhandDiag(SoulspireNativeWeaponOffhandDiag* output, uint32_t size) {
     if (output == nullptr || size < sizeof(SoulspireNativeWeaponOffhandDiag)) return 1;
     SoulspireNativeWeaponOffhandDiag d{};
