@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.2.2-testing.2",
+  "manifestVersion": "2.2.2-testing.3",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
     "version": "main (Stage 2A Perf + 32-Hook Berserker + Core UI)",
@@ -9,7 +9,7 @@
     "commit": "989ca6e",
     "dockerImage": "soulspirexi/server:main-ws3-weap-002-989ca6e",
     "crystalJobsHooks": 32,
-    "notes": "Unified canonical Testing payload: Stage 2A Performance Diagnostics, Testing QoL, Core UI & Soulforge, ECDSA self-updater, 32-hook Soulspire Native (Hook #32 + Commands Menu), centralized 66-Soul & weapon registry, Berserker dual Great Axe equipment/diagnostics, Flintlock, and v19 weapon render probe with mandatory provenance."
+    "notes": "Unified canonical Testing payload: Stage 2A Performance Diagnostics, Testing QoL, Core UI & Soulforge, ECDSA self-updater, 32-hook Soulspire Native + WS3-WEAP-002 native 1H 0x7F offhand bone attachment reuse for Sub Great Axe, centralized 66-Soul & weapon registry, Flintlock, and v19 weapon render probe."
   },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
@@ -116,8 +116,8 @@
       "category": "plugin",
       "sourcePath": "channels/testing/payload/plugins/ashita4/soulspire_native.dll",
       "targetPath": "soulspire_native.dll",
-      "sha256": "2944449c8d868e3a7218df4c9a8471803a8262a66b4c82ab36394c9e7023b5bb",
-      "size": 226816
+      "sha256": "b2bc4ceaf955b5ad563d3adbd6b3280493bbd677be7f6250474a33a9172acdb3",
+      "size": 231424
     },
     {
       "category": "addon",
@@ -6206,7 +6206,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/weapon_render_probe.lua",
       "targetPath": "soulspire_core/core/weapon_render_probe.lua",
-      "sha256": "6065e654ac706f731e0dd6179f43728eee8b27cc4b4e310c9e8f0296783a941d",
+      "sha256": "b686c54b467a5bda543ff324c470f2c215ede9bd77152805cb46a806a997e6bd",
       "size": 61092
     },
     {
@@ -10267,7 +10267,7 @@
     "hash": "cf86aa59ff8d16c6",
     "idLockStatus": "locked",
     "nativeDllCompiledHash": "cf86aa59ff8d16c6",
-    "nativeDllSha256": "2944449c8d868e3a7218df4c9a8471803a8262a66b4c82ab36394c9e7023b5bb",
+    "nativeDllSha256": "b2bc4ceaf955b5ad563d3adbd6b3280493bbd677be7f6250474a33a9172acdb3",
     "nativeDllClientVerified": false,
     "nativeHooks": 32,
     "crystalJobsHooks": 32
