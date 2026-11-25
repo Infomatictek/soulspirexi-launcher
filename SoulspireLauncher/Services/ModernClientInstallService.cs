@@ -362,6 +362,29 @@ public sealed class ModernClientInstallService
             }
         }
 
+        // 2b. Copy unified VanaCore-native Soulspire Core addon (Phase C, DEC-028) into compat\addons\vanacore\soulspire_core\
+        //     and seed its self-contained data/ directory with authoritative Soul Actions TSVs & 66-Soul identities.
+        var srcVanaCoreAddon = Path.Combine(ashitaDir, "addons", "vanacore", "soulspire_core");
+        if (Directory.Exists(srcVanaCoreAddon))
+        {
+            var destVanaCoreAddon = Path.Combine(compatDir, "addons", "vanacore", "soulspire_core");
+            copied += CopyDirectoryContents(srcVanaCoreAddon, destVanaCoreAddon, preserveExistingSettings: true);
+
+            var destDataDir = Path.Combine(destVanaCoreAddon, "data");
+            Directory.CreateDirectory(destDataDir);
+            var srcActionsData = Path.Combine(ashitaDir, "addons", "soulspire_soul_actions", "data");
+            if (Directory.Exists(srcActionsData))
+            {
+                copied += CopyDirectoryContents(srcActionsData, destDataDir);
+            }
+            var srcIdentities = Path.Combine(ashitaDir, "plugins", "data", "soul-identities.json");
+            if (File.Exists(srcIdentities))
+            {
+                File.Copy(srcIdentities, Path.Combine(destDataDir, "soul-identities.json"), overwrite: true);
+                copied++;
+            }
+        }
+
         // 3. Copy SoulspireXI Pivot DAT overlays into compat\pivot\
         foreach (var overlay in new[] { AshitaConfigGenerator.OverlayFolderName, AshitaConfigGenerator.FlintlockOverlayFolderName })
         {

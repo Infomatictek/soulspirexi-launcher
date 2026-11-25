@@ -309,22 +309,21 @@ public sealed class ModernClientIntegrationTests
             Assert.True(File.Exists(Path.Combine(compatDir, "addons", "ashita", "kazenoeye", "kazenoeye.lua")));
             Assert.Equal("native-stub", File.ReadAllText(Path.Combine(ashitaDir, "plugins", "soulspire_native.dll")));
 
-            // Verify Compat boot script loads kazenoeye before soulspire_core, loads soulspire_soulhud,
-            // and never loads standalone soulspire_talents (Soulforge stays unified inside soulspire_core).
+            // Verify Compat boot script loads unified VanaCore-native soulspire_core (Phase C, DEC-028)
+            // without loading legacy external soulspire_native.dll or standalone soulspire_talents.
             var bootSettings = new LauncherSettings
             {
                 AutoLoadCrystalSocketAddon = true,
                 AutoLoadKazenoeyeAddon = true,
                 AutoLoadSoulHudAddon = true,
-                AutoLoadTalentsAddon = true
+                AutoLoadTalentsAddon = true,
+                AutoLoadGearAddon = true
             };
             var boot = ModernClientConfigGenerator.BuildBootScriptContent(bootSettings, ClientEngineMode.ModernCompat);
-            Assert.Contains("/addon load kazenoeye ashita", boot);
-            Assert.Contains("/addon load soulspire_soulhud ashita", boot);
-            Assert.Contains("/addon load soulspire_core ashita", boot);
+            Assert.Contains("/addon load soulspire_core", boot);
+            Assert.DoesNotContain("/addon load soulspire_core ashita", boot);
             Assert.DoesNotContain("/addon load soulspire_talents", boot);
-            Assert.True(boot.IndexOf("/addon load kazenoeye ashita", StringComparison.Ordinal) <
-                        boot.IndexOf("/addon load soulspire_core ashita", StringComparison.Ordinal));
+            Assert.Contains("/addon load soulspire_gear ashita", boot);
         }
         finally
         {

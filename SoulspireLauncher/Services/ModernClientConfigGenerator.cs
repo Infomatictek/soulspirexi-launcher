@@ -184,34 +184,14 @@ public sealed class ModernClientConfigGenerator
             return sb.ToString();
         }
 
-        sb.AppendLine("# Modern — Soulspire Compatibility: VanaCore-native Soulspire engine ([soulspire] enabled=1) & addon boot script.");
+        sb.AppendLine("# Modern — Soulspire Compatibility: VanaCore-native Soulspire engine ([soulspire] enabled=1) & unified Phase C addon boot script.");
         sb.AppendLine("# Legacy external soulspire_native.dll is intentionally omitted so VanaCore's coordinated src/core/soulspire/ owns hooks (DEC-028).");
         sb.AppendLine("/wait 1");
-        if (settings.AutoLoadCrystalSocketAddon)
-        {
-            sb.AppendLine("/addon load crystalsocket ashita");
-        }
-        if (settings.AutoLoadKazenoeyeAddon)
-        {
-            sb.AppendLine("/addon load kazenoeye ashita");
-        }
-        if (settings.AutoLoadSoulHudAddon)
-        {
-            sb.AppendLine("/addon load soulspire_soulhud ashita");
-        }
-        if (settings.AutoLoadSoulHudAddon || settings.AutoLoadTalentsAddon)
-        {
-            sb.AppendLine("/addon load soulspire_core ashita");
-        }
-        if (settings.AutoLoadFlintlockAddon)
-        {
-            sb.AppendLine("/addon load soulspire_flintlock ashita");
-        }
+        sb.AppendLine("/addon load soulspire_core");
         if (settings.AutoLoadGearAddon)
         {
             sb.AppendLine("/addon load soulspire_gear ashita");
         }
-        sb.AppendLine("/addon load soulspire_soul_actions ashita");
         return sb.ToString();
     }
 

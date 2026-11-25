@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.2.0-testing.core-ui.7",
+  "manifestVersion": "2.2.3-testing.9",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
-    "version": "client_data_cache_overhaul (761260a / OXTL v2 + O(N) Precomp + Level Sync META)",
-    "branch": "client_data_cache_overhaul",
-    "commit": "761260a",
-    "dockerImage": "soulspirexi/server:stg-core-ui-761260a",
-    "crystalJobsHooks": 31,
-    "notes": "Soulforge Approved Visual Target + Balanced Mouse/Cursor Input Lifecycle Fix + Centralized Reactive CharacterState + Budgeted Incremental Cache Warmup + OXTL v2 Reliability paired with isolated Core UI staging (56xxx, stg-core-ui-761260a)."
+    "version": "main (Soulspire Native 27-hook)",
+    "branch": "main",
+    "commit": "HEAD",
+    "dockerImage": "soulspirexi/server:main",
+    "crystalJobsHooks": 27,
+    "notes": "Testing channel build pairing verified 27-hook Soulspire Native (soulspire_native.dll) with server."
   },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
@@ -6206,7 +6206,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/weapon_render_probe.lua",
       "targetPath": "soulspire_core/core/weapon_render_probe.lua",
-      "sha256": "aa72ff1900604d3a9f0409dfda37635e4c3ed1f35fa7369c03f9f9462e82cedd",
+      "sha256": "ce4b0d8029223de3a67478f865e062ea3449d0c829a2dbee636edf44d8dc4f15",
       "size": 61092
     },
     {
@@ -8236,8 +8236,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_talents/soulforge_state.lua",
       "targetPath": "soulspire_talents/soulforge_state.lua",
-      "sha256": "1232bae51a9fbcee4d1073035e158860cf605d07abb9eec0421f7dc15ac9be81",
-      "size": 69028
+      "sha256": "41d5315c9b4483ae7daf582837422e7af2d1c22699bf32029233091a64b9d7eb",
+      "size": 72372
     },
     {
       "category": "addon",
@@ -8266,6 +8266,76 @@
       "targetPath": "soulspire_talents/ws_registry_generated.lua",
       "sha256": "52609aefb0e4ed5fafed18a1d003188b8f1a8fcc10c575cccdbbb6b78c14d211",
       "size": 51156
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/core/actions.lua",
+      "targetPath": "vanacore/soulspire_core/core/actions.lua",
+      "sha256": "c41f12095919f8053673171ad4133136f577c402cfe8f4a002905a14ae2b1dd1",
+      "size": 7007
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/core/crystalsocket.lua",
+      "targetPath": "vanacore/soulspire_core/core/crystalsocket.lua",
+      "sha256": "0da78ed020b5ef61916fc02f259879801dcf6e70131ac5899279e86d541f24e4",
+      "size": 3152
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/core/flintlock.lua",
+      "targetPath": "vanacore/soulspire_core/core/flintlock.lua",
+      "sha256": "f4601f1f67e80d1ef2104a98cae0468d3de11bf4d97d55c55ab038b94398bf47",
+      "size": 1457
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/core/hud.lua",
+      "targetPath": "vanacore/soulspire_core/core/hud.lua",
+      "sha256": "cc2cd083dd23fec17d572d5200cc4cef53471855d2e6effdb5bc7dae0520ecf4",
+      "size": 2849
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/core/identity.lua",
+      "targetPath": "vanacore/soulspire_core/core/identity.lua",
+      "sha256": "0d7a05e507a65d9f9d17e67a7cd853877a4cd884038bd7613d3fb2ed293b7256",
+      "size": 4191
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/core/mob_status.lua",
+      "targetPath": "vanacore/soulspire_core/core/mob_status.lua",
+      "sha256": "fb9cb08227be6dc17aca4178ba6794088b43db513376d56675d996519edac936",
+      "size": 1060
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/core/soulforge.lua",
+      "targetPath": "vanacore/soulspire_core/core/soulforge.lua",
+      "sha256": "43cccdfe9975620a8790c1b253a1391f1f9c22ea25b5209c63935443c6e9b378",
+      "size": 16141
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/core/weapon_mastery.lua",
+      "targetPath": "vanacore/soulspire_core/core/weapon_mastery.lua",
+      "sha256": "66add4787ac581badb801d13e6ae64d5c9b6d5e6e648afcfb1e06078b2d917d4",
+      "size": 6228
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/soulspire_core.lua",
+      "targetPath": "vanacore/soulspire_core/soulspire_core.lua",
+      "sha256": "d5064cb6f8b7a78d47725834fcecdb2eb1e43ca59b760e2ab28751d56070b3cc",
+      "size": 10578
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/tests/test_soulforge_allocation.lua",
+      "targetPath": "vanacore/soulspire_core/tests/test_soulforge_allocation.lua",
+      "sha256": "97afdb3562bcc34a3843407c01c388f3abf7f82f1b18afdb8552ab59edf3b0d1",
+      "size": 2682
     }
   ],
   "news": [
@@ -10266,11 +10336,11 @@
     "version": "2026.11.22-66-souls-approved",
     "hash": "cf86aa59ff8d16c6",
     "idLockStatus": "locked",
-    "nativeDllCompiledHash": "0e3278fac7296cb3",
-    "nativeDllSha256": "65d0a72d55dc8a63b9793d1ef9b23b1cb31c897fe4eb768dc2fb28950e2702ef",
+    "nativeDllCompiledHash": "cf86aa59ff8d16c6",
+    "nativeDllSha256": "",
     "nativeDllClientVerified": false,
-    "nativeHooks": 31,
-    "crystalJobsHooks": 31
+    "nativeHooks": 27,
+    "crystalJobsHooks": 27
   },
   "clientDataCache": {
     "schemaVersion": 1,

@@ -100,14 +100,43 @@ class VanaCoreCompatibilityTests(unittest.TestCase):
         self.assertIn('"soulspire_soulhud"', mis)
         self.assertIn('"kazenoeye"', mis)
 
-        # 3. Compat boot script loads kazenoeye before soulspire_core, loads soulspire_soulhud, and never loads standalone soulspire_talents
+        # 3. Phase C Compat boot script loads unified VanaCore-native soulspire_core (zero Ashita shims for Core)
         mcg = (REPO_ROOT / "SoulspireLauncher" / "Services" / "ModernClientConfigGenerator.cs").read_text(encoding="utf-8")
-        self.assertIn("/addon load kazenoeye ashita", mcg)
-        self.assertIn("/addon load soulspire_soulhud ashita", mcg)
+        self.assertIn("/addon load soulspire_core", mcg)
+        self.assertNotIn("/addon load soulspire_core ashita", mcg)
         self.assertNotIn("/addon load soulspire_talents", mcg)
-        self.assertLess(mcg.index("/addon load kazenoeye ashita"), mcg.index("/addon load soulspire_core ashita"))
 
-        # 4. soulspire_core suppresses raw [OXMOB]| 0x017 transport frames so they never leak into player chat
+        # 4. Phase C unified VanaCore-native soulspire_core modules & Soulforge allocation fix
+        vc_root = REPO_ROOT / "addons" / "vanacore" / "soulspire_core"
+        for rel in [
+            "soulspire_core.lua",
+            "core/identity.lua",
+            "core/actions.lua",
+            "core/hud.lua",
+            "core/soulforge.lua",
+            "core/weapon_mastery.lua",
+            "core/crystalsocket.lua",
+            "core/flintlock.lua",
+            "core/mob_status.lua",
+        ]:
+            self.assertTrue((vc_root / rel).is_file(), f"Missing Phase C module: {rel}")
+
+        vc_core = (vc_root / "soulspire_core.lua").read_text(encoding="utf-8")
+        self.assertIn("vana.gameui.add", vc_core)
+        self.assertIn("vana.gamepad.nav", vc_core)
+        self.assertIn("vana.soulspire", vc_core)
+
+        vc_sf = (vc_root / "core" / "soulforge.lua").read_text(encoding="utf-8")
+        self.assertIn("resolve_node_idx", vc_sf)
+        self.assertIn("PENDING_TIMEOUT_SEC", vc_sf)
+        self.assertIn("vana.packets.inject", vc_sf)
+
+        # 5. Classic fallback soulforge_state.lua also receives the WS talent allocation & pendingOp timeout fix
+        sf_state = (REPO_ROOT / "addons" / "ashita4" / "soulspire_talents" / "soulforge_state.lua").read_text(encoding="utf-8")
+        self.assertIn("resolveServerNodeIndex", sf_state)
+        self.assertIn("pending_op_timeout", sf_state)
+
+        # 6. soulspire_core (Ashita fallback) suppresses raw [OXMOB]| 0x017 transport frames
         core = (REPO_ROOT / "addons" / "ashita4" / "soulspire_core" / "soulspire_core.lua").read_text(encoding="utf-8")
         self.assertIn("'[OXMOB]|'", core)
 

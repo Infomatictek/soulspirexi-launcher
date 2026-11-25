@@ -63,6 +63,7 @@ def expected_client_files(repo_root: Path) -> dict[str, tuple[str, str]]:
         ("dat", repo_root / "dat-overlay" / "ROM", repo_root / "dat-overlay"),
         ("plugin", repo_root / "plugins" / "ashita4", repo_root / "plugins" / "ashita4"),
         ("addon", repo_root / "addons" / "ashita4", repo_root / "addons" / "ashita4"),
+        ("addon", repo_root / "addons" / "vanacore", repo_root / "addons"),
     ]
     for category, scan_root, target_base in roots:
         if not scan_root.exists():

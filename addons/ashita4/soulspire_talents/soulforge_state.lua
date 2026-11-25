@@ -411,6 +411,14 @@ function M.new(opts)
         if type(sendFn) == 'function' then
             return sendFn(M.PACKET_C2S_ID, bytes, op, wsId, arg1, arg2)
         end
+        if type(vana) == 'table' and vana.packets and type(vana.packets.inject) == 'function' then
+            local chars = {}
+            for i = 1, #bytes do
+                chars[i] = string.char(bytes[i] % 256)
+            end
+            vana.packets.inject(false, M.PACKET_C2S_ID, table.concat(chars))
+            return true
+        end
         if AshitaCore and AshitaCore.GetPacketManager then
             local pm = AshitaCore:GetPacketManager()
             if pm and pm.AddOutgoingPacket then
@@ -705,8 +713,35 @@ function M.new(opts)
         end
     end
 
+    local function resolveServerNodeIndex(wsId, node)
+        if type(node) ~= 'table' then return 0 end
+        local idx = tonumber(node.idx) or 0
+        if idx >= 1 then return idx end
+        local detail = state.wsDetail
+        if (not detail or detail.id ~= wsId) and state.wsDetailsById then
+            detail = state.wsDetailsById[wsId]
+        end
+        if detail and type(detail.nodes) == 'table' then
+            for i, n in ipairs(detail.nodes) do
+                if n == node or (node.key ~= nil and n.key == node.key) then
+                    return tonumber(n.idx) or i
+                end
+            end
+        end
+        return tonumber(node.slot) or 0
+    end
+
     local function investNode(wsId, node)
         if not wsId or not node or isPendingActive() then return false end
+        local nodeIdx = resolveServerNodeIndex(wsId, node)
+        if nodeIdx < 1 then
+            state.rejectedNodeKey = node.key
+            state.rejectedMsg = 'Unable to resolve server talent node index; resyncing...'
+            state.rejectedAt = clockFn()
+            setStatus(state.rejectedMsg)
+            requestWS(wsId, true, true)
+            return false
+        end
         state.inspectedNodeKey = node.key
         state.rejectedNodeKey = nil
         state.rejectedMsg = nil
@@ -714,17 +749,34 @@ function M.new(opts)
             kind    = 'invest',
             wsId    = wsId,
             nodeKey = node.key,
-            nodeIdx = node.idx or 0,
+            nodeIdx = nodeIdx,
             sentAt  = clockFn(),
         }
         setStatus('Forging ' .. tostring(node.name or node.key) .. '...')
         local compactFlag = isCompactEnabled() and 1 or 0
-        sendTalentPacket(M.OP_INVEST, wsId, node.idx or 0, compactFlag)
+        local sent = sendTalentPacket(M.OP_INVEST, wsId, nodeIdx, compactFlag)
+        if not sent then
+            state.pendingOp = nil
+            state.rejectedNodeKey = node.key
+            state.rejectedMsg = 'Packet transport unavailable for talent allocation.'
+            state.rejectedAt = clockFn()
+            setStatus(state.rejectedMsg)
+            return false
+        end
         return true
     end
 
     local function refundNode(wsId, node)
         if not wsId or not node or isPendingActive() then return false end
+        local nodeIdx = resolveServerNodeIndex(wsId, node)
+        if nodeIdx < 1 then
+            state.rejectedNodeKey = node.key
+            state.rejectedMsg = 'Unable to resolve server talent node index; resyncing...'
+            state.rejectedAt = clockFn()
+            setStatus(state.rejectedMsg)
+            requestWS(wsId, true, true)
+            return false
+        end
         state.inspectedNodeKey = node.key
         state.rejectedNodeKey = nil
         state.rejectedMsg = nil
@@ -732,12 +784,20 @@ function M.new(opts)
             kind    = 'refund',
             wsId    = wsId,
             nodeKey = node.key,
-            nodeIdx = node.idx or 0,
+            nodeIdx = nodeIdx,
             sentAt  = clockFn(),
         }
         setStatus('Refunding ' .. tostring(node.name or node.key) .. '...')
         local compactFlag = isCompactEnabled() and 1 or 0
-        sendTalentPacket(M.OP_REFUND, wsId, node.idx or 0, compactFlag)
+        local sent = sendTalentPacket(M.OP_REFUND, wsId, nodeIdx, compactFlag)
+        if not sent then
+            state.pendingOp = nil
+            state.rejectedNodeKey = node.key
+            state.rejectedMsg = 'Packet transport unavailable for talent refund.'
+            state.rejectedAt = clockFn()
+            setStatus(state.rejectedMsg)
+            return false
+        end
         return true
     end
 
@@ -1026,6 +1086,25 @@ function M.new(opts)
                     end
                     setStatus(state.wsError)
                 end
+            end
+        end
+
+        -- 3. Expire stale pendingOp mutations so UI never stalls silently after a dropped/unanswered invest
+        local po = state.pendingOp
+        if po and (t - (po.sentAt or 0)) >= M.REQUEST_TIMEOUT_SEC then
+            local timedOut = po
+            state.pendingOp = nil
+            completePendingMutation(timedOut, 'timeout')
+            state.rejectedNodeKey = timedOut.nodeKey
+            state.rejectedMsg = 'Talent update timed out waiting for server; resyncing...'
+            state.rejectedAt = t
+            if dataService then
+                dataService:record_metric('timeouts', 1)
+                dataService:record_event('oxtl', 'pending_op_timeout', tostring(timedOut.kind) .. ' ws=' .. tostring(timedOut.wsId))
+            end
+            setStatus(state.rejectedMsg)
+            if timedOut.wsId and timedOut.wsId > 0 then
+                requestWS(timedOut.wsId, true, true)
             end
         end
     end

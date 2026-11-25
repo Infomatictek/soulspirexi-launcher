@@ -136,6 +136,25 @@ def main(argv: list[str] | None = None) -> int:
                 }
             )
 
+    vanacore_addons_root = repo_root / "addons" / "vanacore"
+    if vanacore_addons_root.exists():
+        for file_path in sorted(
+            (p for p in vanacore_addons_root.rglob("*") if p.is_file()),
+            key=lambda p: p.relative_to(repo_root).as_posix().lower(),
+        ):
+            rel_repo = file_path.relative_to(repo_root).as_posix()
+            rel_addon = "vanacore/" + file_path.relative_to(vanacore_addons_root).as_posix()
+            digest, size = sha256_file(file_path)
+            entries.append(
+                {
+                    "category": "addon",
+                    "sourcePath": rel_repo,
+                    "targetPath": rel_addon,
+                    "sha256": digest,
+                    "size": size,
+                }
+            )
+
     manifest["files"] = entries
 
     optional_overlays: list[dict[str, object]] = []
