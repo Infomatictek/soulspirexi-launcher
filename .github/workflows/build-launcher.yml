@@ -545,6 +545,65 @@ jobs:
           git commit -m "chore(soulspire-native): sync CI-verified 32-hook soulspire_native.dll"
           git push origin "HEAD:${{ github.ref_name }}"
 
+  sync-testing-native-binary:
+    needs: [verify-manifest, build-and-test, build-soulspire-native]
+    if: github.ref == 'refs/heads/feat/client-modern-001-vanacore-compat' && !startsWith(github.event.head_commit.message, 'chore(testing-native):')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Download verified Windows x86 soulspire-native-win-x86 artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: soulspire-native-win-x86
+          path: ci-native
+
+      - name: Sync dual-host soulspire_native.dll into Testing channel ONLY (Stable untouched)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/publish-testing-channel.py \
+            --native-dll ci-native/plugins/ashita4/soulspire_native.dll \
+            --build-info ci-native/soulspire_native-build-info.txt \
+            --provenance-json ci-native/soulspire_native-provenance.json \
+            --modern-client-json channels/testing/modern-client.json \
+            --manifest-version "2.2.3-testing.1" \
+            --server-version "main (Stage 2A Perf + 32-Hook Dual-Host Native + Opt-In Modern VanaCore)" \
+            --server-branch "main" \
+            --server-commit "989ca6e" \
+            --server-image "soulspirexi/server:main-ws3-weap-002-989ca6e" \
+            --repo-branch "main" \
+            --native-hooks 32 \
+            --notes "Unified canonical Testing payload (2.2.3-testing.1): Stage 2A Perf, Testing QoL, Core UI & Soulforge, ECDSA self-updater, dual-host 32-hook Soulspire Native (Ashita + VanaCore), v19 weapon render probe, and opt-in experimental Modern (VanaCore Baseline & Soulspire Compatibility) client engine."
+          python scripts/verify-launcher-manifest.py --manifest channels/testing/manifest.json
+          # Guarantee Stable manifest.json and Stable plugins/ashita4/soulspire_native.dll are NEVER modified!
+          git diff --exit-code manifest.json plugins/ashita4/soulspire_native.dll
+
+      - name: Commit and push synced Testing-only dual-host soulspire_native.dll
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add channels/testing/payload/plugins/ashita4/soulspire_native.dll channels/testing/manifest.json channels/testing/crystaljobs-provenance.json
+          if git diff --cached --quiet; then
+            echo "No Testing-channel binary/manifest changes to commit."
+            exit 0
+          fi
+          git commit -m "chore(testing-native): sync CI-verified dual-host 32-hook soulspire_native.dll for 2.2.3-testing.1"
+          git push origin "HEAD:${{ github.ref_name }}"
+
   publish-release:
     needs: [verify-manifest, build-and-test, build-soulspire-native]
     concurrency:

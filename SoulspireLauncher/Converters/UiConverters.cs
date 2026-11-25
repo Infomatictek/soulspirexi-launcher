@@ -155,6 +155,22 @@ public sealed class StagingLaneToLabelConverter : IValueConverter
         throw new NotSupportedException();
 }
 
+public sealed class ClientEngineToLabelConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is ClientEngineMode mode
+            ? mode switch
+            {
+                ClientEngineMode.ModernBaseline => "Modern — VanaCore Baseline (Experimental)",
+                ClientEngineMode.ModernCompat => "Modern — Soulspire Compatibility (Experimental)",
+                _ => "Classic — Ashita v4 (Default)"
+            }
+            : value?.ToString() ?? string.Empty;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
 public sealed class BoolToStagingBorderBrushConverter : IValueConverter
 {
     private static readonly Brush StagingBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F59E0B"));

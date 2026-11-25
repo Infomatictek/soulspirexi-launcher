@@ -5,7 +5,8 @@ namespace SoulspireLauncher.Models;
 public enum ClientEngineMode
 {
     Classic = 0,
-    Modern = 1
+    ModernBaseline = 1,
+    ModernCompat = 2
 }
 
 public enum WindowModeOption

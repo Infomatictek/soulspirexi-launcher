@@ -405,12 +405,50 @@ public sealed class ManifestUpdateService
 
         // Stable channel must never distribute an unverified Modern (VanaCore) client descriptor,
         // even if the manifest omits the legacy registry metadata block.
-        if (requestedChannel == UpdateChannel.Stable &&
-            manifest.ModernClient is not null &&
-            !manifest.ModernClient.ClientVerified)
+        if (manifest.ModernClient is not null)
         {
-            error = "Refusing Stable manifest: modernClient is not marked client-verified (modernClient.clientVerified=false). Modern (VanaCore) remains opt-in on Testing until runtime certification completes.";
-            return false;
+            if (requestedChannel == UpdateChannel.Stable)
+            {
+                var unverifiedTop = !manifest.ModernClient.ClientVerified;
+                var unverifiedBaseline = manifest.ModernClient.Baseline is not null && !manifest.ModernClient.Baseline.ClientVerified;
+                var unverifiedCompat = manifest.ModernClient.Compat is not null && !manifest.ModernClient.Compat.ClientVerified;
+                if (unverifiedTop || unverifiedBaseline || unverifiedCompat)
+                {
+                    error = "Refusing Stable manifest: modernClient is not marked client-verified (modernClient.clientVerified=false). Modern (VanaCore) remains opt-in on Testing until runtime certification completes.";
+                    return false;
+                }
+            }
+            else
+            {
+                // Testing channel: enforce explicit experimental eligibility & SHA-256 package integrity for any declared Modern package.
+                foreach (var pkg in new[] { manifest.ModernClient.Baseline, manifest.ModernClient.Compat })
+                {
+                    if (pkg is null || (!pkg.ExperimentalEligible && !pkg.ClientVerified))
+                    {
+                        continue;
+                    }
+
+                    if (!Uri.TryCreate(pkg.PackageUrl, UriKind.Absolute, out var pkgUri) ||
+                        !pkgUri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+                    {
+                        error = $"Manifest modernClient.{pkg.Profile} is eligible for Testing but has an invalid or non-HTTPS packageUrl.";
+                        return false;
+                    }
+
+                    var sha = (pkg.PackageSha256 ?? string.Empty).Trim();
+                    if (sha.Length != 64 || !sha.All(Uri.IsHexDigit))
+                    {
+                        error = $"Manifest modernClient.{pkg.Profile} is missing a valid 64-character SHA-256 packageSha256.";
+                        return false;
+                    }
+
+                    if (pkg.PackageSize <= 0)
+                    {
+                        error = $"Manifest modernClient.{pkg.Profile} must declare a positive packageSize.";
+                        return false;
+                    }
+                }
+            }
         }
 
         var reg = manifest.Registry;

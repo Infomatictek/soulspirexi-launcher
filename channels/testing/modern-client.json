@@ -1,0 +1,34 @@
+{
+  "engine": "vanacore",
+  "version": "0.9.9-soulspire",
+  "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
+  "experimentalEligible": true,
+  "clientVerified": false,
+  "minimumAshitaInterface": "4.30",
+  "baseline": {
+    "profile": "baseline",
+    "version": "0.9.9",
+    "tag": "v0.9.9-soulspire-baseline.1",
+    "commitSha": "56ef560c02",
+    "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
+    "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-baseline.1/soulspirexi-client-experimental-0.9.9-56ef560c02-win32.zip",
+    "packageSha256": "218a6b1f56fb72f266b1f0e0d6eefccc90ada563b2ca4bbcf18d702973570f83",
+    "packageSize": 98950990,
+    "experimentalEligible": true,
+    "clientVerified": false,
+    "notes": "Phase 1 minimal VanaCore Baseline: disables all Soulspire native hooks, addons, Pivot overlays, and experimental menu hooks for clean first-login certification against play.soulspirexi.com."
+  },
+  "compat": {
+    "profile": "compat",
+    "version": "0.9.9",
+    "tag": "v0.9.9-soulspire-compat.1",
+    "commitSha": "a506b8bd6f",
+    "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
+    "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-compat.1/soulspirexi-client-experimental-0.9.9-a506b8bd6f-win32.zip",
+    "packageSha256": "0b1cb39239eacc7e3911d0dd07c2c94ee5032796a72d996fc7074841f1064835",
+    "packageSize": 98948388,
+    "experimentalEligible": true,
+    "clientVerified": false,
+    "notes": "Phase 2 Soulspire Compatibility build: FFXiMain 0x6AE818B4 & input sig scans, Ashita v4.30 default, dinput_state/xinput_state adapters, singlemenu guard, and progressive dual-host soulspire_native.dll + Soulspire Core + Pivot support."
+  }
+}
