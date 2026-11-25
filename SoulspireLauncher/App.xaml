@@ -15,6 +15,7 @@
         <conv:DiagStatusToBrushConverter x:Key="DiagStatusToBrush" />
         <conv:ServerTargetToLabelConverter x:Key="ServerTargetToLabel" />
         <conv:StagingLaneToLabelConverter x:Key="StagingLaneToLabel" />
+        <conv:ClientEngineToLabelConverter x:Key="ClientEngineToLabel" />
         <conv:BoolToStagingBorderBrushConverter x:Key="BoolToStagingBorderBrush" />
 
         <!-- SoulspireXI Official Design Palette -->

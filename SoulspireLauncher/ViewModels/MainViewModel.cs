@@ -20,6 +20,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly LauncherSelfUpdateService _selfUpdateService;
     private readonly FfxiInstallDetector _detector;
     private readonly AshitaConfigGenerator _configGenerator;
+    private readonly ModernClientConfigGenerator _modernConfigGenerator;
+    private readonly ModernClientInstallService _modernInstallService;
+    private readonly ModernClientDiagnosticsService _modernDiagnosticsService;
     private readonly ServerStatusService _statusService;
     private readonly GameLaunchService _launchService;
     private readonly ShortcutMigrationService _shortcutMigrationService;
@@ -55,6 +58,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _selfUpdateService = new LauncherSelfUpdateService();
         _detector = new FfxiInstallDetector();
         _configGenerator = new AshitaConfigGenerator();
+        _modernConfigGenerator = new ModernClientConfigGenerator();
+        _modernInstallService = new ModernClientInstallService();
+        _modernDiagnosticsService = new ModernClientDiagnosticsService();
         _statusService = new ServerStatusService();
         _launchService = new GameLaunchService();
         _shortcutMigrationService = new ShortcutMigrationService();
@@ -105,6 +111,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         RollbackLauncherCommand = new AsyncRelayCommand(RollbackLauncherAsync, () => !IsBusy && CanRollbackLauncher);
         ExportPerformanceBundleCommand = new RelayCommand(ExportPerformanceBundleNow, () => !IsBusy);
         OpenDiagnosticsFolderCommand = new RelayCommand(OpenDiagnosticsFolder);
+        ExportModernDiagnosticsCommand = new RelayCommand(ExportModernDiagnosticsNow, () => !IsBusy);
+        OpenModernLogsFolderCommand = new RelayCommand(OpenModernLogsFolder);
+        InstallModernClientCommand = new AsyncRelayCommand(() => InstallSelectedModernClientAsync(forceReinstall: false), () => !IsBusy && IsModernEngineSelected);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -141,6 +150,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public ICommand RollbackLauncherCommand { get; }
     public ICommand ExportPerformanceBundleCommand { get; }
     public ICommand OpenDiagnosticsFolderCommand { get; }
+    public ICommand ExportModernDiagnosticsCommand { get; }
+    public ICommand OpenModernLogsFolderCommand { get; }
+    public ICommand InstallModernClientCommand { get; }
 
     public IReadOnlyList<ServerTargetMode> ServerTargetOptions { get; } =
     [
@@ -1074,6 +1086,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(TestingQolStatusText));
                 OnPropertyChanged(nameof(CanEnablePerformanceDiagnostics));
                 OnPropertyChanged(nameof(PerfDiagStatusText));
+                OnPropertyChanged(nameof(SelectedClientEngine));
+                OnPropertyChanged(nameof(CanSelectModernEngine));
+                OnPropertyChanged(nameof(IsModernEngineSelected));
+                OnPropertyChanged(nameof(ClientEngineStatusText));
                 NotifyPayloadMetadataChanged();
                 SyncCorePerfConfigSafe();
                 _settingsService.Save(_settings, PlainPassword);
@@ -1092,6 +1108,164 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public string ChannelDescriptionText => IsTestingChannel
         ? $"Canonical Testing payload ({(ResolvedNativeHookCount > 0 ? $"{ResolvedNativeHookCount}-hook" : "native")} DLL, Soulspire Core, Stage 2A performance diagnostics, Testing QoL, and weapon presentation updates) without affecting Stable players."
         : "Stable channel delivers production-verified SoulspireXI client builds.";
+
+    public IReadOnlyList<ClientEngineMode> ClientEngineOptions { get; } =
+    [
+        ClientEngineMode.Classic,
+        ClientEngineMode.ModernBaseline,
+        ClientEngineMode.ModernCompat
+    ];
+
+    public bool CanSelectModernEngine =>
+        IsTestingChannel ||
+        _manifest.ModernClient?.ClientVerified == true ||
+        _manifest.ModernClient?.Baseline?.ClientVerified == true ||
+        _manifest.ModernClient?.Compat?.ClientVerified == true;
+
+    public ClientEngineMode SelectedClientEngine
+    {
+        get => ModernClientConfigGenerator.ResolveEffectiveEngine(_settings, _manifest);
+        set
+        {
+            var effective = ModernClientConfigGenerator.IsModernEngine(value) && !CanSelectModernEngine
+                ? ClientEngineMode.Classic
+                : value;
+            if (_settings.ClientEngine != effective)
+            {
+                _settings.ClientEngine = effective;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsModernEngineSelected));
+                OnPropertyChanged(nameof(IsModernCompatSelected));
+                OnPropertyChanged(nameof(ActiveModernProfileDirectory));
+                OnPropertyChanged(nameof(ClientEngineStatusText));
+                OnPropertyChanged(nameof(ModernDiagnosticsStatusText));
+                _settingsService.Save(_settings, PlainPassword);
+                Log(effective switch
+                {
+                    ClientEngineMode.ModernBaseline => "Selected Modern — VanaCore Baseline (Experimental) in isolated ModernClient\\baseline folder.",
+                    ClientEngineMode.ModernCompat => "Selected Modern — Soulspire Compatibility (Experimental) in isolated ModernClient\\compat folder.",
+                    _ => "Selected Classic — Ashita v4 client engine."
+                });
+            }
+        }
+    }
+
+    public bool IsModernEngineSelected => ModernClientConfigGenerator.IsModernEngine(SelectedClientEngine);
+    public bool IsModernCompatSelected => SelectedClientEngine == ClientEngineMode.ModernCompat;
+
+    public string ModernClientPath
+    {
+        get => string.IsNullOrWhiteSpace(_settings.ModernClientPath)
+            ? Path.Combine(SettingsService.ResolveLauncherBaseDirectory(), "ModernClient")
+            : _settings.ModernClientPath;
+        set
+        {
+            if (_settings.ModernClientPath != value)
+            {
+                _settings.ModernClientPath = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ActiveModernProfileDirectory));
+                OnPropertyChanged(nameof(ClientEngineStatusText));
+                OnPropertyChanged(nameof(ModernDiagnosticsStatusText));
+                _settingsService.Save(_settings, PlainPassword);
+            }
+        }
+    }
+
+    public string ActiveModernProfileDirectory =>
+        ModernClientConfigGenerator.ResolveProfileDirectory(ModernClientPath, SelectedClientEngine);
+
+    public bool ModernClientUseD3D11Fallback
+    {
+        get => _settings.ModernClientUseD3D11Fallback;
+        set
+        {
+            if (_settings.ModernClientUseD3D11Fallback != value)
+            {
+                _settings.ModernClientUseD3D11Fallback = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ClientEngineStatusText));
+                _settingsService.Save(_settings, PlainPassword);
+            }
+        }
+    }
+
+    public bool ModernClientSafeLoginMode
+    {
+        get => _settings.ModernClientSafeLoginMode;
+        set
+        {
+            if (_settings.ModernClientSafeLoginMode != value)
+            {
+                _settings.ModernClientSafeLoginMode = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ClientEngineStatusText));
+                _settingsService.Save(_settings, PlainPassword);
+            }
+        }
+    }
+
+    public string ClientEngineStatusText
+    {
+        get
+        {
+            if (!CanSelectModernEngine)
+            {
+                return "Classic — Ashita v4 active. Switch Update Channel to Testing to opt into Modern (VanaCore — Experimental).";
+            }
+
+            if (!IsModernEngineSelected)
+            {
+                return "Classic — Ashita v4 active. Your Ashita installation stays isolated and untouched if you test Modern.";
+            }
+
+            var mode = SelectedClientEngine;
+            var profileDir = ActiveModernProfileDirectory;
+            var pkg = _manifest.ModernClient?.ResolvePackage(mode);
+            var rendererLabel = ModernClientUseD3D11Fallback ? "D3D11 fallback" : "D3D12";
+            var modeSummary = mode == ClientEngineMode.ModernBaseline
+                ? "Baseline (all Soulspire native hooks, addons & experimental menus disabled)"
+                : "Soulspire Compatibility (progressive dual-host soulspire_native.dll + Core + Pivot)";
+
+            if (pkg is not null && ModernClientInstallService.IsUpToDate(profileDir, pkg))
+            {
+                return $"Ready ({pkg.Tag}, {rendererLabel}) — {modeSummary}. Press Play to launch securely via --password-stdin.";
+            }
+
+            if (pkg is not null && !string.IsNullOrWhiteSpace(pkg.PackageUrl))
+            {
+                return $"Will auto-download & SHA-256 verify {pkg.Tag} into isolated folder on Play ({rendererLabel}) — {modeSummary}.";
+            }
+
+            var exe = GameLaunchService.ResolveModernClientExecutable(profileDir);
+            return exe is not null
+                ? $"Local build ready ({rendererLabel}) — {modeSummary}. Uses --password-stdin."
+                : $"No local package found in {profileDir}. Check for Testing updates to fetch the verified Modern client package.";
+        }
+    }
+
+    public string ModernDiagnosticsStatusText
+    {
+        get
+        {
+            var profileDir = ActiveModernProfileDirectory;
+            var vanaLog = Path.Combine(profileDir, "logs", "vanacore.log");
+            if (!File.Exists(vanaLog))
+            {
+                return "No VanaCore session log yet. Launch Modern once, then click Export Modern Diagnostics to create a redacted ZIP.";
+            }
+
+            try
+            {
+                var summary = ModernClientDiagnosticsService.ParseVanaCoreLog(File.ReadAllText(vanaLog));
+                return $"Latest log: sigs matched={summary.MatchedCount}, failed={summary.FailedCount} | {summary.FfxiMainInfo}";
+            }
+            catch
+            {
+                return "VanaCore log detected. Click Export Modern Diagnostics to export a redacted diagnostic ZIP.";
+            }
+        }
+    }
 
     private void NotifyPayloadMetadataChanged()
     {
@@ -2012,12 +2186,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 Log("Warning: Could not reach GitHub for remote manifest; launching with local client files.");
             }
 
-            var xiloaderPath = FfxiInstallDetector.ResolveXiloaderPath(_settings.AshitaPath);
-            if (string.IsNullOrEmpty(xiloaderPath))
-            {
-                throw new FileNotFoundException("xiloader.exe could not be located or downloaded.");
-            }
-
             var plan = StagingRelayService.ResolveConnectionPlan(_settings, _manifest);
             if (plan.RequiresLoopbackRelay && plan.RelayConfig is not null)
             {
@@ -2061,6 +2229,103 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             {
                 // Always guarantee the Staging loopback relay is stopped before launching Production or Custom.
                 _stagingRelay.Stop();
+            }
+
+            var effectiveEngine = ModernClientConfigGenerator.ResolveEffectiveEngine(_settings, _manifest);
+            if (ModernClientConfigGenerator.IsModernEngine(effectiveEngine))
+            {
+                var profileDir = ModernClientConfigGenerator.ResolveProfileDirectory(ModernClientPath, effectiveEngine);
+                var modernPkg = _manifest.ModernClient?.ResolvePackage(effectiveEngine);
+                if (modernPkg is not null && !string.IsNullOrWhiteSpace(modernPkg.PackageUrl))
+                {
+                    StatusMessage = $"Ensuring verified Modern ({modernPkg.Profile}) client package ({modernPkg.Tag})...";
+                    var installResult = await _modernInstallService.EnsureInstalledAsync(
+                        profileDir,
+                        modernPkg,
+                        forceReinstall: false,
+                        progress,
+                        CancellationToken.None);
+                    if (installResult.Downloaded)
+                    {
+                        Log($"Downloaded, SHA-256 verified, and installed Modern ({modernPkg.Profile}) {modernPkg.Tag} into {profileDir}.");
+                    }
+                    else
+                    {
+                        Log($"Verified existing Modern ({modernPkg.Profile}) {modernPkg.Tag} installation.");
+                    }
+                }
+                else if (GameLaunchService.ResolveModernClientExecutable(profileDir) is null)
+                {
+                    throw new FileNotFoundException(
+                        $"Modern (VanaCore) client binaries were not found in '{profileDir}' and the active manifest does not declare a download package.\n\n" +
+                        "Check for Testing updates or switch Client Engine back to Classic — Ashita v4.",
+                        Path.Combine(profileDir, "VanaCore.exe"));
+                }
+
+                if (effectiveEngine == ClientEngineMode.ModernCompat)
+                {
+                    StatusMessage = "Syncing dual-host Soulspire Native, addons & Pivot overlays into isolated Modern compat folder...";
+                    var syncedCompat = ModernClientInstallService.SyncCompatibilityOverlayFromAshita(_settings.AshitaPath, profileDir);
+                    Log($"Prepared isolated Modern Compatibility overlay ({syncedCompat} files copied; Classic Ashita untouched).");
+                }
+
+                StatusMessage = "Auto-detecting FFXI & PlayOnline paths and generating VanaCore config...";
+                var diag = _detector.Inspect(_settings, _manifest);
+                var ffxiDir = !string.IsNullOrWhiteSpace(_settings.FfxiPath) && Directory.Exists(_settings.FfxiPath)
+                    ? _settings.FfxiPath
+                    : diag.DetectedFfxiPath;
+                var polDir = !string.IsNullOrWhiteSpace(diag.DetectedPolPath) && Directory.Exists(diag.DetectedPolPath)
+                    ? diag.DetectedPolPath
+                    : null;
+                if (polDir is null && !string.IsNullOrWhiteSpace(ffxiDir))
+                {
+                    var parent = Directory.GetParent(ffxiDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))?.FullName;
+                    var candidatePol = parent is not null ? Path.Combine(parent, "PlayOnlineViewer") : null;
+                    if (!string.IsNullOrWhiteSpace(candidatePol) && Directory.Exists(candidatePol))
+                    {
+                        polDir = candidatePol;
+                    }
+                }
+
+                var cfgSwModern = PerformanceDiagnosticsService.StartSpanIfEnabled(IsPerfDiagActive);
+                var iniName = _modernConfigGenerator.WriteAllConfigs(
+                    profileDir,
+                    _settings,
+                    effectiveEngine,
+                    plan.BootServerHost,
+                    polDir,
+                    string.IsNullOrWhiteSpace(ffxiDir) ? null : ffxiDir);
+                _perfDiag.RecordSpan(IsPerfDiagActive, "config_write", cfgSwModern, true, "complete", "client_only");
+
+                var engineLabel = effectiveEngine == ClientEngineMode.ModernBaseline
+                    ? "Modern — VanaCore Baseline"
+                    : "Modern — Soulspire Compatibility";
+                StatusMessage = $"Launching {engineLabel} -> {plan.DisplayHost} (secure --password-stdin)...";
+                Log(StatusMessage);
+                var launchSwModern = PerformanceDiagnosticsService.StartSpanIfEnabled(IsPerfDiagActive);
+                var launchedModern = _launchService.LaunchModernClient(
+                    profileDir,
+                    plan.BootServerHost,
+                    _settings.Username,
+                    PlainPassword,
+                    iniName,
+                    _settings.Language);
+                _perfDiag.RecordSpan(IsPerfDiagActive, "launch_handoff", launchSwModern, true, "complete", "client_only");
+                _perfDiag.StartProcessMonitoring(launchedModern, IsPerfDiagActive, () => ExportPerfBundleFromBackground());
+                OnPropertyChanged(nameof(ClientEngineStatusText));
+                OnPropertyChanged(nameof(ModernDiagnosticsStatusText));
+
+                if (_settings.AutoCloseOnLaunch && !plan.RequiresLoopbackRelay)
+                {
+                    Application.Current.Shutdown();
+                }
+                return;
+            }
+
+            var xiloaderPath = FfxiInstallDetector.ResolveXiloaderPath(_settings.AshitaPath);
+            if (string.IsNullOrEmpty(xiloaderPath))
+            {
+                throw new FileNotFoundException("xiloader.exe could not be located or downloaded.");
             }
 
             StatusMessage = "Writing Ashita v4 & Pivot configurations...";
@@ -2604,6 +2869,124 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             Raise();
         }
+    }
+
+    private async Task InstallSelectedModernClientAsync(bool forceReinstall)
+    {
+        var effectiveEngine = ModernClientConfigGenerator.ResolveEffectiveEngine(_settings, _manifest);
+        if (!ModernClientConfigGenerator.IsModernEngine(effectiveEngine))
+        {
+            StatusMessage = "Select Modern — VanaCore Baseline or Modern — Soulspire Compatibility first.";
+            return;
+        }
+
+        var pkg = _manifest.ModernClient?.ResolvePackage(effectiveEngine);
+        if (pkg is null || string.IsNullOrWhiteSpace(pkg.PackageUrl))
+        {
+            MessageBox.Show(
+                "No downloadable Modern client package is declared in the current manifest.\nClick 'Check / Sync Updates' on the Testing channel first.",
+                "Modern Client Package Unavailable",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        IsBusy = true;
+        ProgressPercent = 0;
+        try
+        {
+            var profileDir = ModernClientConfigGenerator.ResolveProfileDirectory(ModernClientPath, effectiveEngine);
+            var progress = new Progress<SyncProgress>(p =>
+            {
+                StatusMessage = p.Message;
+                ProgressPercent = p.Percent;
+            });
+
+            var result = await _modernInstallService.EnsureInstalledAsync(
+                profileDir,
+                pkg,
+                forceReinstall,
+                progress,
+                CancellationToken.None);
+
+            if (effectiveEngine == ClientEngineMode.ModernCompat)
+            {
+                ModernClientInstallService.SyncCompatibilityOverlayFromAshita(_settings.AshitaPath, profileDir);
+            }
+
+            StatusMessage = result.Downloaded
+                ? $"Installed and SHA-256 verified Modern ({pkg.Profile}) {pkg.Tag}."
+                : $"Modern ({pkg.Profile}) {pkg.Tag} is already installed and up to date.";
+            Log(StatusMessage);
+            OnPropertyChanged(nameof(ClientEngineStatusText));
+            OnPropertyChanged(nameof(ModernDiagnosticsStatusText));
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Modern client install failed: {ex.Message}";
+            Log(StatusMessage);
+            MessageBox.Show(ex.Message, "Modern Client Install Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            IsBusy = false;
+            ProgressPercent = 0;
+        }
+    }
+
+    private void ExportModernDiagnosticsNow()
+    {
+        try
+        {
+            var mode = ModernClientConfigGenerator.IsModernEngine(SelectedClientEngine)
+                ? SelectedClientEngine
+                : ClientEngineMode.ModernBaseline;
+            var profileDir = ModernClientConfigGenerator.ResolveProfileDirectory(ModernClientPath, mode);
+            var result = _modernDiagnosticsService.ExportBundle(
+                profileDir,
+                mode,
+                _settings,
+                LauncherVersionText,
+                PlainPassword);
+
+            StatusMessage = result.SummaryText;
+            Log($"{result.SummaryText} -> {result.ZipPath}");
+            OnPropertyChanged(nameof(ModernDiagnosticsStatusText));
+
+            MessageBox.Show(
+                $"{result.SummaryText}\n\nSaved to:\n{result.ZipPath}\n\nPasswords and authentication secrets have been redacted.",
+                "Modern Client Diagnostics Exported",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                Arguments = $"/select,\"{result.ZipPath}\"",
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Could not export Modern diagnostics: {ex.Message}";
+            Log(StatusMessage);
+            MessageBox.Show(ex.Message, "Modern Diagnostics Export Failed", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void OpenModernLogsFolder()
+    {
+        var mode = ModernClientConfigGenerator.IsModernEngine(SelectedClientEngine)
+            ? SelectedClientEngine
+            : ClientEngineMode.ModernBaseline;
+        var profileDir = ModernClientConfigGenerator.ResolveProfileDirectory(ModernClientPath, mode);
+        var logsDir = Path.Combine(profileDir, "logs");
+        Directory.CreateDirectory(logsDir);
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = logsDir,
+            UseShellExecute = true
+        });
     }
 
     private void NotifyEffectiveServerChanged()

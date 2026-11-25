@@ -1,5 +1,7 @@
--- Pure-Lua parser and reversible updater for Ashita v4 XIPivot soulspirexi.ini.
--- Never touches live FFXI DATs in memory; changes apply cleanly on the next client launch.
+-- Pure-Lua parser and reversible updater for BOTH:
+--   1. Ashita v4 XIPivot soulspirexi.ini ([overlays] section)
+--   2. VanaCore built-in Pivot vanacore.ini ([pivot.order] section)
+-- Never touches live FFXI DATs in memory; changes apply cleanly on the next client launch / zone.
 
 local M = {}
 
@@ -10,18 +12,37 @@ local function trim(s)
     return (s:gsub('^%s+', ''):gsub('%s+$', ''))
 end
 
--- Parse [overlays] entries from soulspirexi.ini text into an ordered list of overlay names.
+function M.detect_section_name(ini_text)
+    if type(ini_text) ~= 'string' then
+        return 'overlays'
+    end
+    for raw_line in (ini_text .. '\n'):gmatch('(.-)\r?\n') do
+        local section = trim(raw_line):match('^%[(.-)%]$')
+        if section then
+            local lower = section:lower()
+            if lower == 'pivot.order' or lower == 'pivot' then
+                return 'pivot.order'
+            elseif lower == 'overlays' then
+                return 'overlays'
+            end
+        end
+    end
+    return 'overlays'
+end
+
+-- Parse [overlays] (Ashita XIPivot) or [pivot.order] (VanaCore Pivot) entries into an ordered list.
 function M.parse_overlays(ini_text)
     if type(ini_text) ~= 'string' then
         return {}
     end
+    local target_section = M.detect_section_name(ini_text)
     local in_overlays = false
     local indexed = {}
     for raw_line in (ini_text .. '\n'):gmatch('(.-)\r?\n') do
         local line = trim(raw_line)
         local section = line:match('^%[(.-)%]$')
         if section then
-            in_overlays = (section:lower() == 'overlays')
+            in_overlays = (section:lower() == target_section)
         elseif in_overlays and line ~= '' and line:sub(1, 1) ~= ';' and line:sub(1, 1) ~= '#' then
             local k, v = line:match('^([^=]+)=(.*)$')
             if k and v then
@@ -51,13 +72,16 @@ function M.is_flintlock_enabled(ini_text)
     return false
 end
 
--- Return updated soulspirexi.ini text with flintlock-akimbo-compact enabled (priority 0) or removed,
--- preserving [settings], [cache], and all other user overlays.
+-- Return updated INI text with flintlock-akimbo-compact enabled or removed, preserving all other sections.
+-- Under VanaCore ([pivot.order]), soulspirexi remains priority 0 (server-first) with flintlock directly after;
+-- under Ashita XIPivot ([overlays]), flintlock is placed at priority 0 matching existing behavior.
 function M.set_flintlock_enabled(ini_text, enabled)
     if type(ini_text) ~= 'string' or ini_text == '' then
         return nil, 'Empty pivot INI content.'
     end
 
+    local target_section = M.detect_section_name(ini_text)
+    local is_vanacore = (target_section == 'pivot.order')
     local current = M.parse_overlays(ini_text)
     local filtered = {}
     for _, name in ipairs(current) do
@@ -71,9 +95,32 @@ function M.set_flintlock_enabled(ini_text, enabled)
 
     local next_overlays = {}
     if enabled then
-        next_overlays[1] = M.FLINTLOCK_OVERLAY
-        for _, name in ipairs(filtered) do
-            next_overlays[#next_overlays + 1] = name
+        if is_vanacore then
+            local has_base = false
+            for _, name in ipairs(filtered) do
+                if name:lower() == M.BASE_OVERLAY then
+                    has_base = true
+                end
+            end
+            if has_base then
+                next_overlays[1] = M.BASE_OVERLAY
+                next_overlays[2] = M.FLINTLOCK_OVERLAY
+                for _, name in ipairs(filtered) do
+                    if name:lower() ~= M.BASE_OVERLAY then
+                        next_overlays[#next_overlays + 1] = name
+                    end
+                end
+            else
+                next_overlays[1] = M.FLINTLOCK_OVERLAY
+                for _, name in ipairs(filtered) do
+                    next_overlays[#next_overlays + 1] = name
+                end
+            end
+        else
+            next_overlays[1] = M.FLINTLOCK_OVERLAY
+            for _, name in ipairs(filtered) do
+                next_overlays[#next_overlays + 1] = name
+            end
         end
     else
         next_overlays = filtered
@@ -97,7 +144,7 @@ function M.set_flintlock_enabled(ini_text, enabled)
             if in_overlays and not wrote_overlays then
                 emit_overlays()
             end
-            in_overlays = (section:lower() == 'overlays')
+            in_overlays = (section:lower() == target_section)
             out_lines[#out_lines + 1] = raw_line
             if in_overlays then
                 emit_overlays()
@@ -111,7 +158,7 @@ function M.set_flintlock_enabled(ini_text, enabled)
         if #out_lines > 0 and trim(out_lines[#out_lines]) ~= '' then
             out_lines[#out_lines + 1] = ''
         end
-        out_lines[#out_lines + 1] = '[overlays]'
+        out_lines[#out_lines + 1] = '[' .. target_section .. ']'
         emit_overlays()
     end
 

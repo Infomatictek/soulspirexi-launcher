@@ -28,6 +28,9 @@ public sealed class LauncherManifest
     [JsonPropertyName("clientDataCache")]
     public ManifestClientDataCache? ClientDataCache { get; set; }
 
+    [JsonPropertyName("modernClient")]
+    public ManifestModernClient? ModernClient { get; set; }
+
     [JsonPropertyName("serverName")]
     public string ServerName { get; set; } = "SoulspireXI";
 
@@ -348,4 +351,107 @@ public sealed class ManifestClientDataCache
 
     [JsonPropertyName("packageCount")]
     public int PackageCount { get; set; }
+}
+
+public sealed class ManifestModernClientPackage
+{
+    [JsonPropertyName("profile")]
+    public string Profile { get; set; } = string.Empty;
+
+    [JsonPropertyName("version")]
+    public string Version { get; set; } = string.Empty;
+
+    [JsonPropertyName("tag")]
+    public string Tag { get; set; } = string.Empty;
+
+    [JsonPropertyName("commitSha")]
+    public string CommitSha { get; set; } = string.Empty;
+
+    [JsonPropertyName("upstreamCommit")]
+    public string UpstreamCommit { get; set; } = string.Empty;
+
+    [JsonPropertyName("packageUrl")]
+    public string PackageUrl { get; set; } = string.Empty;
+
+    [JsonPropertyName("packageSha256")]
+    public string PackageSha256 { get; set; } = string.Empty;
+
+    [JsonPropertyName("packageSize")]
+    public long PackageSize { get; set; }
+
+    [JsonPropertyName("experimentalEligible")]
+    public bool ExperimentalEligible { get; set; }
+
+    [JsonPropertyName("clientVerified")]
+    public bool ClientVerified { get; set; }
+
+    [JsonPropertyName("notes")]
+    public string Notes { get; set; } = string.Empty;
+}
+
+public sealed class ManifestModernClient
+{
+    [JsonPropertyName("engine")]
+    public string Engine { get; set; } = "vanacore";
+
+    [JsonPropertyName("version")]
+    public string Version { get; set; } = string.Empty;
+
+    [JsonPropertyName("upstreamCommit")]
+    public string UpstreamCommit { get; set; } = string.Empty;
+
+    [JsonPropertyName("packageUrl")]
+    public string PackageUrl { get; set; } = string.Empty;
+
+    [JsonPropertyName("packageSha256")]
+    public string PackageSha256 { get; set; } = string.Empty;
+
+    [JsonPropertyName("packageSize")]
+    public long PackageSize { get; set; }
+
+    [JsonPropertyName("experimentalEligible")]
+    public bool ExperimentalEligible { get; set; }
+
+    [JsonPropertyName("clientVerified")]
+    public bool ClientVerified { get; set; }
+
+    [JsonPropertyName("minimumAshitaInterface")]
+    public string MinimumAshitaInterface { get; set; } = "4.30";
+
+    [JsonPropertyName("baseline")]
+    public ManifestModernClientPackage? Baseline { get; set; }
+
+    [JsonPropertyName("compat")]
+    public ManifestModernClientPackage? Compat { get; set; }
+
+    public ManifestModernClientPackage? ResolvePackage(ClientEngineMode mode)
+    {
+        if (mode == ClientEngineMode.ModernBaseline && Baseline is not null)
+        {
+            return Baseline;
+        }
+
+        if (mode == ClientEngineMode.ModernCompat && Compat is not null)
+        {
+            return Compat;
+        }
+
+        if (mode is ClientEngineMode.ModernBaseline or ClientEngineMode.ModernCompat &&
+            (!string.IsNullOrWhiteSpace(PackageUrl) || !string.IsNullOrWhiteSpace(Version) || ExperimentalEligible || ClientVerified))
+        {
+            return new ManifestModernClientPackage
+            {
+                Profile = mode == ClientEngineMode.ModernCompat ? "compat" : "baseline",
+                Version = Version,
+                UpstreamCommit = UpstreamCommit,
+                PackageUrl = PackageUrl,
+                PackageSha256 = PackageSha256,
+                PackageSize = PackageSize,
+                ExperimentalEligible = ExperimentalEligible,
+                ClientVerified = ClientVerified
+            };
+        }
+
+        return null;
+    }
 }

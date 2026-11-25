@@ -443,18 +443,22 @@ jobs:
           ) | Set-Content -Path "soulspire_native-testing-build-info.txt" -Encoding UTF8
 
           python scripts/verify-soulspire-native-dll.py $dllPath --build-info soulspire_native-testing-build-info.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python scripts/publish-testing-channel.py `
             --native-dll $dllPath `
             --build-info soulspire_native-testing-build-info.txt `
-            --manifest-version "2.2.0-testing.1" `
+            --modern-client-json channels/testing/modern-client.json `
+            --manifest-version "2.2.99-testing.1" `
             --server-version "${{ github.ref_name }} (${{ github.sha }})" `
-            --server-branch "${{ github.ref_name }}" `
+            --server-branch "main" `
             --server-commit "${{ github.sha }}" `
             --server-image "soulspirexi/server:main" `
-            --repo-branch "${{ github.ref_name }}" `
+            --repo-branch "main" `
             --native-hooks 32
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
           python scripts/verify-launcher-manifest.py --manifest channels/testing/manifest.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Upload verified Testing channel package artifact
         uses: actions/upload-artifact@v7

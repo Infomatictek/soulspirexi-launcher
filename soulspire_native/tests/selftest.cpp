@@ -1903,6 +1903,48 @@ int main() {
 
     VirtualFree(memory, 0, MEM_RELEASE);
 
+    // Dual-host packet detour validation tests (Ashita.dll + VanaCore.Core.dll, fail-closed on unknown/corrupted).
+    {
+        HMODULE self_mod = GetModuleHandleW(nullptr);
+        assert(self_mod != nullptr);
+        uint8_t expected[24]{};
+        for (size_t i = 0; i < sizeof(expected); ++i) expected[i] = static_cast<uint8_t>(0x10u + i);
+
+        uint8_t entry[24]{};
+        auto build_jmp = [&](size_t stolen, uintptr_t target_addr) {
+            std::memcpy(entry, expected, sizeof(expected));
+            entry[0] = 0xE9u;
+            const uint32_t rel = static_cast<uint32_t>(target_addr - reinterpret_cast<uintptr_t>(entry + 5));
+            std::memcpy(entry + 1, &rel, 4);
+            for (size_t k = 5; k < stolen; ++k) entry[k] = 0x90u;
+        };
+        const uintptr_t valid_code = reinterpret_cast<uintptr_t>(&fake_lookup);
+
+        // 0xDD6C0 decrypt: 10-byte stolen prologue accepted for Ashita OR VanaCore; rejected if no host matches.
+        build_jmp(10, valid_code);
+        assert(host_packet_detour_matches(0xDD6C0u, entry, expected, sizeof(expected), self_mod, nullptr));
+        assert(host_packet_detour_matches(0xDD6C0u, entry, expected, sizeof(expected), nullptr, self_mod));
+        assert(!host_packet_detour_matches(0xDD6C0u, entry, expected, sizeof(expected), nullptr, nullptr));
+
+        // 0xDF7C0 encrypt: 5-byte accepted for Ashita & VanaCore; 7-byte accepted for VanaCore only.
+        build_jmp(5, valid_code);
+        assert(host_packet_detour_matches(0xDF7C0u, entry, expected, sizeof(expected), self_mod, nullptr));
+        assert(host_packet_detour_matches(0xDF7C0u, entry, expected, sizeof(expected), nullptr, self_mod));
+
+        build_jmp(7, valid_code);
+        assert(!host_packet_detour_matches(0xDF7C0u, entry, expected, sizeof(expected), self_mod, nullptr));
+        assert(host_packet_detour_matches(0xDF7C0u, entry, expected, sizeof(expected), nullptr, self_mod));
+
+        // Corrupted trailing byte must fail closed on both hosts.
+        entry[12] ^= 0xFFu;
+        assert(!host_packet_detour_matches(0xDF7C0u, entry, expected, sizeof(expected), nullptr, self_mod));
+        assert(!host_packet_detour_matches(0xDD6C0u, entry, expected, sizeof(expected), self_mod, self_mod));
+
+        // Non-packet RVA must never match host_packet_detour_matches.
+        build_jmp(5, valid_code);
+        assert(!host_packet_detour_matches(0x133E33u, entry, expected, sizeof(expected), self_mod, self_mod));
+    }
+
     transport_checks();
     multi_job_checks();
     equipment_persona_checks();

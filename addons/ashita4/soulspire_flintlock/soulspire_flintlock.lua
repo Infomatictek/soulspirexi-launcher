@@ -76,9 +76,21 @@ local function ashita_root()
     return nil
 end
 
+local function is_vanacore_host()
+    if not (ok_ffi and ffi) then return false end
+    local ok, hit = pcall(function()
+        return ffi.C.GetModuleHandleA('VanaCore.Core.dll') ~= nil
+            or ffi.C.GetModuleHandleA('SoulspireClient.Core.dll') ~= nil
+    end)
+    return ok and hit == true
+end
+
 local function pivot_ini_path()
     local root = ashita_root()
     if not root then return nil end
+    if is_vanacore_host() then
+        return root .. '\\vanacore.ini'
+    end
     return root .. '\\config\\pivot\\soulspirexi.ini'
 end
 
@@ -86,7 +98,8 @@ local function overlay_installed()
     local root = ashita_root()
     if not root then return false end
     -- Check one of the 7 required player skeleton DATs (HumeM base).
-    local f = io.open(root .. '\\polplugins\\DATs\\' .. PivotConfig.FLINTLOCK_OVERLAY .. '\\ROM\\27\\82.DAT', 'rb')
+    local base_dir = is_vanacore_host() and (root .. '\\pivot\\') or (root .. '\\polplugins\\DATs\\')
+    local f = io.open(base_dir .. PivotConfig.FLINTLOCK_OVERLAY .. '\\ROM\\27\\82.DAT', 'rb')
     if f then
         f:close()
         return true

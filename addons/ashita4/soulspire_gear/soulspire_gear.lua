@@ -43,7 +43,9 @@ if okJit and jit and jit.off then
     jit.off()
 end
 
-if ashita.addons_version ~= nil and ashita.addons_version >= 4.3 and addon.instance and addon_feature then
+if (((ashita.interface_version ~= nil and ashita.interface_version >= 4.3)
+    or (ashita.addons_version ~= nil and ashita.addons_version >= 4.1))
+    and addon.instance and addon_feature) then
     pcall(function()
         addon.instance:enable_feature(addon_feature.use_packet_chunks)
     end)

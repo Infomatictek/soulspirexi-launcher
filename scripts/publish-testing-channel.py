@@ -212,6 +212,7 @@ def build_testing_manifest(
     repo_branch: str | None = None,
     candidate: str = "default-27hook",
     provenance_json: Path | None = None,
+    modern_client_json: Path | None = None,
     allow_non_main_branch: bool = False,
     allow_same_version: bool = False,
 ) -> Path:
@@ -389,6 +390,20 @@ def build_testing_manifest(
 
     testing_manifest["files"] = merged_files
 
+    # Preserve or inject explicit experimental modernClient descriptor (never sets clientVerified=true from CI).
+    if modern_client_json is not None and modern_client_json.is_file():
+        modern_cfg = json.loads(modern_client_json.read_text(encoding="utf-8"))
+        testing_manifest["modernClient"] = modern_cfg
+    else:
+        existing_testing_path = testing_dir / "manifest.json"
+        if existing_testing_path.is_file():
+            try:
+                existing_testing = json.loads(existing_testing_path.read_text(encoding="utf-8"))
+                if isinstance(existing_testing, dict) and isinstance(existing_testing.get("modernClient"), dict):
+                    testing_manifest["modernClient"] = existing_testing["modernClient"]
+            except json.JSONDecodeError:
+                pass
+
     out_path = testing_dir / "manifest.json"
     out_path.write_text(json.dumps(testing_manifest, indent=2) + "\n", encoding="utf-8", newline="\n")
     return out_path
@@ -417,6 +432,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Explicit Testing candidate track (preserves 27-hook channel and isolates each 24-hook Search/Registry candidate).",
     )
     parser.add_argument("--provenance-json", type=Path, default=None, help="Optional crystaljobs-provenance.json to bundle with candidate.")
+    parser.add_argument("--modern-client-json", type=Path, default=None, help="Optional modernClient experimental descriptor JSON for Testing manifest.")
     args = parser.parse_args(argv)
 
     out_path = build_testing_manifest(
@@ -433,6 +449,7 @@ def main(argv: list[str] | None = None) -> int:
         repo_branch=args.repo_branch,
         candidate=args.candidate,
         provenance_json=args.provenance_json,
+        modern_client_json=args.modern_client_json,
     )
     print(f"Wrote verified Testing channel manifest: {out_path}")
     return 0
