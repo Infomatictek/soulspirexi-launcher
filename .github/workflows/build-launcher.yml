@@ -605,6 +605,8 @@ jobs:
                   entry["size"] = size
                   updated += 1
           assert updated == 1, f"Expected 1 testing soulspire_native.dll entry, updated {updated}"
+          if isinstance(mf.get("registry"), dict):
+              mf["registry"]["nativeDllSha256"] = sha
           mf_path.write_text(json.dumps(mf, indent=2) + "\n", encoding="utf-8")
           print(f"Synced Testing soulspire_native.dll: sha256={sha} size={size}")
           PY
