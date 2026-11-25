@@ -92,12 +92,11 @@ public sealed class TestingQolSettingsTests
     [InlineData("play-staging.soulspirexi.com", "SoulspireXI")]
     [InlineData("localhost", "SoulspireXI")]
     [InlineData("127.0.0.1", "SoulspireXI")]
-    [InlineData("192.168.1.50", "SoulspireXI")]
-    [InlineData("10.77.0.2", "SoulspireXI")]
-    [InlineData("100.64.12.34", "SoulspireXI")]
-    [InlineData("unraid.tailnet.ts.net", "SoulspireXI")]
+    [InlineData("::1", "SoulspireXI")]
+    [InlineData("192.168.1.50", "SoulspireXI Staging")]
+    [InlineData("10.77.0.2", "SoulspireXI Dev")]
     [InlineData("play.custom.example", "SoulspireXI Staging")]
-    public void ServerSwitching_StagingServersEnableQolEvenOnStableChannel(string host, string serverName)
+    public void ServerSwitching_ExplicitStagingAndDevServersEnableQolEvenOnStableChannel(string host, string serverName)
     {
         var settings = new LauncherSettings
         {
@@ -122,7 +121,12 @@ public sealed class TestingQolSettingsTests
     [Theory]
     [InlineData("play.soulspirexi.com")]
     [InlineData("play.example.com")]
-    public void ProductionServerOnStableChannel_DoesNotApplyTestingQol(string host)
+    [InlineData("192.168.1.50")]
+    [InlineData("10.77.0.2")]
+    [InlineData("172.16.0.10")]
+    [InlineData("100.64.12.34")]
+    [InlineData("unraid.tailnet.ts.net")]
+    public void ProductionOrPrivateIpOnStableChannel_DoesNotApplyTestingQolWithoutExplicitTestingConfig(string host)
     {
         var settings = new LauncherSettings
         {

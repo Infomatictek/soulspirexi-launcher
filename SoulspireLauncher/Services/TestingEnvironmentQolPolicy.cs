@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Sockets;
 using SoulspireLauncher.Models;
 
 namespace SoulspireLauncher.Services;
@@ -30,10 +29,7 @@ public static class TestingEnvironmentQolPolicy
     private static readonly string[] StagingDomainSuffixes =
     [
         ".local",
-        ".lan",
-        ".internal",
-        ".home",
-        ".ts.net"
+        ".internal"
     ];
 
     public static bool IsTestingChannel(UpdateChannel channel) =>
@@ -61,9 +57,12 @@ public static class TestingEnvironmentQolPolicy
             return true;
         }
 
+        // Only loopback (127.0.0.1 / ::1) is treated as an explicit local dev endpoint by IP alone.
+        // Private LAN/VPN IPs (10.x, 172.16-31.x, 192.168.x, 100.64.x) alone must NOT classify a Stable
+        // session as Testing unless a Testing channel or explicit staging/dev server name is configured.
         if (IPAddress.TryParse(host, out var ip))
         {
-            return IsLocalOrPrivateIp(ip);
+            return IPAddress.IsLoopback(ip) || (ip.IsIPv4MappedToIPv6 && IPAddress.IsLoopback(ip.MapToIPv4()));
         }
 
         foreach (var suffix in StagingDomainSuffixes)
@@ -177,38 +176,5 @@ public static class TestingEnvironmentQolPolicy
         }
 
         return false;
-    }
-
-    private static bool IsLocalOrPrivateIp(IPAddress ip)
-    {
-        if (IPAddress.IsLoopback(ip))
-        {
-            return true;
-        }
-
-        if (ip.AddressFamily == AddressFamily.InterNetworkV6)
-        {
-            if (ip.IsIPv4MappedToIPv6)
-            {
-                return IsLocalOrPrivateIp(ip.MapToIPv4());
-            }
-
-            var bytes6 = ip.GetAddressBytes();
-            // fc00::/7 (Unique Local Address) or fe80::/10 (Link-Local)
-            return (bytes6[0] & 0xFE) == 0xFC || (bytes6[0] == 0xFE && (bytes6[1] & 0xC0) == 0x80);
-        }
-
-        if (ip.AddressFamily != AddressFamily.InterNetwork)
-        {
-            return false;
-        }
-
-        var bytes = ip.GetAddressBytes();
-        return bytes[0] == 10 ||
-               bytes[0] == 127 ||
-               (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) ||
-               (bytes[0] == 192 && bytes[1] == 168) ||
-               (bytes[0] == 100 && bytes[1] >= 64 && bytes[1] <= 127) ||
-               (bytes[0] == 169 && bytes[1] == 254);
     }
 }
