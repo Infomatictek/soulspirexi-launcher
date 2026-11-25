@@ -903,6 +903,36 @@ function M.sanitize_actor_struct(actor_ptr, mem, module_base, image_size)
         end
         sub_slots[#sub_slots + 1] = rec
     end
+
+    -- Inspect CXiModelBase::firstPart (actor + 0x674 + 0x44 = actor + 0x6B8 -> CXiModelPart*)
+    do
+        local rec = {
+            offset = '0x6B8_modelPart0',
+            present = false,
+            inner_present = false,
+            inner_vtable_rva = '',
+            inner_u16 = {},
+        }
+        local ok_p, part_ptr = pcall(mem.read_uint32, actor_ptr + 0x6B8)
+        if ok_p and type(part_ptr) == 'number' and part_ptr >= 0x01000000 and part_ptr < 0x7FFF0000 then
+            rec.present = true
+            rec.inner_present = true
+            local ok_vt, vt = pcall(mem.read_uint32, part_ptr)
+            if ok_vt and type(vt) == 'number' and vt >= mod_lo and vt < mod_hi then
+                rec.inner_vtable_rva = string.format('0x%X', vt - mod_lo)
+            end
+            if type(mem.read_array) == 'function' then
+                local ok_arr, raw = pcall(mem.read_array, part_ptr, 0xC8)
+                if ok_arr and type(raw) == 'table' and #raw >= 64 then
+                    for w = 0, 31 do
+                        local u16 = (raw[w * 2 + 1] or 0) + (raw[w * 2 + 2] or 0) * 256
+                        rec.inner_u16[#rec.inner_u16 + 1] = u16
+                    end
+                end
+            end
+        end
+        sub_slots[#sub_slots + 1] = rec
+    end
     return words, sub_slots
 end
 
