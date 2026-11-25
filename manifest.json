@@ -6205,7 +6205,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/weapon_render_probe.lua",
       "targetPath": "soulspire_core/core/weapon_render_probe.lua",
-      "sha256": "cb533759f8125934460563a662e0edfe53e481fa6b4cb6cc35fb575ea5b52f3e",
+      "sha256": "17a48a0fed5f61cb696ef31ec4c168e0235c500401e8415618d4a80ee5b50ef8",
       "size": 61092
     },
     {
