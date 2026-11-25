@@ -12,7 +12,7 @@ using SoulspireLauncher.Services;
 
 namespace SoulspireLauncher.ViewModels;
 
-public sealed class MainViewModel : INotifyPropertyChanged
+public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly SettingsService _settingsService;
     private readonly SettingsImportService _importService;
@@ -23,6 +23,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private readonly ServerStatusService _statusService;
     private readonly GameLaunchService _launchService;
     private readonly ShortcutMigrationService _shortcutMigrationService;
+    private readonly StagingRelayService _stagingRelay;
+    private readonly PerformanceDiagnosticsService _perfDiag;
 
     private LauncherSettings _settings;
     private LauncherManifest _manifest;
@@ -37,6 +39,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
     private int _pendingUpdatesCount;
     private string _plainPassword = string.Empty;
     private string? _manifestUnavailableError;
+    private LauncherUpdateStage _launcherUpdateStage = LauncherUpdateStage.Idle;
+    private string _launcherUpdateStatusText = "Up to date (auto-check enabled)";
+    private LauncherInstallState? _installState;
+    private bool _hasRecordedStartupSpan;
+    private bool _isColdCheckSpan = true;
+    private bool _isColdSyncSpan = true;
+    private string _lastPerfExportPath = string.Empty;
 
     public MainViewModel()
     {
@@ -49,6 +58,10 @@ public sealed class MainViewModel : INotifyPropertyChanged
         _statusService = new ServerStatusService();
         _launchService = new GameLaunchService();
         _shortcutMigrationService = new ShortcutMigrationService();
+        _stagingRelay = new StagingRelayService();
+        _perfDiag = new PerformanceDiagnosticsService();
+        _stagingRelay.DiagnosticMessage += Log;
+        _stagingRelay.StateChanged += OnStagingRelayStateChanged;
 
         _manifest = _manifestService.LoadEmbeddedManifest();
         ManifestUpdateService.ApplyLocalOverride(_manifest, _settingsService.LoadLocalServerOverride());
@@ -85,9 +98,17 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ImportAshitaIniCommand = new RelayCommand(ImportFromAshitaIniDialog);
         LaunchFfxiConfigCommand = new RelayCommand(LaunchFfxiConfigTool);
         CreateDesktopShortcutCommand = new RelayCommand(CreateDesktopShortcut);
+        SelectProductionServerCommand = new RelayCommand(() => SelectedServerTarget = ServerTargetMode.Production);
+        StopStagingRelayCommand = new RelayCommand(StopStagingRelay, () => IsStagingRelayActive);
+        ResetStagingDefaultsCommand = new RelayCommand(ResetStagingDefaults);
+        InstallPerUserLauncherCommand = new RelayCommand(InstallPerUserLauncher, () => !IsBusy && CanInstallPerUser);
+        RollbackLauncherCommand = new AsyncRelayCommand(RollbackLauncherAsync, () => !IsBusy && CanRollbackLauncher);
+        ExportPerformanceBundleCommand = new RelayCommand(ExportPerformanceBundleNow, () => !IsBusy);
+        OpenDiagnosticsFolderCommand = new RelayCommand(OpenDiagnosticsFolder);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+    public event Action? RequestMinimizeWindow;
 
     public ObservableCollection<ManifestNewsItem> NewsItems { get; }
     public ObservableCollection<string> ActivityLog { get; }
@@ -113,6 +134,27 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public ICommand ImportAshitaIniCommand { get; }
     public ICommand LaunchFfxiConfigCommand { get; }
     public ICommand CreateDesktopShortcutCommand { get; }
+    public ICommand SelectProductionServerCommand { get; }
+    public ICommand StopStagingRelayCommand { get; }
+    public ICommand ResetStagingDefaultsCommand { get; }
+    public ICommand InstallPerUserLauncherCommand { get; }
+    public ICommand RollbackLauncherCommand { get; }
+    public ICommand ExportPerformanceBundleCommand { get; }
+    public ICommand OpenDiagnosticsFolderCommand { get; }
+
+    public IReadOnlyList<ServerTargetMode> ServerTargetOptions { get; } =
+    [
+        ServerTargetMode.Production,
+        ServerTargetMode.Staging,
+        ServerTargetMode.Custom
+    ];
+
+    public IReadOnlyList<StagingLane> StagingLaneOptions { get; } =
+    [
+        StagingLane.Combat,
+        StagingLane.CoreUi,
+        StagingLane.Native
+    ];
 
     public string SelectedTab
     {
@@ -137,13 +179,149 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public string ServerName => _manifest.ServerName;
     public string Tagline => _manifest.Tagline;
 
-    public string EffectiveHost => _settings.UseCustomServer && !string.IsNullOrWhiteSpace(_settings.CustomServerHost)
-        ? _settings.CustomServerHost.Trim()
-        : _manifest.DefaultHost;
+    private ResolvedServerConnectionPlan CurrentConnectionPlan =>
+        StagingRelayService.ResolveConnectionPlan(_settings, _manifest);
 
-    public bool EffectiveUseHairpin => _settings.UseCustomServer ? _settings.CustomUseHairpin : _manifest.UseHairpin;
-    public int EffectiveLobbyPort => _settings.UseCustomServer ? _settings.CustomLobbyPort : _manifest.Ports.Lobby;
-    public int EffectiveSearchPort => _settings.UseCustomServer ? _settings.CustomSearchPort : _manifest.Ports.Search;
+    public ServerTargetMode SelectedServerTarget
+    {
+        get => _settings.ServerTarget;
+        set
+        {
+            if (_settings.ServerTarget == value)
+            {
+                return;
+            }
+
+            var previous = _settings.ServerTarget;
+            _settings.ServerTarget = value;
+            _settings.UseCustomServer = value == ServerTargetMode.Custom;
+
+            if (previous == ServerTargetMode.Staging && value != ServerTargetMode.Staging)
+            {
+                _stagingRelay.Stop();
+                _settingsService.Save(_settings, PlainPassword);
+                var restoredIni = StagingRelayService.TryRestoreOrdinaryBootConfig(
+                    _configGenerator,
+                    _settings,
+                    _manifest,
+                    PlainPassword);
+                var plan = CurrentConnectionPlan;
+                StatusMessage = $"Switched to {value} ({plan.DisplayHost}). Staging relay stopped.";
+                Log(restoredIni
+                    ? $"Switched from Staging to {value} ({plan.DisplayHost}); stopped Staging TCP relay and restored soulspirexi.ini."
+                    : $"Switched from Staging to {value} ({plan.DisplayHost}); stopped Staging TCP relay.");
+            }
+            else if (value == ServerTargetMode.Staging)
+            {
+                _settingsService.Save(_settings, PlainPassword);
+                var plan = CurrentConnectionPlan;
+                StatusMessage = $"Staging Server selected ({plan.DisplayHost}). Managed TCP relay starts automatically on Play.";
+                Log($"Selected Staging Server ({plan.DisplayHost}, TCP {StagingAuthPort}/{StagingDataPort}/{StagingViewPort}/{StagingSearchPort}, Profile {StagingProfilePort}/{StagingProfileIrcPort}, Map UDP {plan.MapUdpPort}). No admin privileges or Windows portproxy changes required.");
+            }
+            else
+            {
+                _stagingRelay.Stop();
+                _settingsService.Save(_settings, PlainPassword);
+            }
+
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(UseCustomServer));
+            NotifyEffectiveServerChanged();
+            _ = RefreshServerStatusAsync();
+        }
+    }
+
+    public StagingLane SelectedStagingLane
+    {
+        get => _settings.StagingLane;
+        set
+        {
+            if (_settings.StagingLane == value)
+            {
+                return;
+            }
+
+            _settings.ApplyStagingLanePreset(value);
+            if (IsStagingRelayActive)
+            {
+                _stagingRelay.Stop();
+            }
+
+            _settingsService.Save(_settings, PlainPassword);
+
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(StagingAuthPort));
+            OnPropertyChanged(nameof(StagingDataPort));
+            OnPropertyChanged(nameof(StagingViewPort));
+            OnPropertyChanged(nameof(StagingSearchPort));
+            OnPropertyChanged(nameof(StagingProfilePort));
+            OnPropertyChanged(nameof(StagingProfileIrcPort));
+            NotifyEffectiveServerChanged();
+
+            var preset = LauncherSettings.GetStagingLanePreset(value);
+            var plan = CurrentConnectionPlan;
+            StatusMessage = $"Selected {preset.DisplayName} ({plan.DisplayHost}). Managed TCP relay starts on Play.";
+            Log($"Selected Staging Lane: {preset.DisplayName} ({plan.StatusProbeHost}, TCP {StagingAuthPort}/{StagingDataPort}/{StagingViewPort}/{StagingSearchPort}, Profile {StagingProfilePort}/{StagingProfileIrcPort}, Map UDP {plan.MapUdpPort}).");
+            _ = RefreshServerStatusAsync();
+        }
+    }
+
+    public bool IsProductionMode => _settings.ServerTarget == ServerTargetMode.Production;
+    public bool IsStagingMode => _settings.ServerTarget == ServerTargetMode.Staging;
+    public bool IsCustomServerMode => _settings.ServerTarget == ServerTargetMode.Custom;
+    public bool IsStagingRelayActive => _stagingRelay.IsRunning;
+
+    public string EffectiveHost => CurrentConnectionPlan.StatusProbeHost;
+    public bool EffectiveUseHairpin => CurrentConnectionPlan.BootUseHairpin;
+    public int EffectiveLobbyPort => CurrentConnectionPlan.StatusProbeLobbyPort;
+    public int EffectiveSearchPort => CurrentConnectionPlan.StatusProbeSearchPort;
+
+    public string StagingHeaderBadgeText
+    {
+        get
+        {
+            var preset = LauncherSettings.GetStagingLanePreset(_settings.StagingLane);
+            return $"TARGET: {preset.ShortBadgeLabel} ({preset.PortBlockLabel})";
+        }
+    }
+
+    public string StagingCardHeaderText
+    {
+        get
+        {
+            var preset = LauncherSettings.GetStagingLanePreset(_settings.StagingLane);
+            return $"{preset.ShortBadgeLabel} ACTIVE ({preset.PortBlockLabel})";
+        }
+    }
+
+    public string ServerStatusDisplayHost
+    {
+        get
+        {
+            var plan = CurrentConnectionPlan;
+            if (!IsStagingMode)
+            {
+                return plan.DisplayHost;
+            }
+
+            var preset = LauncherSettings.GetStagingLanePreset(_settings.StagingLane);
+            return $"{preset.ShortBadgeLabel} • {plan.DisplayHost}";
+        }
+    }
+
+    public string StagingTargetSummaryText
+    {
+        get
+        {
+            var plan = CurrentConnectionPlan;
+            var preset = LauncherSettings.GetStagingLanePreset(_settings.StagingLane);
+            return $"{preset.DisplayName} • {plan.StatusProbeHost} (Lobby/Search {StagingAuthPort}/{StagingDataPort}/{StagingViewPort}/{StagingSearchPort} • Profile {StagingProfilePort}/{StagingProfileIrcPort} • Map UDP {plan.MapUdpPort})";
+        }
+    }
+
+    public string StagingRelayStatusText => IsStagingRelayActive
+        ? "Managed loopback TCP relay ACTIVE on 127.0.0.1 (54231/54230/54001/54002/51220/51240) • No admin required"
+        : "Managed loopback TCP relay ready (6 TCP ports incl. Profile 51220/51240 • Starts on Play • No admin required)";
 
     public bool IsBusy
     {
@@ -158,11 +336,28 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    public string PlayButtonText => IsBusy
-        ? "PREPARING..."
-        : PendingUpdatesCount > 0
-            ? $"UPDATE & PLAY ({PendingUpdatesCount})"
-            : "PLAY SOULSPIREXI";
+    public string PlayButtonText
+    {
+        get
+        {
+            if (IsBusy)
+            {
+                return "PREPARING...";
+            }
+
+            if (IsStagingMode)
+            {
+                var preset = LauncherSettings.GetStagingLanePreset(_settings.StagingLane);
+                return PendingUpdatesCount > 0
+                    ? $"UPDATE & PLAY {preset.ShortBadgeLabel} ({PendingUpdatesCount})"
+                    : $"PLAY {preset.ShortBadgeLabel}";
+            }
+
+            return PendingUpdatesCount > 0
+                ? $"UPDATE & PLAY ({PendingUpdatesCount})"
+                : "PLAY SOULSPIREXI";
+        }
+    }
 
     public string StatusMessage
     {
@@ -221,7 +416,140 @@ public sealed class MainViewModel : INotifyPropertyChanged
         {
             if (_settings.UseCustomServer != value)
             {
-                _settings.UseCustomServer = value;
+                SelectedServerTarget = value
+                    ? ServerTargetMode.Custom
+                    : ServerTargetMode.Production;
+            }
+        }
+    }
+
+    public string StagingServerHost
+    {
+        get => _settings.StagingServerHost;
+        set
+        {
+            if (_settings.StagingServerHost != value)
+            {
+                _settings.StagingServerHost = value;
+                if (IsStagingRelayActive)
+                {
+                    _stagingRelay.Stop();
+                }
+
+                OnPropertyChanged();
+                NotifyEffectiveServerChanged();
+            }
+        }
+    }
+
+    public int StagingAuthPort
+    {
+        get => _settings.StagingAuthPort;
+        set
+        {
+            if (_settings.StagingAuthPort != value)
+            {
+                _settings.StagingAuthPort = value;
+                if (IsStagingRelayActive)
+                {
+                    _stagingRelay.Stop();
+                }
+
+                OnPropertyChanged();
+                NotifyEffectiveServerChanged();
+            }
+        }
+    }
+
+    public int StagingDataPort
+    {
+        get => _settings.StagingDataPort;
+        set
+        {
+            if (_settings.StagingDataPort != value)
+            {
+                _settings.StagingDataPort = value;
+                if (IsStagingRelayActive)
+                {
+                    _stagingRelay.Stop();
+                }
+
+                OnPropertyChanged();
+                NotifyEffectiveServerChanged();
+            }
+        }
+    }
+
+    public int StagingViewPort
+    {
+        get => _settings.StagingViewPort;
+        set
+        {
+            if (_settings.StagingViewPort != value)
+            {
+                _settings.StagingViewPort = value;
+                if (IsStagingRelayActive)
+                {
+                    _stagingRelay.Stop();
+                }
+
+                OnPropertyChanged();
+                NotifyEffectiveServerChanged();
+            }
+        }
+    }
+
+    public int StagingSearchPort
+    {
+        get => _settings.StagingSearchPort;
+        set
+        {
+            if (_settings.StagingSearchPort != value)
+            {
+                _settings.StagingSearchPort = value;
+                if (IsStagingRelayActive)
+                {
+                    _stagingRelay.Stop();
+                }
+
+                OnPropertyChanged();
+                NotifyEffectiveServerChanged();
+            }
+        }
+    }
+
+    public int StagingProfilePort
+    {
+        get => _settings.StagingProfilePort;
+        set
+        {
+            if (_settings.StagingProfilePort != value)
+            {
+                _settings.StagingProfilePort = value;
+                if (IsStagingRelayActive)
+                {
+                    _stagingRelay.Stop();
+                }
+
+                OnPropertyChanged();
+                NotifyEffectiveServerChanged();
+            }
+        }
+    }
+
+    public int StagingProfileIrcPort
+    {
+        get => _settings.StagingProfileIrcPort;
+        set
+        {
+            if (_settings.StagingProfileIrcPort != value)
+            {
+                _settings.StagingProfileIrcPort = value;
+                if (IsStagingRelayActive)
+                {
+                    _stagingRelay.Stop();
+                }
+
                 OnPropertyChanged();
                 NotifyEffectiveServerChanged();
             }
@@ -592,6 +920,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 _settings.EnableAutomaticTestingQolSettings = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(TestingQolStatusText));
+                OnPropertyChanged(nameof(CanEnablePerformanceDiagnostics));
+                OnPropertyChanged(nameof(PerfDiagStatusText));
+                SyncCorePerfConfigSafe();
                 _settingsService.Save(_settings, PlainPassword);
                 Log($"Automatic Testing Quality of Life Settings {(value ? "enabled" : "disabled")}.");
             }
@@ -622,11 +953,51 @@ public sealed class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    public string LauncherVersionText => $"v{LauncherSelfUpdateService.GetCurrentVersion()}";
+    public bool CanEnablePerformanceDiagnostics => IsTestingChannel;
+
+    public bool EnablePerformanceDiagnostics
+    {
+        get => _settings.EnablePerformanceDiagnostics;
+        set
+        {
+            if (_settings.EnablePerformanceDiagnostics != value)
+            {
+                _settings.EnablePerformanceDiagnostics = value;
+                SyncCorePerfConfigSafe();
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(PerfDiagStatusText));
+                _settingsService.Save(_settings, PlainPassword);
+                Log($"Performance Diagnostics {(value && IsTestingChannel ? "enabled (Testing channel)" : "disabled")}.");
+            }
+        }
+    }
+
+    public string PerfDiagStatusText
+    {
+        get
+        {
+            if (!IsTestingChannel)
+            {
+                return "Disabled on Stable channel (switch to a Testing channel to opt in).";
+            }
+
+            if (TestingEnvironmentQolPolicy.IsPerformanceDiagnosticsActive(_settings, _manifest.Channel))
+            {
+                return string.IsNullOrWhiteSpace(_lastPerfExportPath)
+                    ? "Active (Testing): records launcher & Core timings with redacted JSON export on exit (<= 512 KB)."
+                    : $"Active (Testing): last bundle saved ({Path.GetFileName(_lastPerfExportPath)}).";
+            }
+
+            return "Off by default: opt in to record launcher & in-game Core performance baselines on Testing.";
+        }
+    }
+
+    public string LauncherVersionText => $"v{LauncherSelfUpdateService.GetCurrentInformationalVersion()}";
 
     public IReadOnlyList<UpdateChannel> UpdateChannelOptions { get; } =
     [
         UpdateChannel.Stable,
+        UpdateChannel.TestingCoreUi,
         UpdateChannel.Testing,
         UpdateChannel.TestingSearchLegacyText,
         UpdateChannel.TestingRegistry24Hook,
@@ -646,6 +1017,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(ChannelBadgeText));
                 OnPropertyChanged(nameof(ChannelDescriptionText));
                 OnPropertyChanged(nameof(TestingQolStatusText));
+                OnPropertyChanged(nameof(CanEnablePerformanceDiagnostics));
+                OnPropertyChanged(nameof(PerfDiagStatusText));
+                SyncCorePerfConfigSafe();
                 _settingsService.Save(_settings, PlainPassword);
                 Log($"Switched update channel to {value}. Checking manifest...");
                 _ = CheckUpdatesOnlyAsync();
@@ -656,11 +1030,13 @@ public sealed class MainViewModel : INotifyPropertyChanged
     public bool IsTestingChannel => _settings.UpdateChannel is UpdateChannel.Testing
         or UpdateChannel.TestingRegistry24Hook
         or UpdateChannel.TestingSearchLegacyText
-        or UpdateChannel.TestingSearchAlignedText;
+        or UpdateChannel.TestingSearchAlignedText
+        or UpdateChannel.TestingCoreUi;
 
     public string ChannelBadgeText => _settings.UpdateChannel switch
     {
         UpdateChannel.Testing => "TESTING CHANNEL",
+        UpdateChannel.TestingCoreUi => "TESTING — CORE UI",
         UpdateChannel.TestingRegistry24Hook => "TESTING B (MENU2FON)",
         UpdateChannel.TestingSearchLegacyText => "TESTING A (LEGACY TEXT)",
         UpdateChannel.TestingSearchAlignedText => "TESTING C (ALIGNED TEXT)",
@@ -669,7 +1045,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public string ChannelDescriptionText => _settings.UpdateChannel switch
     {
-        UpdateChannel.Testing => "Testing channel delivers verified 31-hook canonical test-server DLLs (Commands menu + registry weapon engine), addons, and DAT overlays without affecting Stable players.",
+        UpdateChannel.Testing => "Testing channel delivers verified 32-hook canonical test-server DLLs (Commands menu + registry weapon engine + dual-weapon resolver), addons, and DAT overlays without affecting Stable players.",
+        UpdateChannel.TestingCoreUi => "Isolated SoulspireXI Core unified UI, Main Menu dock, Soulforge, and gamepad navigation preview. Preserves your settings; switch back to Stable anytime.",
         UpdateChannel.TestingRegistry24Hook => "Candidate B (Control): Current 24-hook menu2fon sprite Search renderer (2.1.4-testing.registry24). Switch back to Stable anytime.",
         UpdateChannel.TestingSearchLegacyText => "Candidate A (Historical 4f0fdb3): 24-hook 66-Soul registry with legacy single-call 0.75x native_text Search labels (zero sprite mutation).",
         UpdateChannel.TestingSearchAlignedText => "Candidate C (Repair): 24-hook 66-Soul registry with fixed-column aligned native_text Search labels (readable first, zero sprite mutation).",
@@ -701,6 +1078,66 @@ public sealed class MainViewModel : INotifyPropertyChanged
     }
 
     public bool IsLauncherUpdateAvailable => _availableLauncherUpdate?.UpdateAvailable == true;
+
+    public LauncherUpdateStage LauncherUpdateStage
+    {
+        get => _launcherUpdateStage;
+        private set
+        {
+            if (SetField(ref _launcherUpdateStage, value))
+            {
+                OnPropertyChanged(nameof(LauncherUpdateStatusText));
+            }
+        }
+    }
+
+    public string LauncherUpdateStatusText
+    {
+        get => _launcherUpdateStatusText;
+        private set => SetField(ref _launcherUpdateStatusText, value);
+    }
+
+    public bool CanInstallPerUser
+    {
+        get
+        {
+            var exePath = LauncherSelfUpdateService.GetCurrentExecutablePath();
+            return !string.IsNullOrWhiteSpace(exePath) &&
+                   !LauncherInstallationService.IsRunningFromPerUserInstall(exePath);
+        }
+    }
+
+    public bool CanRollbackLauncher
+    {
+        get
+        {
+            var exePath = LauncherSelfUpdateService.GetCurrentExecutablePath();
+            var dir = !string.IsNullOrWhiteSpace(exePath) ? Path.GetDirectoryName(exePath) : null;
+            return !string.IsNullOrWhiteSpace(dir) && LauncherInstallationService.CanRollback(dir, out _);
+        }
+    }
+
+    public string RollbackLauncherButtonText =>
+        !string.IsNullOrWhiteSpace(_installState?.PreviousVersion)
+            ? $"Rollback to {_installState.PreviousVersion}"
+            : "Rollback Previous Launcher";
+
+    public string LauncherInstallLocationText
+    {
+        get
+        {
+            var exePath = LauncherSelfUpdateService.GetCurrentExecutablePath();
+            if (string.IsNullOrWhiteSpace(exePath))
+            {
+                return "Development / unpacked build";
+            }
+
+            var mode = LauncherInstallationService.IsRunningFromPerUserInstall(exePath)
+                ? "Per-user install"
+                : "Portable location";
+            return $"{mode}: {Path.GetDirectoryName(exePath)}";
+        }
+    }
 
     public string LauncherUpdateButtonText => IsLauncherUpdateAvailable
         ? $"Update Launcher ({_availableLauncherUpdate!.LatestTag})"
@@ -771,12 +1208,27 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     public async Task InitializeAsync()
     {
-        var justUpdated = Environment.GetCommandLineArgs()
-            .Any(arg => arg.Equals(LauncherSelfUpdateService.JustUpdatedArg, StringComparison.OrdinalIgnoreCase));
+        var cmdArgs = Environment.GetCommandLineArgs();
+        var justUpdated = cmdArgs.Any(arg => arg.Equals(LauncherSelfUpdateService.JustUpdatedArg, StringComparison.OrdinalIgnoreCase));
+        var rolledBack = cmdArgs.Any(arg => arg.Equals(LauncherSelfUpdateService.RolledBackArg, StringComparison.OrdinalIgnoreCase));
+        var updateFailed = cmdArgs.Any(arg => arg.Equals(LauncherSelfUpdateService.UpdateFailedArg, StringComparison.OrdinalIgnoreCase));
+        var updatedTo = ReadArgValue(cmdArgs, LauncherSelfUpdateService.UpdatedToArg);
         LauncherSelfUpdateService.CleanupStagingDirectory();
 
         // Only remove obsolete OverlordsLauncher.exe once SoulspireLauncher.exe itself is verified running.
         var currentExePath = LauncherSelfUpdateService.GetCurrentExecutablePath();
+        var currentInstallDir = !string.IsNullOrWhiteSpace(currentExePath) ? Path.GetDirectoryName(currentExePath) : null;
+        if (!string.IsNullOrWhiteSpace(currentInstallDir))
+        {
+            var recovery = LauncherInstallationService.RecoverFromInterruptedUpdate(currentInstallDir);
+            if (recovery.RecoveredCorruptOrMissingExe || recovery.CleanedTempFilesCount > 0 || recovery.ClearedPendingVerification)
+            {
+                Log($"Launcher recovery: {recovery.Summary}");
+            }
+
+            RefreshInstallState();
+        }
+
         if (LauncherSelfUpdateService.CleanupObsoleteLegacyLauncherBinary(currentExePath))
         {
             Log("Removed obsolete OverlordsLauncher.exe after verifying SoulspireLauncher.exe.");
@@ -829,10 +1281,42 @@ public sealed class MainViewModel : INotifyPropertyChanged
             }
         }
 
-        Log($"Launcher {LauncherVersionText} initialized. Ashita path: {AshitaPath}");
+        Log($"Launcher {LauncherVersionText} initialized ({_settings.UpdateChannel} • {_settings.ServerTarget}). Ashita path: {AshitaPath}");
+        SyncCorePerfConfigSafe();
+        if (!_hasRecordedStartupSpan)
+        {
+            _hasRecordedStartupSpan = true;
+            App.StartupStopwatch.Stop();
+            _perfDiag.RecordDurationMs(
+                IsPerfDiagActive,
+                "startup",
+                App.StartupStopwatch.Elapsed.TotalMilliseconds,
+                isColdOverride: true,
+                outcome: "complete",
+                scope: "client_only");
+        }
         if (justUpdated)
         {
-            StatusMessage = $"Launcher updated to {LauncherVersionText}.";
+            LauncherUpdateStage = LauncherUpdateStage.Completed;
+            var targetLabel = string.IsNullOrWhiteSpace(updatedTo) ? LauncherVersionText : updatedTo;
+            LauncherUpdateStatusText = $"Update completed ({targetLabel})";
+            StatusMessage = $"Launcher updated to {targetLabel}. Settings and {_settings.ServerTarget} environment preserved.";
+            Log(StatusMessage);
+        }
+        else if (rolledBack)
+        {
+            LauncherUpdateStage = LauncherUpdateStage.Completed;
+            var targetLabel = string.IsNullOrWhiteSpace(updatedTo) ? LauncherVersionText : updatedTo;
+            LauncherUpdateStatusText = $"Rolled back to {targetLabel}";
+            StatusMessage = $"Launcher rolled back to {targetLabel}.";
+            Log(StatusMessage);
+        }
+        else if (updateFailed)
+        {
+            LauncherUpdateStage = LauncherUpdateStage.Failed;
+            var detail = _installState?.LastUpdateError ?? "Previous launcher update failed and rolled back safely.";
+            LauncherUpdateStatusText = $"Previous update rolled back: {detail}";
+            StatusMessage = LauncherUpdateStatusText;
             Log(StatusMessage);
         }
 
@@ -843,7 +1327,7 @@ public sealed class MainViewModel : INotifyPropertyChanged
             await CheckUpdatesOnlyAsync();
         }
 
-        if (!justUpdated && (_settings.AutoUpdateLauncher || _settings.AutoCheckUpdatesOnStartup))
+        if (!justUpdated && !rolledBack && (_settings.AutoUpdateLauncher || _settings.AutoCheckUpdatesOnStartup))
         {
             await CheckAndApplyLauncherUpdateAsync(autoApply: _settings.AutoUpdateLauncher, showUpToDateDialog: false);
         }
@@ -851,6 +1335,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private async Task CheckUpdatesOnlyAsync()
     {
+        var checkSw = PerformanceDiagnosticsService.StartSpanIfEnabled(IsPerfDiagActive);
+        var isColdCheck = _isColdCheckSpan;
         try
         {
             StatusMessage = $"Checking SoulspireXI {ChannelBadgeText} manifest...";
@@ -858,10 +1344,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
             var result = await _manifestService.FetchManifestDetailedAsync(
                 embedded,
                 _settingsService.LoadLocalServerOverride(),
-                _settings.UpdateChannel);
+                _settings.UpdateChannel,
+                perf: _perfDiag,
+                perfEnabled: IsPerfDiagActive,
+                isColdCheck: isColdCheck);
 
             if (result.Manifest is null)
             {
+                _perfDiag.RecordSpan(IsPerfDiagActive, "check", checkSw, isColdCheck, "failed", "client_plus_server_rtt");
+                _isColdCheckSpan = false;
                 _manifestUnavailableError = result.ErrorMessage ?? $"Could not load remote manifest for {_settings.UpdateChannel}.";
                 PendingUpdatesCount = 0;
                 OnPropertyChanged(nameof(ManifestVersionText));
@@ -876,7 +1367,9 @@ public sealed class MainViewModel : INotifyPropertyChanged
             _manifest = result.Manifest;
             ApplyManifest(result.Manifest);
 
-            var pending = _manifestService.GetOutdatedFiles(_manifest, _settings);
+            var pending = _manifestService.GetOutdatedFiles(_manifest, _settings, perf: _perfDiag, perfEnabled: IsPerfDiagActive, isCold: isColdCheck);
+            _perfDiag.RecordSpan(IsPerfDiagActive, "check", checkSw, isColdCheck, "complete", "client_plus_server_rtt", files: pending.Count);
+            _isColdCheckSpan = false;
             PendingUpdatesCount = pending.Count;
             RefreshDiagnostics();
 
@@ -914,6 +1407,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
     {
         try
         {
+            LauncherUpdateStage = LauncherUpdateStage.Checking;
+            LauncherUpdateStatusText = $"Checking {ChannelBadgeText} launcher updates...";
             var result = await _selfUpdateService.CheckForUpdateAsync(_manifest, _settings.UpdateChannel);
             _availableLauncherUpdate = result;
             OnPropertyChanged(nameof(IsLauncherUpdateAvailable));
@@ -922,10 +1417,12 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             if (!result.UpdateAvailable)
             {
+                LauncherUpdateStage = LauncherUpdateStage.UpToDate;
+                LauncherUpdateStatusText = $"Up to date ({LauncherVersionText} • {ChannelBadgeText})";
                 if (showUpToDateDialog)
                 {
                     MessageBox.Show(
-                        $"SoulspireXI Launcher {LauncherVersionText} ({_settings.UpdateChannel}) is already up to date.",
+                        $"SoulspireXI Launcher {LauncherVersionText} ({ChannelBadgeText}) is already up to date.",
                         "SoulspireXI Launcher — Up to Date",
                         MessageBoxButton.OK,
                         MessageBoxImage.Information);
@@ -934,17 +1431,28 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 return false;
             }
 
-            Log($"Launcher update available ({_settings.UpdateChannel}): {result.LatestTag} (current {LauncherVersionText})");
+            LauncherUpdateStage = LauncherUpdateStage.UpdateAvailable;
+            LauncherUpdateStatusText = $"Update available: {result.LatestTag} ({ChannelBadgeText})";
+            Log($"Launcher update available ({ChannelBadgeText}, source={result.Source}): {result.LatestTag} (current {LauncherVersionText})");
 
             if (autoApply)
             {
+                if (_stagingRelay.IsRunning)
+                {
+                    LauncherUpdateStage = LauncherUpdateStage.DeferredActiveRelay;
+                    LauncherUpdateStatusText = $"Update {result.LatestTag} ready — deferred while Staging relay is active";
+                    StatusMessage = LauncherUpdateStatusText;
+                    Log("Deferred automatic launcher update because the Staging TCP relay is currently active.");
+                    return false;
+                }
+
                 if (LauncherSelfUpdateService.CanSelfUpdateInPlace(out _, out var reason))
                 {
-                    return await ApplyAvailableLauncherUpdateAsync();
+                    return await ApplyAvailableLauncherUpdateAsync(isAutoApply: true);
                 }
 
                 Log($"Automatic launcher update skipped: {reason}");
-                StatusMessage = $"Launcher {result.LatestTag} available (click Update Launcher).";
+                StatusMessage = $"Launcher {result.LatestTag} available (click Update Launcher or Install Per-User).";
                 return false;
             }
 
@@ -952,8 +1460,8 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (showUpToDateDialog || promptOnUpdateIfManual)
             {
                 var prompt = promptOnUpdateIfManual
-                    ? $"A new SoulspireXI Launcher release ({result.LatestTag}) is available.\nCurrent version: {LauncherVersionText}\n\nDownload and restart before playing?"
-                    : $"A new SoulspireXI Launcher release ({result.LatestTag}) is available.\nCurrent version: {LauncherVersionText}\n\nDownload and restart now?";
+                    ? $"A verified SoulspireXI Launcher release ({result.LatestTag}) is available.\nCurrent version: {LauncherVersionText}\n\nDownload, verify, and restart before playing?"
+                    : $"A verified SoulspireXI Launcher release ({result.LatestTag}) is available.\nCurrent version: {LauncherVersionText}\n\nDownload, verify, and restart now?";
                 var choice = MessageBox.Show(
                     prompt,
                     "SoulspireXI Launcher — Update Available",
@@ -961,17 +1469,19 @@ public sealed class MainViewModel : INotifyPropertyChanged
                     MessageBoxImage.Information);
                 if (choice == MessageBoxResult.Yes)
                 {
-                    return await ApplyAvailableLauncherUpdateAsync();
+                    return await ApplyAvailableLauncherUpdateAsync(isAutoApply: false);
                 }
             }
         }
         catch (Exception ex)
         {
-            Log($"Launcher update check skipped: {ex.Message}");
+            LauncherUpdateStage = LauncherUpdateStage.Failed;
+            LauncherUpdateStatusText = $"Update check failed: {ex.Message}";
+            Log($"Launcher update check failed: {ex.Message}");
             if (showUpToDateDialog)
             {
                 MessageBox.Show(
-                    $"Could not check GitHub Releases for SoulspireXI Launcher updates:\n{ex.Message}",
+                    $"Could not check for SoulspireXI Launcher updates:\n{ex.Message}",
                     "SoulspireXI Launcher — Update Check Failed",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
@@ -981,16 +1491,48 @@ public sealed class MainViewModel : INotifyPropertyChanged
         return false;
     }
 
-    private async Task<bool> ApplyAvailableLauncherUpdateAsync()
+    private async Task<bool> ApplyAvailableLauncherUpdateAsync(bool isAutoApply = false)
     {
         if (_availableLauncherUpdate is null || !_availableLauncherUpdate.UpdateAvailable)
         {
             return false;
         }
 
+        // Coordinate with active Staging TCP relay so gameplay connections are never unexpectedly severed
+        if (_stagingRelay.IsRunning)
+        {
+            if (isAutoApply)
+            {
+                LauncherUpdateStage = LauncherUpdateStage.DeferredActiveRelay;
+                LauncherUpdateStatusText = $"Update {_availableLauncherUpdate.LatestTag} deferred while Staging relay is active";
+                StatusMessage = LauncherUpdateStatusText;
+                Log("Deferred automatic launcher update because Staging TCP relay is active.");
+                return false;
+            }
+
+            var activeClients = _stagingRelay.ActiveClientConnections;
+            var relayChoice = MessageBox.Show(
+                $"The Staging TCP relay is currently active ({activeClients} active connection(s)).\n\n" +
+                $"Installing SoulspireXI Launcher {_availableLauncherUpdate.LatestTag} requires stopping the Staging relay and restarting the launcher.\n\n" +
+                "Stop the Staging relay and install the update now? (Choose No to defer until you finish playing.)",
+                "SoulspireXI Launcher — Staging Relay Active",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (relayChoice != MessageBoxResult.Yes)
+            {
+                LauncherUpdateStage = LauncherUpdateStage.DeferredActiveRelay;
+                LauncherUpdateStatusText = $"Update {_availableLauncherUpdate.LatestTag} deferred by user while Staging relay is active";
+                StatusMessage = LauncherUpdateStatusText;
+                Log("Deferred launcher update so active Staging connections remain uninterrupted.");
+                return false;
+            }
+        }
+
         if (!LauncherSelfUpdateService.CanSelfUpdateInPlace(out var targetExePath, out var reason) ||
             string.IsNullOrEmpty(targetExePath))
         {
+            LauncherUpdateStage = LauncherUpdateStage.Failed;
+            LauncherUpdateStatusText = reason;
             Log(reason);
             if (!string.IsNullOrWhiteSpace(_availableLauncherUpdate.ReleaseUrl))
             {
@@ -1021,27 +1563,52 @@ public sealed class MainViewModel : INotifyPropertyChanged
         ProgressPercent = 0;
         try
         {
+            LauncherUpdateStage = LauncherUpdateStage.Downloading;
+            LauncherUpdateStatusText = $"Downloading {_availableLauncherUpdate.LatestTag}...";
             var progress = new Progress<SyncProgress>(p =>
             {
                 StatusMessage = p.Message;
+                LauncherUpdateStatusText = p.Message;
                 ProgressPercent = p.Percent;
+                if (p.Percent >= 85 && p.Percent < 100)
+                {
+                    LauncherUpdateStage = LauncherUpdateStage.Verifying;
+                }
             });
 
-            Log($"Downloading launcher update {_availableLauncherUpdate.LatestTag}...");
-            var stagedExe = await _selfUpdateService.DownloadUpdateAsync(_availableLauncherUpdate, progress);
-            StatusMessage = $"Installing {_availableLauncherUpdate.LatestTag} and restarting...";
+            Log($"Downloading and verifying launcher update {_availableLauncherUpdate.LatestTag}...");
+            var staged = await _selfUpdateService.DownloadAndVerifyUpdateAsync(_availableLauncherUpdate, progress);
+
+            // Persist all player settings (channel, Staging/Production target, paths, credentials) before restart
+            _settingsService.Save(_settings, PlainPassword);
+            _stagingRelay.Stop();
+
+            LauncherUpdateStage = LauncherUpdateStage.Installing;
+            LauncherUpdateStatusText = $"Installing {_availableLauncherUpdate.LatestTag} via SoulspireUpdater...";
+            StatusMessage = $"Installing {_availableLauncherUpdate.LatestTag} and restarting launcher...";
             Log(StatusMessage);
 
-            _selfUpdateService.LaunchUpdaterAndPrepareRestart(stagedExe, targetExePath);
+            var usedStandalone = _selfUpdateService.LaunchStandaloneUpdaterAndPrepareRestart(
+                staged,
+                targetExePath,
+                LauncherSelfUpdateService.GetCurrentInformationalVersion());
+            Log(usedStandalone
+                ? "Launched standalone SoulspireUpdater.exe outside active install directory."
+                : "Launched backup-and-swap updater fallback.");
+
+            LauncherUpdateStage = LauncherUpdateStage.Restarting;
+            LauncherUpdateStatusText = $"Restarting into {_availableLauncherUpdate.LatestTag}...";
             Application.Current?.Shutdown();
             return true;
         }
         catch (Exception ex)
         {
+            LauncherUpdateStage = LauncherUpdateStage.Failed;
+            LauncherUpdateStatusText = $"Update failed: {ex.Message}";
             StatusMessage = $"Launcher self-update failed: {ex.Message}";
             Log(StatusMessage);
             MessageBox.Show(
-                $"Could not update SoulspireLauncher.exe:\n{ex.Message}",
+                $"Could not update SoulspireLauncher.exe (existing installation was preserved untouched):\n\n{ex.Message}",
                 "SoulspireXI Launcher — Update Error",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
@@ -1054,6 +1621,146 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 IsBusy = false;
             }
         }
+    }
+
+    private void InstallPerUserLauncher()
+    {
+        var currentExe = LauncherSelfUpdateService.GetCurrentExecutablePath();
+        if (string.IsNullOrWhiteSpace(currentExe))
+        {
+            MessageBox.Show(
+                "Per-user installation is available when running the packaged SoulspireLauncher.exe.",
+                "SoulspireXI Launcher — Install",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        try
+        {
+            var currentDir = Path.GetDirectoryName(currentExe) ?? string.Empty;
+            var siblingUpdater = Path.Combine(currentDir, LauncherInstallationService.CanonicalUpdaterExeName);
+            var result = LauncherInstallationService.InstallPerUser(
+                currentExe,
+                File.Exists(siblingUpdater) ? siblingUpdater : null,
+                LauncherSelfUpdateService.GetCurrentInformationalVersion(),
+                _settings.UpdateChannel,
+                _settingsService,
+                _settings,
+                PlainPassword,
+                _shortcutMigrationService);
+
+            if (!result.Success)
+            {
+                MessageBox.Show(result.Message, "SoulspireXI Launcher — Install Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            RefreshInstallState();
+            StatusMessage = result.Message;
+            Log(result.Message);
+
+            var relaunch = MessageBox.Show(
+                $"{result.Message}\n\nStart Menu shortcut: {(result.StartMenuShortcutCreated ? "Created" : "Skipped")}\nDesktop shortcut: {(result.DesktopShortcutCreated ? "Created" : "Skipped")}\n\nSwitch to the installed launcher now?",
+                "SoulspireXI Launcher — Installed",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Information);
+            if (relaunch == MessageBoxResult.Yes)
+            {
+                _settingsService.Save(_settings, PlainPassword);
+                _stagingRelay.Stop();
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = result.InstalledExePath,
+                    WorkingDirectory = result.InstallRoot,
+                    UseShellExecute = true
+                });
+                Application.Current?.Shutdown();
+            }
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Installation failed: {ex.Message}";
+            Log(StatusMessage);
+            MessageBox.Show($"Could not install SoulspireXI Launcher:\n{ex.Message}", "SoulspireXI Launcher — Install Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private Task RollbackLauncherAsync()
+    {
+        var currentExe = LauncherSelfUpdateService.GetCurrentExecutablePath();
+        if (string.IsNullOrWhiteSpace(currentExe))
+        {
+            return Task.CompletedTask;
+        }
+
+        if (_stagingRelay.IsRunning)
+        {
+            var relayChoice = MessageBox.Show(
+                $"The Staging TCP relay is currently active ({_stagingRelay.ActiveClientConnections} active connection(s)).\n\nStop the Staging relay and roll back the launcher now?",
+                "SoulspireXI Launcher — Staging Relay Active",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (relayChoice != MessageBoxResult.Yes)
+            {
+                return Task.CompletedTask;
+            }
+        }
+
+        var prevLabel = _installState?.PreviousVersion ?? "the previous version";
+        var confirm = MessageBox.Show(
+            $"Roll back SoulspireXI Launcher to {prevLabel}?\n\nYour settings, Update Channel, Server Environment, and installed game files will be preserved.",
+            "SoulspireXI Launcher — Confirm Rollback",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        if (confirm != MessageBoxResult.Yes)
+        {
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            LauncherUpdateStage = LauncherUpdateStage.RollingBack;
+            LauncherUpdateStatusText = $"Rolling back to {prevLabel}...";
+            _settingsService.Save(_settings, PlainPassword);
+            _stagingRelay.Stop();
+            _selfUpdateService.LaunchRollbackAndPrepareRestart(currentExe);
+            Application.Current?.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            LauncherUpdateStage = LauncherUpdateStage.Failed;
+            LauncherUpdateStatusText = $"Rollback failed: {ex.Message}";
+            Log(LauncherUpdateStatusText);
+            MessageBox.Show($"Could not roll back SoulspireXI Launcher:\n{ex.Message}", "SoulspireXI Launcher — Rollback Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void RefreshInstallState()
+    {
+        var exePath = LauncherSelfUpdateService.GetCurrentExecutablePath();
+        var dir = !string.IsNullOrWhiteSpace(exePath) ? Path.GetDirectoryName(exePath) : null;
+        _installState = !string.IsNullOrWhiteSpace(dir) ? LauncherInstallationService.LoadInstallState(dir) : null;
+        OnPropertyChanged(nameof(CanInstallPerUser));
+        OnPropertyChanged(nameof(CanRollbackLauncher));
+        OnPropertyChanged(nameof(RollbackLauncherButtonText));
+        OnPropertyChanged(nameof(LauncherInstallLocationText));
+        RelayCommand.RaiseCanExecuteChanged();
+    }
+
+    private static string? ReadArgValue(string[] args, string flag)
+    {
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i].Equals(flag, StringComparison.OrdinalIgnoreCase))
+            {
+                return args[i + 1];
+            }
+        }
+
+        return null;
     }
 
     private async Task SyncUpdatesAsync(bool forceAll)
@@ -1089,7 +1796,15 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 ProgressPercent = p.Percent;
             });
 
-            var count = await _manifestService.SyncSoulspireFilesAsync(_manifest, _settings, forceAll, progress);
+            var count = await _manifestService.SyncSoulspireFilesAsync(
+                _manifest,
+                _settings,
+                forceAll,
+                progress,
+                perf: _perfDiag,
+                perfEnabled: IsPerfDiagActive,
+                isCold: _isColdSyncSpan);
+            _isColdSyncSpan = false;
             PendingUpdatesCount = _manifestService.GetOutdatedFiles(_manifest, _settings).Count;
             RefreshDiagnostics();
 
@@ -1217,8 +1932,16 @@ public sealed class MainViewModel : INotifyPropertyChanged
             if (result.FromRemote)
             {
                 StatusMessage = $"Checking for SoulspireXI ({ChannelBadgeText}) file updates...";
-                var updatedCount = await _manifestService.SyncSoulspireFilesAsync(_manifest, _settings, forceAll: false, progress);
-                PendingUpdatesCount = _manifestService.GetOutdatedFiles(_manifest, _settings).Count;
+                var updatedCount = await _manifestService.SyncSoulspireFilesAsync(
+                    _manifest,
+                    _settings,
+                    forceAll: false,
+                    progress,
+                    perf: _perfDiag,
+                    perfEnabled: IsPerfDiagActive,
+                    isCold: _isColdSyncSpan);
+                _isColdSyncSpan = false;
+                PendingUpdatesCount = _manifestService.GetOutdatedFiles(_manifest, _settings, perf: _perfDiag, perfEnabled: IsPerfDiagActive, isCold: false).Count;
                 Log(updatedCount > 0
                     ? $"Updated {updatedCount} SoulspireXI client file(s) before launch."
                     : "All SoulspireXI client files are up to date.");
@@ -1234,6 +1957,51 @@ public sealed class MainViewModel : INotifyPropertyChanged
                 throw new FileNotFoundException("xiloader.exe could not be located or downloaded.");
             }
 
+            var plan = StagingRelayService.ResolveConnectionPlan(_settings, _manifest);
+            if (plan.RequiresLoopbackRelay && plan.RelayConfig is not null)
+            {
+                StatusMessage = $"Checking Staging lobby & profile reachability ({plan.StatusProbeHost}:{plan.StatusProbeLobbyPort}, {plan.StatusProbeProfilePort}/{plan.StatusProbeProfileIrcPort})...";
+                var stagingProbe = await _statusService.CheckStagingAsync(
+                    plan.StatusProbeHost,
+                    plan.StatusProbeLobbyPort,
+                    plan.StatusProbeSearchPort,
+                    plan.StatusProbeProfilePort,
+                    plan.StatusProbeProfileIrcPort);
+                ServerStatus = stagingProbe;
+
+                if (!stagingProbe.LobbyReachable)
+                {
+                    _stagingRelay.Stop();
+                    throw new InvalidOperationException(
+                        $"Staging server {plan.StatusProbeHost}:{plan.StatusProbeLobbyPort} is unreachable ({stagingProbe.SummaryText}).\n\n" +
+                        "Launch cancelled before starting the loopback relay or modifying soulspirexi.ini. " +
+                        "Verify the Staging server is running and reachable from this PC, or switch back to Production.");
+                }
+
+                if (stagingProbe.ProfileReachable == false)
+                {
+                    _stagingRelay.Stop();
+                    var detail = stagingProbe.ProfileFailureDetail
+                        ?? $"Staging profile server unreachable on {plan.StatusProbeHost}:{plan.StatusProbeProfilePort}/{plan.StatusProbeProfileIrcPort}";
+                    throw new InvalidOperationException(
+                        $"{detail}.\n\n" +
+                        "xiloader requires both profile TCP ports (51220->51221 and 51240->51241) to complete login without error 0x21. " +
+                        "Launch cancelled before starting the loopback relay or modifying soulspirexi.ini.");
+                }
+
+                StatusMessage = $"Starting managed Staging TCP relay -> {plan.StatusProbeHost}...";
+                var relayResult = _stagingRelay.Start(plan.RelayConfig);
+                if (!relayResult.Success)
+                {
+                    throw new InvalidOperationException(relayResult.Message);
+                }
+            }
+            else
+            {
+                // Always guarantee the Staging loopback relay is stopped before launching Production or Custom.
+                _stagingRelay.Stop();
+            }
+
             StatusMessage = "Writing Ashita v4 & Pivot configurations...";
             if (_configGenerator.CapturePlayerInputPreferencesIfUnmanaged(_settings.AshitaPath, _settings))
             {
@@ -1242,19 +2010,22 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             var effectiveInput = TestingEnvironmentQolPolicy.ResolveInputSettings(
                 _settings,
-                EffectiveHost,
+                plan.BootServerHost,
                 _manifest.Channel,
                 _manifest.ServerName);
 
+            var cfgSw = PerformanceDiagnosticsService.StartSpanIfEnabled(IsPerfDiagActive);
             _configGenerator.WriteAllConfigs(
                 _settings.AshitaPath,
                 _settings,
-                EffectiveHost,
-                EffectiveUseHairpin,
+                plan.BootServerHost,
+                plan.BootUseHairpin,
                 PlainPassword,
                 xiloaderPath,
                 manifestChannel: _manifest.Channel,
                 serverName: _manifest.ServerName);
+            SyncCorePerfConfigSafe();
+            _perfDiag.RecordSpan(IsPerfDiagActive, "config_write", cfgSw, true, "complete", "client_only");
 
             if (effectiveInput.TestingQolApplied)
             {
@@ -1263,13 +2034,27 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
             RefreshDiagnostics();
 
-            StatusMessage = $"Launching Ashita v4 -> {EffectiveHost}...";
+            StatusMessage = plan.RequiresLoopbackRelay
+                ? $"Launching Ashita v4 -> STAGING {plan.DisplayHost} (via local loopback relay)..."
+                : $"Launching Ashita v4 -> {plan.DisplayHost}...";
             Log(StatusMessage);
-            _launchService.LaunchAshita(_settings.AshitaPath);
+            var launchSw = PerformanceDiagnosticsService.StartSpanIfEnabled(IsPerfDiagActive);
+            var launchedProc = _launchService.LaunchAshita(_settings.AshitaPath);
+            _perfDiag.RecordSpan(IsPerfDiagActive, "launch_handoff", launchSw, true, "complete", "client_only");
+            _perfDiag.StartProcessMonitoring(launchedProc, IsPerfDiagActive, () => ExportPerfBundleFromBackground());
 
             if (_settings.AutoCloseOnLaunch)
             {
-                Application.Current.Shutdown();
+                if (plan.RequiresLoopbackRelay)
+                {
+                    StatusMessage = "Staging TCP relay active — launcher minimized (keep open while playing Staging).";
+                    Log(StatusMessage);
+                    RequestMinimizeWindow?.Invoke();
+                }
+                else
+                {
+                    Application.Current.Shutdown();
+                }
             }
         }
         catch (Exception ex)
@@ -1286,14 +2071,25 @@ public sealed class MainViewModel : INotifyPropertyChanged
 
     private async Task RefreshServerStatusAsync()
     {
+        var plan = CurrentConnectionPlan;
         ServerStatus = new ServerStatus
         {
-            Host = EffectiveHost,
+            Host = plan.StatusProbeHost,
             IsOnline = false,
-            SummaryText = $"Checking {EffectiveHost}..."
+            SummaryText = $"Checking {plan.DisplayHost}..."
         };
 
-        var result = await _statusService.CheckAsync(EffectiveHost, EffectiveLobbyPort, EffectiveSearchPort);
+        var result = plan.RequiresLoopbackRelay
+            ? await _statusService.CheckStagingAsync(
+                plan.StatusProbeHost,
+                plan.StatusProbeLobbyPort,
+                plan.StatusProbeSearchPort,
+                plan.StatusProbeProfilePort,
+                plan.StatusProbeProfileIrcPort)
+            : await _statusService.CheckAsync(
+                plan.StatusProbeHost,
+                plan.StatusProbeLobbyPort,
+                plan.StatusProbeSearchPort);
         ServerStatus = result;
     }
 
@@ -1592,14 +2388,178 @@ public sealed class MainViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ImportedSettingsSourceText));
         OnPropertyChanged(nameof(EnableAutomaticTestingQolSettings));
         OnPropertyChanged(nameof(TestingQolStatusText));
+        OnPropertyChanged(nameof(CanEnablePerformanceDiagnostics));
+        OnPropertyChanged(nameof(EnablePerformanceDiagnostics));
+        OnPropertyChanged(nameof(PerfDiagStatusText));
+        SyncCorePerfConfigSafe();
+    }
+
+    private void StopStagingRelay()
+    {
+        _stagingRelay.Stop();
+        StatusMessage = "Staging TCP relay stopped.";
+    }
+
+    private void ResetStagingDefaults()
+    {
+        var manifestStaging = _manifest.StagingServer;
+        _settings.StagingServerHost = !string.IsNullOrWhiteSpace(manifestStaging?.Host)
+            ? manifestStaging.Host.Trim()
+            : LauncherSettings.DefaultStagingHost;
+        _settings.ApplyStagingLanePreset(_settings.StagingLane);
+
+        _stagingRelay.Stop();
+        _settingsService.Save(_settings, PlainPassword);
+
+        OnPropertyChanged(nameof(SelectedStagingLane));
+        OnPropertyChanged(nameof(StagingServerHost));
+        OnPropertyChanged(nameof(StagingAuthPort));
+        OnPropertyChanged(nameof(StagingDataPort));
+        OnPropertyChanged(nameof(StagingViewPort));
+        OnPropertyChanged(nameof(StagingSearchPort));
+        OnPropertyChanged(nameof(StagingProfilePort));
+        OnPropertyChanged(nameof(StagingProfileIrcPort));
+        NotifyEffectiveServerChanged();
+        var preset = LauncherSettings.GetStagingLanePreset(_settings.StagingLane);
+        StatusMessage = $"Restored {preset.DisplayName} defaults ({_settings.StagingServerHost}:{_settings.StagingAuthPort}).";
+        Log(StatusMessage);
+        _ = RefreshServerStatusAsync();
+    }
+
+    public void Shutdown()
+    {
+        if (IsPerfDiagActive)
+        {
+            TryExportPerfBundle(silent: true);
+        }
+
+        _perfDiag.StopProcessMonitoring();
+        _stagingRelay.Stop();
+    }
+
+    public void Dispose()
+    {
+        _perfDiag.Dispose();
+        _stagingRelay.DiagnosticMessage -= Log;
+        _stagingRelay.StateChanged -= OnStagingRelayStateChanged;
+        _stagingRelay.Dispose();
+    }
+
+    private bool IsPerfDiagActive =>
+        TestingEnvironmentQolPolicy.IsPerformanceDiagnosticsActive(_settings, _manifest.Channel);
+
+    private void SyncCorePerfConfigSafe()
+    {
+        try
+        {
+            PerformanceDiagnosticsService.WriteCoreConfig(_settings, _manifest.Channel);
+        }
+        catch (Exception ex)
+        {
+            Log($"Warning: could not update Core perf config: {ex.Message}");
+        }
+    }
+
+    private void ExportPerformanceBundleNow() => TryExportPerfBundle(silent: false);
+
+    private void ExportPerfBundleFromBackground()
+    {
+        void Run()
+        {
+            if (IsPerfDiagActive)
+            {
+                TryExportPerfBundle(silent: true);
+            }
+        }
+
+        if (Application.Current?.Dispatcher is { } dispatcher && !dispatcher.CheckAccess())
+        {
+            dispatcher.Invoke(Run);
+        }
+        else
+        {
+            Run();
+        }
+    }
+
+    private void TryExportPerfBundle(bool silent)
+    {
+        try
+        {
+            var res = _perfDiag.ExportBundle(_settings, _manifest, LauncherVersionText);
+            if (res.Success)
+            {
+                _lastPerfExportPath = res.JsonPath;
+                OnPropertyChanged(nameof(PerfDiagStatusText));
+                StatusMessage = res.Message;
+                Log(res.Message);
+            }
+            else if (!silent)
+            {
+                MessageBox.Show(res.Message, "SoulspireXI Performance Diagnostics", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"Performance diagnostic export error: {ex.Message}");
+            if (!silent)
+            {
+                MessageBox.Show(ex.Message, "SoulspireXI Performance Diagnostics — Export Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+    }
+
+    private void OpenDiagnosticsFolder()
+    {
+        try
+        {
+            Directory.CreateDirectory(_perfDiag.DiagnosticsDirectory);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = _perfDiag.DiagnosticsDirectory,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(ex.Message, "SoulspireXI Launcher", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void OnStagingRelayStateChanged()
+    {
+        void Raise()
+        {
+            OnPropertyChanged(nameof(IsStagingRelayActive));
+            OnPropertyChanged(nameof(StagingRelayStatusText));
+            RelayCommand.RaiseCanExecuteChanged();
+        }
+
+        if (Application.Current?.Dispatcher is { } dispatcher && !dispatcher.CheckAccess())
+        {
+            dispatcher.Invoke(Raise);
+        }
+        else
+        {
+            Raise();
+        }
     }
 
     private void NotifyEffectiveServerChanged()
     {
+        OnPropertyChanged(nameof(IsProductionMode));
+        OnPropertyChanged(nameof(IsStagingMode));
+        OnPropertyChanged(nameof(IsCustomServerMode));
         OnPropertyChanged(nameof(EffectiveHost));
         OnPropertyChanged(nameof(EffectiveUseHairpin));
         OnPropertyChanged(nameof(EffectiveLobbyPort));
         OnPropertyChanged(nameof(EffectiveSearchPort));
+        OnPropertyChanged(nameof(ServerStatusDisplayHost));
+        OnPropertyChanged(nameof(StagingHeaderBadgeText));
+        OnPropertyChanged(nameof(StagingCardHeaderText));
+        OnPropertyChanged(nameof(StagingTargetSummaryText));
+        OnPropertyChanged(nameof(StagingRelayStatusText));
+        OnPropertyChanged(nameof(PlayButtonText));
         OnPropertyChanged(nameof(TestingQolStatusText));
     }
 

@@ -45,6 +45,7 @@ public sealed class ChannelToBrushConverter : IValueConverter
             or UpdateChannel.TestingRegistry24Hook
             or UpdateChannel.TestingSearchLegacyText
             or UpdateChannel.TestingSearchAlignedText
+            or UpdateChannel.TestingCoreUi
             ? TestingBrush : StableBrush;
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
@@ -61,6 +62,7 @@ public sealed class ChannelToBadgeBackgroundConverter : IValueConverter
             or UpdateChannel.TestingRegistry24Hook
             or UpdateChannel.TestingSearchLegacyText
             or UpdateChannel.TestingSearchAlignedText
+            or UpdateChannel.TestingCoreUi
             ? TestingBg : StableBg;
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
@@ -77,6 +79,7 @@ public sealed class ChannelToLabelConverter : IValueConverter
             UpdateChannel.TestingRegistry24Hook => "Testing B — Registry 24-Hook (Current menu2fon)",
             UpdateChannel.TestingSearchLegacyText => "Testing A — Search Legacy native_text (4f0fdb3)",
             UpdateChannel.TestingSearchAlignedText => "Testing C — Search Aligned native_text (Repair)",
+            UpdateChannel.TestingCoreUi => "Testing — SoulspireXI Core UI & Gamepad",
             _ => value?.ToString() ?? string.Empty
         };
 
@@ -121,6 +124,44 @@ public sealed class FpsCapLabelConverter : IValueConverter
             0 => "Uncapped",
             _ => value?.ToString() ?? string.Empty
         };
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+public sealed class ServerTargetToLabelConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value switch
+        {
+            ServerTargetMode.Production => "Production (play.soulspirexi.com)",
+            ServerTargetMode.Staging => "Staging Server (Isolated Testing)",
+            ServerTargetMode.Custom => "Custom Server (Manual Host / Ports)",
+            _ => value?.ToString() ?? string.Empty
+        };
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+public sealed class StagingLaneToLabelConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is StagingLane lane
+            ? LauncherSettings.GetStagingLanePreset(lane).DisplayName
+            : value?.ToString() ?? string.Empty;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+public sealed class BoolToStagingBorderBrushConverter : IValueConverter
+{
+    private static readonly Brush StagingBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F59E0B"));
+    private static readonly Brush DefaultBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2A314A"));
+
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        value is true ? StagingBrush : DefaultBrush;
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();

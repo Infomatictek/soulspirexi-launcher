@@ -63,6 +63,7 @@ def build_testing_manifest(
         "registry-24hook": repo_root / "channels" / "testing-registry-24hook",
         "search-legacy-text": repo_root / "channels" / "testing-search-legacy-text",
         "search-aligned-text": repo_root / "channels" / "testing-search-aligned-text",
+        "core-ui-24hook": repo_root / "channels" / "testing-core-ui",
     }
     if candidate not in candidate_dirs:
         raise ValueError(f"Unknown Testing candidate {candidate!r}; expected one of {tuple(candidate_dirs)}")
@@ -105,7 +106,9 @@ def build_testing_manifest(
         staged_dll_sha, _ = sha256_file(dest_dll)
 
     if provenance_json is not None and provenance_json.is_file():
-        shutil.copy2(provenance_json, testing_dir / "crystaljobs-provenance.json")
+        dest_prov = testing_dir / "crystaljobs-provenance.json"
+        if provenance_json.resolve() != dest_prov.resolve():
+            shutil.copy2(provenance_json, dest_prov)
 
     stable_manifest = json.loads(stable_manifest_path.read_text(encoding="utf-8"))
     testing_manifest = copy.deepcopy(stable_manifest)
@@ -122,8 +125,29 @@ def build_testing_manifest(
         "crystalJobsHooks": crystaljobs_hooks,
         "notes": testing_notes,
     }
+    if candidate == "core-ui-24hook":
+        testing_manifest["stagingServer"] = {
+            "name": "SoulspireXI Staging",
+            "host": "192.168.86.117",
+            "useHairpin": False,
+            "localLoopbackHost": "127.0.0.1",
+            "ports": {
+                "auth": 55231,
+                "data": 55230,
+                "view": 55001,
+                "search": 55002,
+                "profile": 51221,
+                "profileIrc": 51241,
+                "map": 55230,
+            },
+            "notes": (
+                "Isolated SoulspireXI Staging server (+1000 alternate ports). "
+                "Managed in-process loopback TCP relay requires no administrator privileges "
+                "and never modifies Windows netsh portproxy rules."
+            ),
+        }
 
-    if candidate in ("registry-24hook", "search-legacy-text", "search-aligned-text"):
+    if candidate in ("registry-24hook", "search-legacy-text", "search-aligned-text", "core-ui-24hook"):
         reg_sync_path = repo_root / "registry_sync.json"
         reg_sync = json.loads(reg_sync_path.read_text(encoding="utf-8")) if reg_sync_path.is_file() else {}
         prov = json.loads(provenance_json.read_text(encoding="utf-8-sig")) if (provenance_json and provenance_json.is_file()) else {}
@@ -134,10 +158,12 @@ def build_testing_manifest(
             "nativeDllCompiledHash": str(prov.get("compiledRegistryHash") or reg_sync.get("registryHash") or ""),
             "nativeDllSha256": staged_dll_sha or str(prov.get("dllSha256") or ""),
             "nativeDllClientVerified": False,  # Never mark client-verified from CI alone
-            "crystalJobsHooks": 24,
+            "nativeHooks": crystaljobs_hooks,
+            "crystalJobsHooks": crystaljobs_hooks,
         }
     elif staged_dll_sha and isinstance(testing_manifest.get("registry"), dict):
         testing_manifest["registry"]["nativeDllSha256"] = staged_dll_sha
+        testing_manifest["registry"]["nativeDllClientVerified"] = False
         testing_manifest["registry"]["nativeHooks"] = crystaljobs_hooks
         testing_manifest["registry"]["crystalJobsHooks"] = crystaljobs_hooks
 
@@ -213,7 +239,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo-branch", default=None, help="Optional branch override for testing manifest rawBaseUrl")
     parser.add_argument(
         "--candidate",
-        choices=("default-27hook", "registry-24hook", "search-legacy-text", "search-aligned-text"),
+        choices=("default-27hook", "registry-24hook", "search-legacy-text", "search-aligned-text", "core-ui-24hook"),
         default="default-27hook",
         help="Explicit Testing candidate track (preserves 27-hook channel and isolates each 24-hook Search/Registry candidate).",
     )

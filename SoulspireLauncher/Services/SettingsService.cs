@@ -114,6 +114,56 @@ public sealed class SettingsService
                     var hasExplicitCustomFlag = doc.RootElement.ValueKind == JsonValueKind.Object &&
                         doc.RootElement.EnumerateObject().Any(p =>
                             p.Name.Equals(nameof(LauncherSettings.UseCustomAshitaPath), StringComparison.OrdinalIgnoreCase));
+                    var hasExplicitServerTarget = doc.RootElement.ValueKind == JsonValueKind.Object &&
+                        doc.RootElement.EnumerateObject().Any(p =>
+                            p.Name.Equals(nameof(LauncherSettings.ServerTarget), StringComparison.OrdinalIgnoreCase));
+
+                    if (!hasExplicitServerTarget)
+                    {
+                        loaded.ServerTarget = loaded.UseCustomServer
+                            ? ServerTargetMode.Custom
+                            : ServerTargetMode.Production;
+                    }
+                    else
+                    {
+                        if (!Enum.IsDefined(loaded.ServerTarget))
+                        {
+                            loaded.ServerTarget = loaded.UseCustomServer
+                                ? ServerTargetMode.Custom
+                                : ServerTargetMode.Production;
+                        }
+
+                        loaded.UseCustomServer = loaded.ServerTarget == ServerTargetMode.Custom;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(loaded.StagingServerHost))
+                    {
+                        loaded.StagingServerHost = LauncherSettings.DefaultStagingHost;
+                    }
+                    if (loaded.StagingAuthPort is <= 0 or > 65535)
+                    {
+                        loaded.StagingAuthPort = LauncherSettings.DefaultStagingAuthPort;
+                    }
+                    if (loaded.StagingDataPort is <= 0 or > 65535)
+                    {
+                        loaded.StagingDataPort = LauncherSettings.DefaultStagingDataPort;
+                    }
+                    if (loaded.StagingViewPort is <= 0 or > 65535)
+                    {
+                        loaded.StagingViewPort = LauncherSettings.DefaultStagingViewPort;
+                    }
+                    if (loaded.StagingSearchPort is <= 0 or > 65535)
+                    {
+                        loaded.StagingSearchPort = LauncherSettings.DefaultStagingSearchPort;
+                    }
+                    if (loaded.StagingProfilePort is <= 0 or > 65535)
+                    {
+                        loaded.StagingProfilePort = LauncherSettings.DefaultStagingProfilePort;
+                    }
+                    if (loaded.StagingProfileIrcPort is <= 0 or > 65535)
+                    {
+                        loaded.StagingProfileIrcPort = LauncherSettings.DefaultStagingProfileIrcPort;
+                    }
 
                     if (string.IsNullOrWhiteSpace(loaded.AshitaPath))
                     {

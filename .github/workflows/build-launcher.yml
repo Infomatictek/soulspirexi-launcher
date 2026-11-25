@@ -12,6 +12,21 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      publish_channel:
+        description: "Optional GitHub Release channel to publish after all CI gates pass (never publishes failed builds)"
+        required: false
+        default: "none"
+        type: choice
+        options:
+          - "none"
+          - "testing-core-ui"
+          - "stable"
+      release_tag:
+        description: "Release version tag (e.g. v2.2.0-testing.core-ui.1 or v2.2.0; required when publish_channel != none)"
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   group: build-launcher-${{ github.ref }}
@@ -84,7 +99,7 @@ jobs:
           echo "Changed files:"
           echo "$changed"
 
-          if echo "$changed" | grep -Eq '^(SoulspireLauncher/|SoulspireLauncher\.Tests/|SoulspireLauncher\.sln|manifest\.json|dat-overlay/|addons/|plugins/|soulspire_native/|scripts/|tests/|\.github/workflows/build-launcher\.yml)'; then
+          if echo "$changed" | grep -Eq '^(SoulspireLauncher/|SoulspireUpdater/|SoulspireLauncher\.Tests/|SoulspireLauncher\.sln|keys/|manifest\.json|channels/launcher-releases/|dat-overlay/|addons/|plugins/|soulspire_native/|scripts/|tests/|\.github/workflows/build-launcher\.yml)'; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
           else
             echo "No launcher/client/manifest files changed; skipping redundant Windows launcher build."
@@ -128,6 +143,46 @@ jobs:
       - name: Run unit tests
         run: dotnet test SoulspireLauncher.sln -c Release --no-build --verbosity normal
 
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Resolve launcher build version and channel
+        id: version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $refName = "${{ github.ref_name }}"
+          $dispatchChannel = "${{ inputs.publish_channel }}"
+          $dispatchTag = "${{ inputs.release_tag }}"
+
+          if ("${{ github.ref }}" -like "refs/tags/v*") {
+            $tag = $refName
+          } elseif ($dispatchTag -and $dispatchTag.StartsWith("v")) {
+            $tag = $dispatchTag.Trim()
+          } else {
+            $tag = "v2.2.0-testing.core-ui.${{ github.run_number }}"
+          }
+
+          if ($dispatchChannel -and $dispatchChannel -ne "none") {
+            $channel = $dispatchChannel
+          } elseif ($tag -match "-testing\.core-ui") {
+            $channel = "testing-core-ui"
+          } elseif ($tag -match "-(testing|rc|beta|alpha)") {
+            $channel = "testing"
+          } else {
+            $channel = "stable"
+          }
+
+          $infoVer = $tag.TrimStart('v', 'V')
+          $numVer = ($infoVer -split '-')[0]
+          Write-Host "Resolved tag=$tag channel=$channel infoVer=$infoVer numVer=$numVer"
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "channel=$channel" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "info_version=$infoVer" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "num_version=$numVer" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
       - name: Publish single-file Windows client launcher
         run: >
           dotnet publish SoulspireLauncher/SoulspireLauncher.csproj
@@ -137,12 +192,30 @@ jobs:
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
           -p:PublishReadyToRun=true
+          -p:Version=${{ steps.version.outputs.num_version }}
+          -p:InformationalVersion=${{ steps.version.outputs.info_version }}
           -o publish/SoulspireLauncher
 
-      - name: Package distributable archive
+      - name: Publish standalone Windows updater helper (SoulspireUpdater.exe)
+        run: >
+          dotnet publish SoulspireUpdater/SoulspireUpdater.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:PublishReadyToRun=true
+          -p:Version=${{ steps.version.outputs.num_version }}
+          -p:InformationalVersion=${{ steps.version.outputs.info_version }}
+          -o publish/SoulspireUpdater
+
+      - name: Package distributable archive and generate launcher-release.json metadata
         shell: pwsh
+        env:
+          SOULSPIRE_RELEASE_SIGNING_PRIVATE_KEY_PEM: ${{ secrets.SOULSPIRE_RELEASE_SIGNING_PRIVATE_KEY_PEM }}
         run: |
           $ErrorActionPreference = 'Stop'
+          Copy-Item "publish/SoulspireUpdater/SoulspireUpdater.exe" "publish/SoulspireLauncher/SoulspireUpdater.exe" -Force
           $sampleConfig = @'
           {
             "ServerName": "SoulspireXI",
@@ -153,10 +226,31 @@ jobs:
           }
           '@
           Set-Content -Path "publish/SoulspireLauncher/soulspire-server.example.json" -Value $sampleConfig -Encoding UTF8
-          Compress-Archive -Path "publish/SoulspireLauncher/SoulspireLauncher.exe", "publish/SoulspireLauncher/soulspire-server.example.json" -DestinationPath "SoulspireLauncher-win-x64.zip" -Force
+          Compress-Archive -Path "publish/SoulspireLauncher/SoulspireLauncher.exe", "publish/SoulspireLauncher/SoulspireUpdater.exe", "publish/SoulspireLauncher/soulspire-server.example.json" -DestinationPath "SoulspireLauncher-win-x64.zip" -Force
           if (-not (Test-Path "publish/SoulspireLauncher/SoulspireLauncher.exe")) { throw "Missing SoulspireLauncher.exe" }
+          if (-not (Test-Path "publish/SoulspireLauncher/SoulspireUpdater.exe")) { throw "Missing SoulspireUpdater.exe" }
           if (Test-Path "publish/SoulspireLauncher/OverlordsLauncher.exe") { throw "Legacy OverlordsLauncher.exe must not be packaged in new releases" }
           if (-not (Test-Path "SoulspireLauncher-win-x64.zip")) { throw "Missing SoulspireLauncher-win-x64.zip" }
+
+          $isReleasePublish = ("${{ github.ref }}" -like "refs/tags/v*") -or ("${{ inputs.publish_channel }}" -and "${{ inputs.publish_channel }}" -ne "none")
+          $metaArgs = @(
+            "scripts/build-launcher-release-metadata.py",
+            "--channel", "${{ steps.version.outputs.channel }}",
+            "--tag", "${{ steps.version.outputs.tag }}",
+            "--package", "SoulspireLauncher-win-x64.zip",
+            "--executable", "publish/SoulspireLauncher/SoulspireLauncher.exe",
+            "--updater", "publish/SoulspireLauncher/SoulspireUpdater.exe",
+            "--verify-public-key", "keys/soulspire-launcher-release-v1.pub.pem",
+            "--release-notes", "Verified CI build ${{ steps.version.outputs.tag }} (${{ github.sha }})",
+            "--output", "launcher-release.json"
+          )
+          if ($isReleasePublish) {
+            # Fail closed: never produce unsigned metadata for any release tag or publish dispatch
+            $metaArgs += "--require-signature"
+          }
+          & python @metaArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Get-Content "launcher-release.json"
 
       - name: Verify Windows executable metadata and SoulspireXI identity
         shell: pwsh
@@ -168,10 +262,15 @@ jobs:
           Write-Host "CompanyName=$($info.CompanyName)"
           Write-Host "OriginalFilename=$($info.OriginalFilename)"
           Write-Host "FileVersion=$($info.FileVersion)"
+          Write-Host "ProductVersion=$($info.ProductVersion)"
           if ($info.ProductName -notmatch 'SoulspireXI') { throw "Unexpected ProductName: $($info.ProductName)" }
           if ($info.FileDescription -notmatch 'SoulspireXI') { throw "Unexpected FileDescription: $($info.FileDescription)" }
           if ($info.CompanyName -notmatch 'SoulspireXI') { throw "Unexpected CompanyName: $($info.CompanyName)" }
           if ($info.ProductName -match 'Overlords' -or $info.FileDescription -match 'Overlords') { throw "Legacy Overlords branding found in executable metadata" }
+
+          $updaterInfo = (Get-Item "publish/SoulspireLauncher/SoulspireUpdater.exe").VersionInfo
+          Write-Host "UpdaterProductName=$($updaterInfo.ProductName)"
+          if ($updaterInfo.ProductName -notmatch 'SoulspireXI') { throw "Unexpected Updater ProductName: $($updaterInfo.ProductName)" }
 
       - name: Upload launcher build artifact
         uses: actions/upload-artifact@v7
@@ -180,7 +279,9 @@ jobs:
           retention-days: 14
           path: |
             publish/SoulspireLauncher/SoulspireLauncher.exe
+            publish/SoulspireLauncher/SoulspireUpdater.exe
             SoulspireLauncher-win-x64.zip
+            launcher-release.json
 
   build-soulspire-native:
     needs: verify-manifest
@@ -217,60 +318,73 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $dllPath = "plugins/ashita4/soulspire_native.dll"
-          $testPath = "soulspire_native/selftest.exe"
-          if (-not (Test-Path $dllPath)) { throw "Missing built DLL: $dllPath" }
-          if (-not (Test-Path $testPath)) { throw "Missing built selftest.exe: $testPath" }
+          try {
+            $dllPath = "plugins/ashita4/soulspire_native.dll"
+            $testPath = "soulspire_native/selftest.exe"
+            if (-not (Test-Path $dllPath)) { throw "Missing built DLL: $dllPath" }
+            if (-not (Test-Path $testPath)) { throw "Missing built selftest.exe: $testPath" }
 
-          $dllBytes = [System.IO.File]::ReadAllBytes($dllPath)
-          $dllHash = (Get-FileHash -Path $dllPath -Algorithm SHA256).Hash.ToLowerInvariant()
-          $testBytes = [System.IO.File]::ReadAllBytes($testPath)
-          $testHash = (Get-FileHash -Path $testPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            $dllBytes = [System.IO.File]::ReadAllBytes($dllPath)
+            $dllHash = (Get-FileHash -Path $dllPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            $testBytes = [System.IO.File]::ReadAllBytes($testPath)
+            $testHash = (Get-FileHash -Path $testPath -Algorithm SHA256).Hash.ToLowerInvariant()
 
-          $regHash = "unknown"
-          if (Test-Path "soulspire_native/registry/labels_generated.h") {
-            $m = Select-String -Path "soulspire_native/registry/labels_generated.h" -Pattern 'kRegistryHash\s*=\s*"([^"]+)"'
-            if ($m) { $regHash = $m.Matches[0].Groups[1].Value }
+            $regHash = "unknown"
+            if (Test-Path "soulspire_native/registry/labels_generated.h") {
+              $m = Select-String -Path "soulspire_native/registry/labels_generated.h" -Pattern 'kRegistryHash\s*=\s*"([^"]+)"'
+              if ($m) { $regHash = $m.Matches[0].Groups[1].Value }
+            }
+
+            $provenance = [ordered]@{
+              dllPath               = "plugins/ashita4/soulspire_native.dll"
+              dllSha256             = $dllHash
+              dllSize               = $dllBytes.Length
+              expectedHooks         = 32
+              abiVersion            = 2
+              compiledRegistryHash  = $regHash
+              runtimeIdentityLoader = $true
+              identitySchemaVersion = 1
+              searchRenderMode      = "menu2fon-soa-corners (mode 1)"
+              sourceCommit          = "${{ github.sha }}"
+              branch                = "${{ github.ref_name }}"
+              ciRunId               = "${{ github.run_id }}"
+              ciRunUrl              = "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+              buildTarget           = "Win32-x86-MSVC"
+              ciVerified            = $true
+              clientVerified        = $false
+              notes                 = "CI-built 32-hook soulspire_native.dll (runtime PC Sub->Main FTABLE model resolver + native Commands menu entry) provenance. Never set clientVerified=true until verified in the Windows FFXI client."
+            }
+            $provenance | ConvertTo-Json -Depth 4 | Set-Content -Path "soulspire_native-provenance.json" -Encoding UTF8
+
+            @(
+              "commit_sha=${{ github.sha }}"
+              "ref=${{ github.ref }}"
+              "branch=${{ github.ref_name }}"
+              "run_id=${{ github.run_id }}"
+              "registry_hash=$regHash"
+              "expected_hooks=32"
+              "abi_version=2"
+              "soulspire_native_dll_size=$($dllBytes.Length)"
+              "soulspire_native_dll_sha256=$dllHash"
+              "selftest_exe_size=$($testBytes.Length)"
+              "selftest_exe_sha256=$testHash"
+            ) | Set-Content -Path "soulspire_native-build-info.txt" -Encoding UTF8
+
+            $ErrorActionPreference = 'Continue'
+            $verifyOut = (& python scripts/verify-soulspire-native-dll.py $dllPath --build-info soulspire_native-build-info.txt --expected-commit "${{ github.sha }}" 2>&1)
+            $vrc = $LASTEXITCODE
+            $ErrorActionPreference = 'Stop'
+            $verifyOut | ForEach-Object { Write-Host $_ }
+            if ($vrc -ne 0) {
+              $joined = ($verifyOut | ForEach-Object { $_.ToString() }) -join ' | '
+              Write-Host "::error::verify-soulspire-native-dll failed (rc=$vrc): $joined"
+              exit $vrc
+            }
+            Get-Content "soulspire_native-build-info.txt"
+          } catch {
+            Write-Host "::error::Step 5 exception: $($_.Exception.Message)"
+            throw
           }
-
-          $provenance = [ordered]@{
-            dllPath               = "plugins/ashita4/soulspire_native.dll"
-            dllSha256             = $dllHash
-            dllSize               = $dllBytes.Length
-            expectedHooks         = 32
-            abiVersion            = 2
-            compiledRegistryHash  = $regHash
-            runtimeIdentityLoader = $true
-            identitySchemaVersion = 1
-            searchRenderMode      = "menu2fon-soa-corners (mode 1)"
-            sourceCommit          = "${{ github.sha }}"
-            branch                = "${{ github.ref_name }}"
-            ciRunId               = "${{ github.run_id }}"
-            ciRunUrl              = "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            buildTarget           = "Win32-x86-MSVC"
-            ciVerified            = $true
-            clientVerified        = $false
-            notes                 = "CI-built 31-hook soulspire_native.dll (with native Commands menu entry) provenance. Never set clientVerified=true until verified in the Windows FFXI client."
-          }
-          $provenance | ConvertTo-Json -Depth 4 | Set-Content -Path "soulspire_native-provenance.json" -Encoding UTF8
-
-          @(
-            "commit_sha=${{ github.sha }}"
-            "ref=${{ github.ref }}"
-            "branch=${{ github.ref_name }}"
-            "run_id=${{ github.run_id }}"
-            "registry_hash=$regHash"
-            "expected_hooks=32"
-            "abi_version=2"
-            "soulspire_native_dll_size=$($dllBytes.Length)"
-            "soulspire_native_dll_sha256=$dllHash"
-            "selftest_exe_size=$($testBytes.Length)"
-            "selftest_exe_sha256=$testHash"
-          ) | Set-Content -Path "soulspire_native-build-info.txt" -Encoding UTF8
-
-          python scripts/verify-soulspire-native-dll.py $dllPath --build-info soulspire_native-build-info.txt --expected-commit "${{ github.sha }}"
-          Get-Content "soulspire_native-build-info.txt"
-
       - name: Upload soulspire_native.dll and selftest.exe build artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -432,42 +546,75 @@ jobs:
           git push origin "HEAD:${{ github.ref_name }}"
 
   publish-release:
-    needs: [build-and-test, build-soulspire-native]
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [verify-manifest, build-and-test, build-soulspire-native]
+    if: >-
+      always() &&
+      needs.verify-manifest.result == 'success' &&
+      needs.build-and-test.result == 'success' &&
+      (needs.build-soulspire-native.result == 'success' || needs.build-soulspire-native.result == 'skipped') &&
+      (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_channel != 'none'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - name: Checkout trusted public key and verifier
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            keys
+            scripts/build-launcher-release-metadata.py
+
       - name: Download launcher build artifact
         uses: actions/download-artifact@v8
         with:
           name: SoulspireLauncher-win-x64
           path: release-assets
 
-      - name: Verify release assets exist (and no legacy OverlordsLauncher.exe)
+      - name: Verify release assets, hashes, and ECDSA signature (fail-closed)
         shell: bash
         run: |
           set -euo pipefail
           test -s release-assets/publish/SoulspireLauncher/SoulspireLauncher.exe
+          test -s release-assets/publish/SoulspireLauncher/SoulspireUpdater.exe
           test ! -e release-assets/publish/SoulspireLauncher/OverlordsLauncher.exe
           test -s release-assets/SoulspireLauncher-win-x64.zip
+          test -s release-assets/launcher-release.json
+          python3 scripts/build-launcher-release-metadata.py \
+            --verify-only release-assets/launcher-release.json \
+            --verify-public-key keys/soulspire-launcher-release-v1.pub.pem \
+            --package release-assets/SoulspireLauncher-win-x64.zip \
+            --executable release-assets/publish/SoulspireLauncher/SoulspireLauncher.exe \
+            --updater release-assets/publish/SoulspireLauncher/SoulspireUpdater.exe
 
-      - name: Determine release channel (Stable vs Testing prerelease)
+      - name: Determine and validate release channel (Stable vs Testing prerelease)
         id: channel
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${{ github.ref_name }}" == *"-testing"* ]] || [[ "${{ github.ref_name }}" == *"-rc"* ]] || [[ "${{ github.ref_name }}" == *"-beta"* ]]; then
-            echo "prerelease=true" >> "$GITHUB_OUTPUT"
-          else
+          META_TAG="$(python3 -c 'import json; print(json.load(open("release-assets/launcher-release.json"))["tag"])')"
+          META_CHANNEL="$(python3 -c 'import json; print(json.load(open("release-assets/launcher-release.json"))["channel"])')"
+          echo "tag=${META_TAG}" >> "$GITHUB_OUTPUT"
+          echo "channel=${META_CHANNEL}" >> "$GITHUB_OUTPUT"
+
+          if [[ "${META_CHANNEL}" == "stable" ]]; then
+            # Guard: Stable releases may ONLY come from main or a non-prerelease tag pointing to main
+            if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] && [[ "${{ github.ref }}" != "refs/heads/main" ]]; then
+              echo "ERROR: Refusing to publish a Stable release from non-main branch ${{ github.ref }}." >&2
+              exit 1
+            fi
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Publish GitHub Release on tag
+      - name: Publish permanent GitHub Release with verified launcher-release.json
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.channel.outputs.tag }}
           prerelease: ${{ steps.channel.outputs.prerelease == 'true' }}
           generate_release_notes: true
           files: |
             release-assets/publish/SoulspireLauncher/SoulspireLauncher.exe
+            release-assets/publish/SoulspireLauncher/SoulspireUpdater.exe
             release-assets/SoulspireLauncher-win-x64.zip
+            release-assets/launcher-release.json

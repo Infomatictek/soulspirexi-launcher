@@ -1,6 +1,7 @@
 -- SoulspireXI Core: verified project asset loader (D3D8 texture helper).
--- Loads addons/ashita4/soulspire_core/assets/soulspire_crest.png (copied from
--- SoulspireLauncher/Assets/app.png) with graceful fallback when D3D8 is absent.
+-- Loads addons/ashita4/soulspire_core/assets/soulspire_crest.png and sibling addon
+-- assets (e.g., crystalsocket/assets/*.png, soulspire_talents/assets/*.png) with
+-- graceful fallback when D3D8 is absent or an icon file is missing.
 
 local Assets = {}
 Assets.__index = Assets
@@ -13,21 +14,14 @@ function Assets.new(addon_path)
     }, Assets)
 end
 
-function Assets:load_texture(name)
-    if type(name) ~= 'string' or name == '' then return nil end
-    if self.textures[name] ~= nil then
-        return self.textures[name] ~= false and self.textures[name].id or nil
+local function load_texture_from_path(self, cache_key, full_path)
+    if self.textures[cache_key] ~= nil then
+        return self.textures[cache_key] ~= false and self.textures[cache_key].id or nil
     end
 
     local ok, status, tex, id = pcall(function()
         local ffi = require('ffi')
         local d3d8 = require('d3d8')
-        if type(self.addon_path) ~= 'string' or self.addon_path == '' then
-            return 'addon path unavailable', nil, nil
-        end
-        local safe = name:gsub('[^%w_%-]', '')
-        if safe == '' then return 'invalid asset name', nil, nil end
-        local full_path = self.addon_path:gsub('[/\\]+$', '') .. '/assets/' .. safe .. '.png'
         local file = io.open(full_path, 'rb')
         if not file then return 'file unavailable', nil, nil end
         local data = file:read('*a')
@@ -50,14 +44,40 @@ function Assets:load_texture(name)
     end)
 
     if ok and tex and id then
-        self.textures[name] = { ptr = tex, id = id }
-        self.status[name] = 'ready'
+        self.textures[cache_key] = { ptr = tex, id = id }
+        self.status[cache_key] = 'ready'
         return id
     end
 
-    self.textures[name] = false
-    self.status[name] = ok and status or 'd3d8 unavailable'
+    self.textures[cache_key] = false
+    self.status[cache_key] = ok and status or 'd3d8 unavailable'
     return nil
+end
+
+function Assets:load_texture(name)
+    if type(name) ~= 'string' or name == '' then return nil end
+    if type(self.addon_path) ~= 'string' or self.addon_path == '' then
+        self.status[name] = 'addon path unavailable'
+        return nil
+    end
+    local safe = name:gsub('[^%w_%-]', '')
+    if safe == '' then return nil end
+    local full_path = self.addon_path:gsub('[/\\]+$', '') .. '/assets/' .. safe .. '.png'
+    return load_texture_from_path(self, name, full_path)
+end
+
+-- Load a PNG asset from a sibling Ashita v4 addon without duplicating asset files.
+function Assets:load_from_addon(sibling_addon, name)
+    if type(sibling_addon) ~= 'string' or sibling_addon == '' or type(name) ~= 'string' or name == '' then
+        return nil
+    end
+    if type(self.addon_path) ~= 'string' or self.addon_path == '' then return nil end
+    local safe_addon = sibling_addon:gsub('[^%w_%-]', '')
+    local safe_name  = name:gsub('[^%w_%-]', '')
+    if safe_addon == '' or safe_name == '' then return nil end
+    local root = self.addon_path:gsub('[/\\]+$', ''):gsub('[/\\][^/\\]+$', '')
+    local full_path = root .. '/' .. safe_addon .. '/assets/' .. safe_name .. '.png'
+    return load_texture_from_path(self, safe_addon .. ':' .. safe_name, full_path)
 end
 
 function Assets:release_all()

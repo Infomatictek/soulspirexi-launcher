@@ -39,6 +39,11 @@ public static class TestingEnvironmentQolPolicy
         !string.IsNullOrWhiteSpace(manifestChannel) &&
         !manifestChannel.Trim().Equals("stable", StringComparison.OrdinalIgnoreCase);
 
+    public static bool IsPerformanceDiagnosticsActive(LauncherSettings settings, string? manifestChannel = null) =>
+        settings.EnablePerformanceDiagnostics &&
+        IsTestingChannel(settings.UpdateChannel) &&
+        (string.IsNullOrWhiteSpace(manifestChannel) || IsTestingManifestChannel(manifestChannel));
+
     public static bool IsStagingServer(string? serverHost, string? serverName = null)
     {
         if (!string.IsNullOrWhiteSpace(serverName) && ContainsStagingToken(serverName))
@@ -81,6 +86,7 @@ public static class TestingEnvironmentQolPolicy
         string? serverHost,
         string? manifestChannel = null,
         string? serverName = null) =>
+        settings.ServerTarget == ServerTargetMode.Staging ||
         IsTestingChannel(settings.UpdateChannel) ||
         IsTestingManifestChannel(manifestChannel) ||
         IsStagingServer(serverHost, serverName);
@@ -100,7 +106,7 @@ public static class TestingEnvironmentQolPolicy
         string? serverName = null)
     {
         var isTestingChannel = IsTestingChannel(settings.UpdateChannel) || IsTestingManifestChannel(manifestChannel);
-        var isStagingServer = IsStagingServer(serverHost, serverName);
+        var isStagingServer = settings.ServerTarget == ServerTargetMode.Staging || IsStagingServer(serverHost, serverName);
         var isTestingEnv = isTestingChannel || isStagingServer;
 
         if (!isTestingEnv)

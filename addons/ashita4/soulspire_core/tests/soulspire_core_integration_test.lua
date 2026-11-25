@@ -176,7 +176,7 @@ assert(has_log('peers=0'), 'Zone change 0x00B must reset peers to 0')
 
 -- 5. `/soulspire status` works cleanly after login.
 run_cmd('/soulspire status')
-assert(has_log('version=0.1.0'), '/soulspire status must report core version')
+assert(has_log('version=1.0.0'), '/soulspire status must report core version')
 
 -- 6. `/soulspire weapondiag on`, live `0x050` packet observation, and `/soulspire weapondiag equip`.
 run_cmd('/soulspire weapondiag on')
