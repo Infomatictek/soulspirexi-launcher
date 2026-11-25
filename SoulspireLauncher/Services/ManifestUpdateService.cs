@@ -402,6 +402,17 @@ public sealed class ManifestUpdateService
         out string error)
     {
         error = string.Empty;
+
+        // Stable channel must never distribute an unverified Modern (VanaCore) client descriptor,
+        // even if the manifest omits the legacy registry metadata block.
+        if (requestedChannel == UpdateChannel.Stable &&
+            manifest.ModernClient is not null &&
+            !manifest.ModernClient.ClientVerified)
+        {
+            error = "Refusing Stable manifest: modernClient is not marked client-verified (modernClient.clientVerified=false). Modern (VanaCore) remains opt-in on Testing until runtime certification completes.";
+            return false;
+        }
+
         var reg = manifest.Registry;
         if (reg is null)
         {
@@ -436,15 +447,6 @@ public sealed class ManifestUpdateService
         {
             var dllName = dllEntry?.TargetPath ?? "soulspire_native.dll";
             error = $"Refusing Stable manifest: {dllName} is not marked client-verified (nativeDllClientVerified=false). Switch to the Testing channel in Settings to receive this build for playtesting.";
-            return false;
-        }
-
-        // Stable channel must never distribute an unverified Modern (VanaCore) client descriptor.
-        if (requestedChannel == UpdateChannel.Stable &&
-            manifest.ModernClient is not null &&
-            !manifest.ModernClient.ClientVerified)
-        {
-            error = "Refusing Stable manifest: modernClient is not marked client-verified (modernClient.clientVerified=false). Modern (VanaCore) remains opt-in on Testing until runtime certification completes.";
             return false;
         }
 

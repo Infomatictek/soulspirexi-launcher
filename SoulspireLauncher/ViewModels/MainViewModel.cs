@@ -1021,8 +1021,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     public int ResolvedNativeHookCount =>
         _manifest.Registry?.NativeHooks is > 0
-            ? _manifest.Registry.NativeHooks
-            : (_manifest.ServerCompatibility?.CrystalJobsHooks ?? 0);
+            ? _manifest.Registry.NativeHooks.Value
+            : (_manifest.ServerCompatibility?.NativeHooks is > 0
+                ? _manifest.ServerCompatibility.NativeHooks.Value
+                : (_manifest.ServerCompatibility?.CrystalJobsHooks ?? 0));
 
     public string NativeDllHookCountText =>
         ResolvedNativeHookCount > 0 ? $"{ResolvedNativeHookCount} hooks" : "Unknown";
@@ -2076,7 +2078,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
             if (result.FromRemote)
             {
-                StatusMessage = $"Checking for SoulspireXI ({ChannelBadgeText}) file updates...";
+                StatusMessage = $"Verifying & syncing SoulspireXI ({ChannelBadgeText}) client payload...";
                 var updatedCount = await _manifestService.SyncSoulspireFilesAsync(
                     _manifest,
                     _settings,
@@ -2086,10 +2088,18 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                     perfEnabled: IsPerfDiagActive,
                     isCold: _isColdSyncSpan);
                 _isColdSyncSpan = false;
-                PendingUpdatesCount = _manifestService.GetOutdatedFiles(_manifest, _settings, perf: _perfDiag, perfEnabled: IsPerfDiagActive, isCold: false).Count;
+                var remainingOutdated = _manifestService.GetOutdatedFiles(_manifest, _settings, perf: _perfDiag, perfEnabled: IsPerfDiagActive, isCold: false);
+                PendingUpdatesCount = remainingOutdated.Count;
+                NotifyPayloadMetadataChanged();
+                if (remainingOutdated.Count > 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Pre-launch client payload verification failed: {remainingOutdated.Count} file(s) still do not match " +
+                        $"manifest {_manifest.ManifestVersion} after synchronization. Launch cancelled to protect client integrity.");
+                }
                 Log(updatedCount > 0
-                    ? $"Updated {updatedCount} SoulspireXI client file(s) before launch."
-                    : "All SoulspireXI client files are up to date.");
+                    ? $"Verified and synced {updatedCount} SoulspireXI client file(s) ({_manifest.ManifestVersion}) before launch."
+                    : $"Pre-launch verification passed: all SoulspireXI client files match {_manifest.ManifestVersion}.");
             }
             else
             {
