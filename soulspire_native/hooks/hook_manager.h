@@ -102,9 +102,16 @@ inline ClientHostKind detect_client_host(HMODULE* out_module = nullptr) noexcept
     return ClientHostKind::Unknown;
 }
 
-// Fail-closed dual-host packet detour validator for FFXiMain.dll decrypt (0xDD6C0) and encrypt/encode (0xDF7C0).
-// Accepts verified prologues owned by Ashita.dll (10B decrypt / 5B encrypt) OR VanaCore.Core.dll /
-// SoulspireClient.Core.dll (10B decrypt / 5B or 7B encrypt). Never skips signature validation for unknown modules.
+// Fail-closed dual-host callee detour validator for FFXiMain.dll functions that Ashita.dll or
+// VanaCore.Core.dll / SoulspireClient.Core.dll legitimately detour before soulspire_native.dll
+// initializes. All listed RVAs are callee-only in soulspire_native.dll (never patched/detoured by
+// us), so chaining through the host's verified 0xE9 detour is safe.
+//   - 0xDD6C0 (MapDecode / packet decrypt): Ashita 10B, VanaCore packets.cpp 10B
+//   - 0xDF7C0 (MapEncode / packet encrypt): Ashita 5B, VanaCore 5B/7B
+//   - 0x1CAD80 (native_text / centred text draw): VanaCore chatfont.cpp 8B
+//   - 0x121110 (YmMenuShape::Draw scaled): VanaCore buttons.cpp 5B
+//   - 0x120FF0 (YmMenuShape::Draw plain): VanaCore buttons.cpp 7B
+// Never skips signature validation for unknown modules, corrupted trailing bytes, or any hook site.
 inline bool host_packet_detour_matches(
     uintptr_t rva,
     uint8_t* entry,
@@ -120,6 +127,15 @@ inline bool host_packet_detour_matches(
         return host_detour(entry, expected, length, 5, ashita_host) ||
                host_detour(entry, expected, length, 5, vanacore_host) ||
                host_detour(entry, expected, length, 7, vanacore_host);
+    }
+    if (rva == 0x1CAD80u) {
+        return host_detour(entry, expected, length, 8, vanacore_host);
+    }
+    if (rva == 0x121110u) {
+        return host_detour(entry, expected, length, 5, vanacore_host);
+    }
+    if (rva == 0x120FF0u) {
+        return host_detour(entry, expected, length, 7, vanacore_host);
     }
     return false;
 }

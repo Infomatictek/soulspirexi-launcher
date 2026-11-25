@@ -1935,12 +1935,28 @@ int main() {
         assert(!host_packet_detour_matches(0xDF7C0u, entry, expected, sizeof(expected), self_mod, nullptr));
         assert(host_packet_detour_matches(0xDF7C0u, entry, expected, sizeof(expected), nullptr, self_mod));
 
+        // VanaCore callee-only UI detours: 0x1CAD80 (chatfont 8B), 0x121110 (buttons 5B), 0x120FF0 (buttons 7B).
+        build_jmp(8, valid_code);
+        assert(!host_packet_detour_matches(0x1CAD80u, entry, expected, sizeof(expected), self_mod, nullptr));
+        assert(host_packet_detour_matches(0x1CAD80u, entry, expected, sizeof(expected), nullptr, self_mod));
+
+        build_jmp(5, valid_code);
+        assert(!host_packet_detour_matches(0x121110u, entry, expected, sizeof(expected), self_mod, nullptr));
+        assert(host_packet_detour_matches(0x121110u, entry, expected, sizeof(expected), nullptr, self_mod));
+
+        build_jmp(7, valid_code);
+        assert(!host_packet_detour_matches(0x120FF0u, entry, expected, sizeof(expected), self_mod, nullptr));
+        assert(host_packet_detour_matches(0x120FF0u, entry, expected, sizeof(expected), nullptr, self_mod));
+
         // Corrupted trailing byte must fail closed on both hosts.
         entry[12] ^= 0xFFu;
         assert(!host_packet_detour_matches(0xDF7C0u, entry, expected, sizeof(expected), nullptr, self_mod));
         assert(!host_packet_detour_matches(0xDD6C0u, entry, expected, sizeof(expected), self_mod, self_mod));
+        assert(!host_packet_detour_matches(0x1CAD80u, entry, expected, sizeof(expected), nullptr, self_mod));
+        assert(!host_packet_detour_matches(0x121110u, entry, expected, sizeof(expected), nullptr, self_mod));
+        assert(!host_packet_detour_matches(0x120FF0u, entry, expected, sizeof(expected), nullptr, self_mod));
 
-        // Non-packet RVA must never match host_packet_detour_matches.
+        // Non-callee hook site RVA must never match host_packet_detour_matches.
         build_jmp(5, valid_code);
         assert(!host_packet_detour_matches(0x133E33u, entry, expected, sizeof(expected), self_mod, self_mod));
     }

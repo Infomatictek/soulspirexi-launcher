@@ -75,6 +75,32 @@ class VanaCoreCompatibilityTests(unittest.TestCase):
         sa = (REPO_ROOT / "addons" / "ashita4" / "soulspire_soul_actions" / "soulspire_soul_actions.lua").read_text(encoding="utf-8")
         self.assertIn("state.rowLimitCapState", sa)
 
+    def test_phase2b_native_callee_detours_soulforge_hud_and_oxmob_suppression(self):
+        # 1. soulspire_native.dll must allow VanaCore's verified callee-only detours (chatfont 0x1CAD80, buttons 0x121110/0x120FF0)
+        hm = (REPO_ROOT / "soulspire_native" / "hooks" / "hook_manager.h").read_text(encoding="utf-8")
+        self.assertIn("0x1CAD80u", hm)
+        self.assertIn("0x121110u", hm)
+        self.assertIn("0x120FF0u", hm)
+        diag = (REPO_ROOT / "soulspire_native" / "diagnostics" / "diagnostics.h").read_text(encoding="utf-8")
+        self.assertIn("soulspire_native.log", diag)
+
+        # 2. Launcher compat overlay syncs soulspire_talents (sibling modules for Core), soulspire_soulhud, and kazenoeye
+        mis = (REPO_ROOT / "SoulspireLauncher" / "Services" / "ModernClientInstallService.cs").read_text(encoding="utf-8")
+        self.assertIn('"soulspire_talents"', mis)
+        self.assertIn('"soulspire_soulhud"', mis)
+        self.assertIn('"kazenoeye"', mis)
+
+        # 3. Compat boot script loads kazenoeye before soulspire_core, loads soulspire_soulhud, and never loads standalone soulspire_talents
+        mcg = (REPO_ROOT / "SoulspireLauncher" / "Services" / "ModernClientConfigGenerator.cs").read_text(encoding="utf-8")
+        self.assertIn("/addon load kazenoeye ashita", mcg)
+        self.assertIn("/addon load soulspire_soulhud ashita", mcg)
+        self.assertNotIn("/addon load soulspire_talents", mcg)
+        self.assertLess(mcg.index("/addon load kazenoeye ashita"), mcg.index("/addon load soulspire_core ashita"))
+
+        # 4. soulspire_core suppresses raw [OXMOB]| 0x017 transport frames so they never leak into player chat
+        core = (REPO_ROOT / "addons" / "ashita4" / "soulspire_core" / "soulspire_core.lua").read_text(encoding="utf-8")
+        self.assertIn("'[OXMOB]|'", core)
+
 
 if __name__ == "__main__":
     unittest.main()

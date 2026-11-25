@@ -505,7 +505,8 @@ ashita.events.register('load', 'soulspire_core_load', function()
 
     last_session_active = is_player_in_session()
     if not menu or not menu.native_hook_supported then
-        log('Waiting for soulspire_native.dll native Commands menu hook; /soulspire remains available.')
+        local detail = menu and menu.native_hook_reason or 'unavailable'
+        log('Waiting for soulspire_native.dll native Commands menu hook (' .. tostring(detail) .. '); /soulspire remains available.')
     end
 end)
 
@@ -1218,16 +1219,24 @@ ashita.events.register('packet_in', 'soulspire_core_packet_in', function(e)
         return
     end
 
-    if e.id == 0x017 and soul_talents_mod and type(buf) == 'string' and #buf >= 25 then
+    if e.id == 0x017 and type(buf) == 'string' and #buf >= 25 then
         local msg = string.sub(buf, 24):match('^([^%z]*)')
-        if msg and string.sub(msg, 1, 8) == '[OXHUD]|' then
-            local t_oxh0 = diag_on and perf_diag.clock() or 0
-            soul_talents_mod:observe_hud_line(string.sub(msg, 9))
-            if CoreIPC.should_block(oxhud_ipc_token) then
+        if msg then
+            if string.sub(msg, 1, 8) == '[OXHUD]|' then
+                local t_oxh0 = diag_on and perf_diag.clock() or 0
+                if soul_talents_mod then
+                    soul_talents_mod:observe_hud_line(string.sub(msg, 9))
+                end
+                if CoreIPC.should_block(oxhud_ipc_token) then
+                    e.blocked = true
+                end
+                if diag_on then
+                    perf_diag:record_flow('soul_hud', (perf_diag.clock() - t_oxh0) * 1000.0, 'complete', { scope = 'client_plus_server_rtt', packets_in = 1, bytes_in = #msg })
+                end
+            elseif string.sub(msg, 1, 8) == '[OXMOB]|' then
+                -- Suppress internal Soulspire mob-status transport frames so they never leak into
+                -- normal player chat when kazenoeye is not loaded (kazenoeye loads before core when enabled).
                 e.blocked = true
-            end
-            if diag_on then
-                perf_diag:record_flow('soul_hud', (perf_diag.clock() - t_oxh0) * 1000.0, 'complete', { scope = 'client_plus_server_rtt', packets_in = 1, bytes_in = #msg })
             end
         end
     end

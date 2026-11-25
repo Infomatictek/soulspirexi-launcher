@@ -2636,10 +2636,15 @@ extern "C" uint32_t __stdcall SoulspireNativeInitialize() {
     }
 
     auto* base = reinterpret_cast<uint8_t*>(GetModuleHandleW(L"FFXiMain.dll"));
+    const ClientHostKind host_kind = detect_client_host();
+    const char* host_name = (host_kind == ClientHostKind::Ashita) ? "Ashita"
+        : (host_kind == ClientHostKind::VanaCore) ? "VanaCore" : "Unknown";
     if (!supported(base)) {
         log_message(LOG_LEVEL_ERROR,
-            "Unsupported FFXiMain.dll build or signature mismatch (stage=%u, rva=0x%X, idx=%u)",
-            hook_diag.init_stage, hook_diag.failed_rva, hook_diag.failed_index);
+            "Unsupported FFXiMain.dll build or signature mismatch (host=%s, stage=%u, rva=0x%X, idx=%u, bytes=%02X %02X %02X %02X %02X)",
+            host_name, hook_diag.init_stage, hook_diag.failed_rva, hook_diag.failed_index,
+            hook_diag.observed_bytes[0], hook_diag.observed_bytes[1], hook_diag.observed_bytes[2],
+            hook_diag.observed_bytes[3], hook_diag.observed_bytes[4]);
         last_error.store(1, std::memory_order_release);
         ReleaseSRWLockExclusive(&lifecycle_lock);
         return 1;
@@ -2785,8 +2790,9 @@ extern "C" uint32_t __stdcall SoulspireNativeInitialize() {
     std::memset(hook_diag.observed_bytes, 0, sizeof(hook_diag.observed_bytes));
     last_error.store(0, std::memory_order_release);
     enabled.store(true, std::memory_order_release);
-    log_message(LOG_LEVEL_INFO, "Initialized all %u native hooks cleanly (ABI v%u)",
-        kExpectedHooks, static_cast<unsigned>(SOULSPIRE_NATIVE_ABI_VERSION));
+    log_message(LOG_LEVEL_INFO, "Initialized all %u native hooks cleanly (host=%s, ABI v%u, ffxi_ts=0x%X, offhand_bone=%u/3)",
+        kExpectedHooks, host_name, static_cast<unsigned>(SOULSPIRE_NATIVE_ABI_VERSION),
+        hook_diag.ffxi_timestamp, offhand_bone_hooks_installed() ? 3u : 0u);
     ReleaseSRWLockExclusive(&lifecycle_lock);
     return 0;
 }

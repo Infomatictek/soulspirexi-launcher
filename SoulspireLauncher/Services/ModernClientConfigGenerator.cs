@@ -188,6 +188,14 @@ public sealed class ModernClientConfigGenerator
         {
             sb.AppendLine("/addon load crystalsocket ashita");
         }
+        if (settings.AutoLoadKazenoeyeAddon)
+        {
+            sb.AppendLine("/addon load kazenoeye ashita");
+        }
+        if (settings.AutoLoadSoulHudAddon)
+        {
+            sb.AppendLine("/addon load soulspire_soulhud ashita");
+        }
         if (settings.AutoLoadSoulHudAddon || settings.AutoLoadTalentsAddon)
         {
             sb.AppendLine("/addon load soulspire_core ashita");

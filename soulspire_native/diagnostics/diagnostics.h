@@ -3,11 +3,39 @@
 #include <atomic>
 #include <cstdarg>
 #include <cstdio>
+#include <cwchar>
 
 namespace soulspire::native {
 
-inline std::atomic<uint32_t> g_log_level{LOG_LEVEL_WARN};
+inline std::atomic<uint32_t> g_log_level{LOG_LEVEL_INFO};
 inline std::atomic<uint32_t> g_suppressed_logs{0};
+
+#if defined(_WIN32)
+inline void append_log_file_line(const char* line) noexcept {
+    if (line == nullptr) return;
+    HMODULE self = nullptr;
+    if (!GetModuleHandleExW(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(&append_log_file_line),
+            &self) || self == nullptr) {
+        return;
+    }
+    wchar_t path[MAX_PATH]{};
+    const DWORD len = GetModuleFileNameW(self, path, MAX_PATH);
+    if (len == 0 || len >= MAX_PATH - 24) return;
+    wchar_t* slash = nullptr;
+    for (DWORD i = 0; i < len; ++i) {
+        if (path[i] == L'\\' || path[i] == L'/') slash = path + i;
+    }
+    if (slash == nullptr) return;
+    std::swprintf(slash + 1, static_cast<size_t>(MAX_PATH - (slash + 1 - path)), L"soulspire_native.log");
+    FILE* f = nullptr;
+    if (_wfopen_s(&f, path, L"a") == 0 && f != nullptr) {
+        std::fputs(line, f);
+        std::fclose(f);
+    }
+}
+#endif
 
 inline void set_log_level(uint32_t level) noexcept {
     if (level > LOG_LEVEL_DEBUG) level = LOG_LEVEL_DEBUG;
@@ -38,6 +66,9 @@ inline void log_message(uint32_t level, const char* fmt, ...) noexcept {
     std::snprintf(line, sizeof(line), "[Soulspire Native] [%s] %s\n", tag, body);
 #if defined(_WIN32)
     OutputDebugStringA(line);
+    if (level <= LOG_LEVEL_INFO) {
+        append_log_file_line(line);
+    }
 #else
     (void)line;
 #endif

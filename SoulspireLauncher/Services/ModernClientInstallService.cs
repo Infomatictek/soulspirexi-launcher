@@ -339,8 +339,21 @@ public sealed class ModernClientInstallService
             copied += CopyDirectoryContents(srcPluginData, Path.Combine(compatDir, "plugins", "data"));
         }
 
-        // 2. Copy SoulspireXI Ashita addons (preserving any user settings inside compat\addons\...\settings\)
-        foreach (var addonName in new[] { "soulspire_core", "crystalsocket", "soulspire_flintlock", "soulspire_gear", "soulspire_soul_actions" })
+        // 2. Copy SoulspireXI Ashita addons (preserving any user settings inside compat\addons\...\settings\).
+        //    Includes soulspire_talents (sibling Lua modules/assets required by soulspire_core's Soulforge/Weapon Mastery
+        //    and Soul Talents tabs without loading soulspire_talents as a separate standalone addon), soulspire_soulhud
+        //    (live floating Soul Crystal Gauge HUD), and kazenoeye (target debuff/status tracker).
+        foreach (var addonName in new[]
+                 {
+                     "soulspire_core",
+                     "soulspire_talents",
+                     "soulspire_soulhud",
+                     "kazenoeye",
+                     "crystalsocket",
+                     "soulspire_flintlock",
+                     "soulspire_gear",
+                     "soulspire_soul_actions"
+                 })
         {
             var srcAddon = Path.Combine(ashitaDir, "addons", addonName);
             if (Directory.Exists(srcAddon))

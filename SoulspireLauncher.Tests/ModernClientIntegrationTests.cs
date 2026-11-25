@@ -235,10 +235,16 @@ public sealed class ModernClientIntegrationTests
             var ashitaDir = Path.Combine(root, "Ashita");
             Directory.CreateDirectory(Path.Combine(ashitaDir, "plugins", "data"));
             Directory.CreateDirectory(Path.Combine(ashitaDir, "addons", "soulspire_core"));
+            Directory.CreateDirectory(Path.Combine(ashitaDir, "addons", "soulspire_talents"));
+            Directory.CreateDirectory(Path.Combine(ashitaDir, "addons", "soulspire_soulhud"));
+            Directory.CreateDirectory(Path.Combine(ashitaDir, "addons", "kazenoeye"));
             File.WriteAllText(Path.Combine(ashitaDir, "plugins", "soulspire_native.dll"), "native-stub");
             File.WriteAllText(Path.Combine(ashitaDir, "plugins", "data", "soul-weapon-config.json"), "{\"schemaVersion\":1}");
             File.WriteAllText(Path.Combine(ashitaDir, "plugins", "data", "soul-identities.json"), "{}");
             File.WriteAllText(Path.Combine(ashitaDir, "addons", "soulspire_core", "soulspire_core.lua"), "-- core");
+            File.WriteAllText(Path.Combine(ashitaDir, "addons", "soulspire_talents", "soulforge_state.lua"), "-- soulforge");
+            File.WriteAllText(Path.Combine(ashitaDir, "addons", "soulspire_soulhud", "soulspire_soulhud.lua"), "-- soulhud");
+            File.WriteAllText(Path.Combine(ashitaDir, "addons", "kazenoeye", "kazenoeye.lua"), "-- kazenoeye");
 
             // Build a valid test ZIP mimicking GitHub Release layout (VanaCore/VanaCore.exe + VanaCore/VanaCore.Core.dll).
             var zipBytes = BuildStubModernZipBytes("v1-exe", "v1-core");
@@ -296,7 +302,27 @@ public sealed class ModernClientIntegrationTests
             Assert.True(File.Exists(Path.Combine(compatDir, "plugins", "data", "soul-weapon-config.json")));
             Assert.True(File.Exists(Path.Combine(compatDir, "plugins", "ashita", "data", "soul-identities.json")));
             Assert.True(File.Exists(Path.Combine(compatDir, "addons", "ashita", "soulspire_core", "soulspire_core.lua")));
+            Assert.True(File.Exists(Path.Combine(compatDir, "addons", "ashita", "soulspire_talents", "soulforge_state.lua")));
+            Assert.True(File.Exists(Path.Combine(compatDir, "addons", "ashita", "soulspire_soulhud", "soulspire_soulhud.lua")));
+            Assert.True(File.Exists(Path.Combine(compatDir, "addons", "ashita", "kazenoeye", "kazenoeye.lua")));
             Assert.Equal("native-stub", File.ReadAllText(Path.Combine(ashitaDir, "plugins", "soulspire_native.dll")));
+
+            // Verify Compat boot script loads kazenoeye before soulspire_core, loads soulspire_soulhud,
+            // and never loads standalone soulspire_talents (Soulforge stays unified inside soulspire_core).
+            var bootSettings = new LauncherSettings
+            {
+                AutoLoadCrystalSocketAddon = true,
+                AutoLoadKazenoeyeAddon = true,
+                AutoLoadSoulHudAddon = true,
+                AutoLoadTalentsAddon = true
+            };
+            var boot = ModernClientConfigGenerator.BuildBootScriptContent(bootSettings, ClientEngineMode.ModernCompat);
+            Assert.Contains("/addon load kazenoeye ashita", boot);
+            Assert.Contains("/addon load soulspire_soulhud ashita", boot);
+            Assert.Contains("/addon load soulspire_core ashita", boot);
+            Assert.DoesNotContain("/addon load soulspire_talents", boot);
+            Assert.True(boot.IndexOf("/addon load kazenoeye ashita", StringComparison.Ordinal) <
+                        boot.IndexOf("/addon load soulspire_core ashita", StringComparison.Ordinal));
         }
         finally
         {
