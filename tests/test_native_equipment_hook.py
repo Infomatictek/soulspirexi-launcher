@@ -243,6 +243,7 @@ class NativeEquipmentHookTests(unittest.TestCase):
                 "SoulspireNativeSetLocalEquippedWeapons",
                 "SoulspireNativeUpsertPeerSoul",
                 "SoulspireNativeGetWeaponModelDiag",
+                "SoulspireNativeGetWeaponOffhandDiag",
             ])
         self.assertEqual(len(exports), len(expected_exports), f"Expected {len(expected_exports)} PE exports, found {len(exports)}: {exports}")
         self.assertEqual(sorted(exports), sorted(expected_exports))
