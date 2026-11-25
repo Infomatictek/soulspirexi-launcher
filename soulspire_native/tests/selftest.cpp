@@ -1939,6 +1939,7 @@ int main() {
 
     // Hook #32 (RVA 0xD3C45): Registry-driven Sub-slot -> Main-slot FTABLE namespace resolver unit tests.
     {
+        selftest_alive = true;
         uint8_t fake_ent[0x100]{};
         uint8_t fake_actor[0x100]{};
         const uint32_t local_id = 0x01020304u;
@@ -1996,6 +1997,7 @@ int main() {
         SoulspireNativeSetLocalEquippedWeapons(0, 0, 0, 0);
         main_lvl_slot = nullptr;
         main_job_slot = nullptr;
+        selftest_alive = false;
     }
 
     const auto get_iface_info = reinterpret_cast<uint32_t(__stdcall*)(SoulspireNativeInterfaceInfo*, uint32_t)>(
