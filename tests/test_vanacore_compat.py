@@ -50,6 +50,31 @@ class VanaCoreCompatibilityTests(unittest.TestCase):
         mus = (REPO_ROOT / "SoulspireLauncher" / "Services" / "ManifestUpdateService.cs").read_text(encoding="utf-8")
         self.assertIn("modernClient.clientVerified=false", mus)
 
+    def test_modern_compat_host_aware_paths_native_plugin_layout_and_rate_limited_logging(self):
+        # 1. VanaCore requires Ashita plugins under plugins/ashita/ and data under plugins/ashita/data/ + plugins/data/
+        mis = (REPO_ROOT / "SoulspireLauncher" / "Services" / "ModernClientInstallService.cs").read_text(encoding="utf-8")
+        self.assertIn('Path.Combine(compatDir, "plugins", "ashita")', mis)
+        self.assertIn('Path.Combine(compatDir, "plugins", "ashita", "data")', mis)
+
+        mcg = (REPO_ROOT / "SoulspireLauncher" / "Services" / "ModernClientConfigGenerator.cs").read_text(encoding="utf-8")
+        self.assertIn("/plugin load soulspire_native ashita", mcg)
+
+        # 2. Host-aware soul-weapon-config.json resolution for both Classic (../../) and VanaCore (../../../)
+        cs_wc = (REPO_ROOT / "addons" / "ashita4" / "crystalsocket" / "weapon_config.lua").read_text(encoding="utf-8")
+        self.assertIn("../../../plugins/ashita/data/soul-weapon-config.json", cs_wc)
+        self.assertIn("../../../plugins/data/soul-weapon-config.json", cs_wc)
+
+        fl_st = (REPO_ROOT / "addons" / "ashita4" / "soulspire_flintlock" / "flintlock_state.lua").read_text(encoding="utf-8")
+        self.assertIn("../../../plugins/ashita/data/soul-weapon-config.json", fl_st)
+        self.assertIn("../../../plugins/data/soul-weapon-config.json", fl_st)
+
+        cs_lua = (REPO_ROOT / "addons" / "ashita4" / "crystalsocket" / "crystalsocket.lua").read_text(encoding="utf-8")
+        self.assertIn("plugins\\\\ashita\\\\soulspire_native.dll", cs_lua)
+
+        # 3. Capability-aware rate-limited Soul Actions logging (no per-tick spam)
+        sa = (REPO_ROOT / "addons" / "ashita4" / "soulspire_soul_actions" / "soulspire_soul_actions.lua").read_text(encoding="utf-8")
+        self.assertIn("state.rowLimitCapState", sa)
+
 
 if __name__ == "__main__":
     unittest.main()

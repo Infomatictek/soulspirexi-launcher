@@ -225,6 +225,8 @@ public sealed class ModernClientDiagnosticsService
         var nativeLogCandidates = new[]
         {
             Path.Combine(profileDir, "logs", "soulspire_native.log"),
+            Path.Combine(profileDir, "plugins", "ashita", "soulspire_native.log"),
+            Path.Combine(profileDir, "plugins", "ashita", "data", "soulspire_native.log"),
             Path.Combine(profileDir, "plugins", "soulspire_native.log"),
             Path.Combine(profileDir, "soulspire_native.log")
         };

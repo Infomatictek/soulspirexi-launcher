@@ -314,19 +314,28 @@ public sealed class ModernClientInstallService
 
         var copied = 0;
 
-        // 1. Copy dual-host soulspire_native.dll + plugins\data\*
+        // 1. Copy dual-host soulspire_native.dll into plugins\ashita\ (where VanaCore's Ashita plugin loader searches)
+        //    and sync authoritative plugins\data\* into BOTH plugins\ashita\data\ (for soulspire_native.dll) and plugins\data\.
         var srcNative = Path.Combine(ashitaDir, "plugins", "soulspire_native.dll");
         if (File.Exists(srcNative))
         {
-            var destPlugins = Path.Combine(compatDir, "plugins");
-            Directory.CreateDirectory(destPlugins);
-            File.Copy(srcNative, Path.Combine(destPlugins, "soulspire_native.dll"), overwrite: true);
+            var destAshitaPlugins = Path.Combine(compatDir, "plugins", "ashita");
+            Directory.CreateDirectory(destAshitaPlugins);
+            File.Copy(srcNative, Path.Combine(destAshitaPlugins, "soulspire_native.dll"), overwrite: true);
             copied++;
+
+            // Clean up any stale root plugins\soulspire_native.dll from earlier Testing builds so only plugins\ashita\ is present.
+            var staleRootNative = Path.Combine(compatDir, "plugins", "soulspire_native.dll");
+            if (File.Exists(staleRootNative))
+            {
+                try { File.Delete(staleRootNative); } catch { /* ignore */ }
+            }
         }
 
         var srcPluginData = Path.Combine(ashitaDir, "plugins", "data");
         if (Directory.Exists(srcPluginData))
         {
+            copied += CopyDirectoryContents(srcPluginData, Path.Combine(compatDir, "plugins", "ashita", "data"));
             copied += CopyDirectoryContents(srcPluginData, Path.Combine(compatDir, "plugins", "data"));
         }
 

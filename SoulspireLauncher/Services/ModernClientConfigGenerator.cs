@@ -182,7 +182,7 @@ public sealed class ModernClientConfigGenerator
         }
 
         sb.AppendLine("# Modern — Soulspire Compatibility: progressive SoulspireXI native & addon boot script.");
-        sb.AppendLine("/plugin load soulspire_native");
+        sb.AppendLine("/plugin load soulspire_native ashita");
         sb.AppendLine("/wait 1");
         if (settings.AutoLoadCrystalSocketAddon)
         {

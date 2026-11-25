@@ -300,7 +300,12 @@ ashita.events.register('load', 'crystalsocket_load', function()
     if type(addon.path) == 'string' and addon.path ~= '' then
         WeaponConfig.load_default(addon.path)
         native_weapon_rules = WeaponConfig.native_rules()
-        labels:set_dll_path(addon.path:gsub('[/\\]+$', '') .. '\\..\\..\\plugins\\soulspire_native.dll')
+        local clean_addon_path = addon.path:gsub('[/\\]+$', '')
+        local dll_path = clean_addon_path .. '\\..\\..\\plugins\\soulspire_native.dll'
+        if clean_addon_path:lower():find('[/\\]addons[/\\]ashita[/\\][^/\\]+$') then
+            dll_path = clean_addon_path .. '\\..\\..\\..\\plugins\\ashita\\soulspire_native.dll'
+        end
+        labels:set_dll_path(dll_path)
         labels:ensure_loaded()
         local wc_st = WeaponConfig.status()
         if wc_st.loaded and #native_weapon_rules > 0 then

@@ -415,7 +415,12 @@ function W.resolve_default_paths(base_dir)
     local candidates = {}
     if type(base_dir) == 'string' and base_dir ~= '' then
         local clean = base_dir:gsub('[/\\]+$', '')
+        -- Classic Ashita layout: <root>/addons/<addon> -> <root>/plugins/data/
         candidates[#candidates + 1] = clean .. '/../../plugins/data/soul-weapon-config.json'
+        -- Modern VanaCore layout: <root>/addons/ashita/<addon> -> <root>/plugins/ashita/data/ and <root>/plugins/data/
+        candidates[#candidates + 1] = clean .. '/../../../plugins/ashita/data/soul-weapon-config.json'
+        candidates[#candidates + 1] = clean .. '/../../../plugins/data/soul-weapon-config.json'
+        -- Repo dev layout
         candidates[#candidates + 1] = clean .. '/../../../plugins/ashita4/data/soul-weapon-config.json'
         candidates[#candidates + 1] = clean .. '/../../plugins/ashita4/data/soul-weapon-config.json'
     end
@@ -424,9 +429,20 @@ function W.resolve_default_paths(base_dir)
         local dir = src:sub(2):match('^(.*)[/\\][^/\\]+$')
         if dir then
             candidates[#candidates + 1] = dir .. '/../../plugins/data/soul-weapon-config.json'
+            candidates[#candidates + 1] = dir .. '/../../../plugins/ashita/data/soul-weapon-config.json'
+            candidates[#candidates + 1] = dir .. '/../../../plugins/data/soul-weapon-config.json'
             candidates[#candidates + 1] = dir .. '/../../../plugins/ashita4/data/soul-weapon-config.json'
         end
     end
+    if type(AshitaCore) == 'userdata' or type(AshitaCore) == 'table' then
+        local ok_inst, inst = pcall(function() return AshitaCore:GetInstallPath() end)
+        if ok_inst and type(inst) == 'string' and inst ~= '' then
+            local clean_inst = inst:gsub('[/\\]+$', '')
+            candidates[#candidates + 1] = clean_inst .. '/plugins/ashita/data/soul-weapon-config.json'
+            candidates[#candidates + 1] = clean_inst .. '/plugins/data/soul-weapon-config.json'
+        end
+    end
+    candidates[#candidates + 1] = 'plugins/ashita/data/soul-weapon-config.json'
     candidates[#candidates + 1] = 'plugins/data/soul-weapon-config.json'
     candidates[#candidates + 1] = 'plugins/ashita4/data/soul-weapon-config.json'
     candidates[#candidates + 1] = '../../../plugins/ashita4/data/soul-weapon-config.json'

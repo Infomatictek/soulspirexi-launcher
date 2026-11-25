@@ -135,13 +135,25 @@ local function syncNativeCatalog()
     state.catalogSynced = ok == true
     -- Presentation width is a separate optional native capability. Existing
     -- clients without this export retain the old rendering path unchanged.
+    -- Log capability unavailability once per state transition (never per-tick spam).
     local rowLimit, why = presentationConfig.load(addon.path)
     if rowLimit then
-        if not nativeActions.setActionRowLimit(rowLimit) then
-            log('Native menu-row width configuration not available in the loaded DLL.')
+        if nativeActions.setActionRowLimit(rowLimit) then
+            if state.rowLimitCapState == 'unavailable' then
+                log('Native menu-row width configuration is now active (limit=' .. tostring(rowLimit) .. ').')
+            end
+            state.rowLimitCapState = 'available'
+        else
+            if state.rowLimitCapState ~= 'unavailable' then
+                state.rowLimitCapState = 'unavailable'
+                log('Native menu-row width configuration not available in the loaded DLL (will retry automatically if soulspire_native.dll loads).')
+            end
         end
     elseif why then
-        log('Presentation configuration warning: ' .. tostring(why))
+        if state.rowLimitConfigWarn ~= tostring(why) then
+            state.rowLimitConfigWarn = tostring(why)
+            log('Presentation configuration warning: ' .. tostring(why))
+        end
     end
     -- Load and sync external Soul action visibility policy (data/visibility.tsv).
     -- Unspecified actions remain unmanaged (fail-open to vanilla FFXI behavior).

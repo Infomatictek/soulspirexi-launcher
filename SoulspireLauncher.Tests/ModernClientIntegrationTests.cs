@@ -197,7 +197,7 @@ public sealed class ModernClientIntegrationTests
         Assert.Contains("renderer=d3d11", ini);
 
         var boot = ModernClientConfigGenerator.BuildBootScriptContent(settings, ClientEngineMode.ModernCompat);
-        Assert.Contains("/plugin load soulspire_native", boot);
+        Assert.Contains("/plugin load soulspire_native ashita", boot);
         Assert.Contains("/addon load crystalsocket ashita", boot);
         Assert.Contains("/addon load soulspire_core ashita", boot);
         Assert.Contains("/addon load soulspire_flintlock ashita", boot);
@@ -233,9 +233,11 @@ public sealed class ModernClientIntegrationTests
         {
             Directory.CreateDirectory(root);
             var ashitaDir = Path.Combine(root, "Ashita");
-            Directory.CreateDirectory(Path.Combine(ashitaDir, "plugins"));
+            Directory.CreateDirectory(Path.Combine(ashitaDir, "plugins", "data"));
             Directory.CreateDirectory(Path.Combine(ashitaDir, "addons", "soulspire_core"));
             File.WriteAllText(Path.Combine(ashitaDir, "plugins", "soulspire_native.dll"), "native-stub");
+            File.WriteAllText(Path.Combine(ashitaDir, "plugins", "data", "soul-weapon-config.json"), "{\"schemaVersion\":1}");
+            File.WriteAllText(Path.Combine(ashitaDir, "plugins", "data", "soul-identities.json"), "{}");
             File.WriteAllText(Path.Combine(ashitaDir, "addons", "soulspire_core", "soulspire_core.lua"), "-- core");
 
             // Build a valid test ZIP mimicking GitHub Release layout (VanaCore/VanaCore.exe + VanaCore/VanaCore.Core.dll).
@@ -280,11 +282,19 @@ public sealed class ModernClientIntegrationTests
             Assert.False(res2.Downloaded);
             Assert.True(res2.UpToDate);
 
-            // SyncCompatibilityOverlayFromAshita copies into ModernClient\compat\ without mutating Ashita\.
+            // SyncCompatibilityOverlayFromAshita copies into ModernClient\compat\plugins\ashita\ + data\ without mutating Ashita\.
             var compatDir = ModernClientConfigGenerator.ResolveProfileDirectory(Path.Combine(root, "ModernClient"), ClientEngineMode.ModernCompat);
+            // Seed a stale root plugins\soulspire_native.dll to verify cleanup.
+            Directory.CreateDirectory(Path.Combine(compatDir, "plugins"));
+            File.WriteAllText(Path.Combine(compatDir, "plugins", "soulspire_native.dll"), "stale-root");
+
             var copied = ModernClientInstallService.SyncCompatibilityOverlayFromAshita(ashitaDir, compatDir);
-            Assert.True(copied >= 2);
-            Assert.True(File.Exists(Path.Combine(compatDir, "plugins", "soulspire_native.dll")));
+            Assert.True(copied >= 6);
+            Assert.True(File.Exists(Path.Combine(compatDir, "plugins", "ashita", "soulspire_native.dll")));
+            Assert.False(File.Exists(Path.Combine(compatDir, "plugins", "soulspire_native.dll")));
+            Assert.True(File.Exists(Path.Combine(compatDir, "plugins", "ashita", "data", "soul-weapon-config.json")));
+            Assert.True(File.Exists(Path.Combine(compatDir, "plugins", "data", "soul-weapon-config.json")));
+            Assert.True(File.Exists(Path.Combine(compatDir, "plugins", "ashita", "data", "soul-identities.json")));
             Assert.True(File.Exists(Path.Combine(compatDir, "addons", "ashita", "soulspire_core", "soulspire_core.lua")));
             Assert.Equal("native-stub", File.ReadAllText(Path.Combine(ashitaDir, "plugins", "soulspire_native.dll")));
         }
