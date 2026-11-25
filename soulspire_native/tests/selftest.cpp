@@ -1939,6 +1939,8 @@ int main() {
 
     // Hook #32 (RVA 0xD3C45): Registry-driven Sub-slot -> Main-slot FTABLE namespace resolver unit tests.
     {
+        transport = {};
+        state = {};
         selftest_alive = true;
         uint8_t fake_ent[0x100]{};
         uint8_t fake_actor[0x100]{};
