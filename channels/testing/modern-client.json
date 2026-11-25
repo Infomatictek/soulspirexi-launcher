@@ -21,14 +21,13 @@
   "compat": {
     "profile": "compat",
     "version": "0.9.9",
-    "tag": "v0.9.9-soulspire-compat.6",
-    "commitSha": "4ac779edb3",
-    "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-    "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-compat.6/soulspirexi-client-experimental-0.9.9-4ac779edb3-win32.zip",
-    "packageSha256": "62fc0b35e8cbd8552de2e45b1aeed45cbed8f43941d2741c8f894a71a2b0d2fc",
-    "packageSize": 98959467,
+    "tag": "v0.9.9-soulspire-native.1",
+    "commitSha": "e45ecc62f7",
+    "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.1/soulspirexi-client-experimental-0.9.9-e45ecc62f7-win32.zip",
+    "packageSha256": "435dbdad7bc5f6b4cb73abe2f5b5eaa0eaa770bcd01622d0d84dc6ca68cd2637",
+    "packageSize": 99004725,
     "experimentalEligible": true,
     "clientVerified": false,
-    "notes": "Phase 2 Soulspire Compatibility build (TLS 1.3 SCH_CREDENTIALS v5 + xiloader 3.0.0 + TLS 1.3 lobby relay + polcore.dll 51220 connect hook): FFXiMain 0x6AE818B4 & input sig scans, Ashita v4.30 default, dinput_state/xinput_state adapters, singlemenu guard, and progressive dual-host soulspire_native.dll + Soulspire Core + Pivot support."
+    "notes": "VanaCore-Native Soulspire Phase A+B build (DEC-028, TLS 1.3 + xiloader 3.0.0 + polcore 51220): modular src/core/soulspire/ EngineState (66-Soul JSON, action catalog, visibility, weapon rules, live OXHUD/OXMOB), coordinated vanacore::packets lifecycle + internal chat-frame suppression, 15 pattern-verified FFXiMain hooks, and vana.soulspire Lua API."
   }
 }

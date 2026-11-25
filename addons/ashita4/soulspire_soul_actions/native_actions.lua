@@ -65,6 +65,16 @@ local entry_arr_t, action_status_t, vis_entry_arr_t, vis_status_t
 local fn_types = {}
 local cache = { module = nil, fns = {} }
 
+local function getVanaSoulspire()
+    if type(vana) == 'table' and type(vana.soulspire) == 'table' and type(vana.soulspire.enabled) == 'function' then
+        local ok, on = pcall(vana.soulspire.enabled)
+        if ok and on == true then
+            return vana.soulspire
+        end
+    end
+    return nil
+end
+
 if okFfi and ffi then
     pcall(ffi.cdef, 'void* __stdcall GetModuleHandleA(const char*);')
     pcall(ffi.cdef, 'void* __stdcall GetProcAddress(void*, const char*);')
@@ -152,11 +162,9 @@ local function resolveFn(shortName)
 end
 
 function M.syncCatalog(catalog)
-    if not (ffi and entry_arr_t and catalog and type(catalog.souls) == 'table') then
-        return false, 'FFI or catalog unavailable'
+    if not (catalog and type(catalog.souls) == 'table') then
+        return false, 'catalog unavailable'
     end
-    local replaceFn = resolveFn('ReplaceCatalog')
-    if not replaceFn then return false, 'soulspire_native.dll Action API unavailable' end
 
     local flat = {}
     for soulKey, kinds in pairs(catalog.souls) do
@@ -172,6 +180,8 @@ function M.syncCatalog(catalog)
                                 branch = branch,
                                 kind = kindId,
                                 id = id,
+                                icon_id = tonumber(info.iconId) or 65535,
+                                icon_id_v2 = tonumber(info.iconIdV2) or 65535,
                                 iconId = tonumber(info.iconId) or 65535,
                                 iconIdV2 = tonumber(info.iconIdV2) or 65535,
                                 name = tostring(info.name or ''),
@@ -183,6 +193,20 @@ function M.syncCatalog(catalog)
             end
         end
     end
+
+    -- VanaCore-native Soulspire engine takes precedence when enabled (DEC-028).
+    local vs = getVanaSoulspire()
+    if vs and type(vs.replace_actions) == 'function' then
+        local ok, count = pcall(vs.replace_actions, flat)
+        if ok then return true, tonumber(count) or #flat end
+        return false, 'vana.soulspire.replace_actions failed: ' .. tostring(count)
+    end
+
+    if not (ffi and entry_arr_t) then
+        return false, 'FFI unavailable'
+    end
+    local replaceFn = resolveFn('ReplaceCatalog')
+    if not replaceFn then return false, 'soulspire_native.dll Action API unavailable' end
 
     local count = #flat
     if count == 0 then
@@ -219,6 +243,11 @@ end
 function M.setActiveSoul(soulKey, characterId)
     local job, branch = M.soulToPair(soulKey)
     if not (job and branch) then return M.clearActiveSoul() end
+    local vs = getVanaSoulspire()
+    if vs and type(vs.set_identity) == 'function' then
+        local ok, res = pcall(vs.set_identity, job, branch, tonumber(characterId) or 0)
+        return ok and res == true
+    end
     local fn = resolveFn('SetActiveSoul')
     if not fn then return false end
     local ok, rc = pcall(fn, job, branch, tonumber(characterId) or 0)
@@ -226,6 +255,11 @@ function M.setActiveSoul(soulKey, characterId)
 end
 
 function M.clearActiveSoul()
+    local vs = getVanaSoulspire()
+    if vs and type(vs.clear_identity) == 'function' then
+        local ok = pcall(vs.clear_identity)
+        return ok
+    end
     local fn = resolveFn('ClearActiveSoul')
     if not fn then return false end
     local ok, rc = pcall(fn)
@@ -235,6 +269,11 @@ end
 function M.setActionRowLimit(limit)
     local n = tonumber(limit)
     if not n or n % 1 ~= 0 or n < 8 or n > 48 then return false end
+    local vs = getVanaSoulspire()
+    if vs and type(vs.set_row_limit) == 'function' then
+        local ok, res = pcall(vs.set_row_limit, n)
+        return ok and res == true
+    end
     local fn = resolveFn('SetActionRowLimit')
     if not fn then return false end
     local ok, rc = pcall(fn, n)
@@ -242,6 +281,29 @@ function M.setActionRowLimit(limit)
 end
 
 function M.readStatus()
+    local vs = getVanaSoulspire()
+    if vs and type(vs.diagnostics) == 'function' then
+        local ok, d = pcall(vs.diagnostics)
+        if ok and type(d) == 'table' then
+            local ident = (type(vs.identity) == 'function') and select(2, pcall(vs.identity)) or nil
+            return {
+                capabilities = tonumber(d.capabilities) or 0,
+                catalog_count = tonumber(d.action_count) or 0,
+                catalog_generation = tonumber(d.action_generation) or 0,
+                active_job = (type(ident) == 'table' and tonumber(ident.job)) or 0,
+                active_branch = (type(ident) == 'table' and tonumber(ident.branch)) or 0,
+                active_source = (type(ident) == 'table' and ident.known) and 1 or 0,
+                magic_name_hits = 0,
+                magic_desc_hits = 0,
+                magic_icon_hits = 0,
+                ability_name_hits = 0,
+                ability_desc_hits = 0,
+                ability_icon_hits = 0,
+                total_hooks = tonumber(d.hooks_installed) or 0,
+                expected_hooks = tonumber(d.hooks_total) or 0,
+            }
+        end
+    end
     if not (ffi and action_status_t) then return nil end
     local fn = resolveFn('GetActionStatus')
     if not fn then return nil end
@@ -269,6 +331,40 @@ function M.readStatus()
 end
 
 function M.syncVisibility(policy)
+    local vs = getVanaSoulspire()
+    if vs and type(vs.replace_visibility) == 'function' then
+        if type(policy) ~= 'table' or type(policy.souls) ~= 'table' then
+            if type(vs.clear_visibility) == 'function' then pcall(vs.clear_visibility) end
+            return true, 0
+        end
+        local vflat = {}
+        for soulKey, kinds in pairs(policy.souls) do
+            local job, branch = M.soulToPair(soulKey)
+            if job and branch and type(kinds) == 'table' then
+                for kindName, entries in pairs(kinds) do
+                    local kindId = KIND_ID[kindName]
+                    if kindId and type(entries) == 'table' then
+                        for id, info in pairs(entries) do
+                            if type(id) == 'number' and type(info) == 'table' then
+                                vflat[#vflat + 1] = {
+                                    job = job,
+                                    branch = branch,
+                                    kind = kindId,
+                                    id = id,
+                                    min_level = tonumber(info.minLevel) or 1,
+                                    rule = (info.rule == 'hidden') and 0 or 1,
+                                }
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        local ok, count = pcall(vs.replace_visibility, vflat)
+        if ok then return true, tonumber(count) or #vflat end
+        return false, 'vana.soulspire.replace_visibility failed: ' .. tostring(count)
+    end
+
     if not (ffi and vis_entry_arr_t) then
         return false, 'FFI visibility types unavailable'
     end
@@ -335,6 +431,10 @@ function M.syncVisibility(policy)
 end
 
 function M.clearVisibility()
+    local vs = getVanaSoulspire()
+    if vs and type(vs.clear_visibility) == 'function' then
+        return pcall(vs.clear_visibility)
+    end
     local fn = resolveFn('ClearVisibility')
     if not fn then return false end
     local ok, rc = pcall(fn)
@@ -342,6 +442,23 @@ function M.clearVisibility()
 end
 
 function M.readVisibilityStatus()
+    local vs = getVanaSoulspire()
+    if vs and type(vs.diagnostics) == 'function' then
+        local ok, d = pcall(vs.diagnostics)
+        if ok and type(d) == 'table' then
+            local ident = (type(vs.identity) == 'function') and select(2, pcall(vs.identity)) or nil
+            return {
+                policy_count = tonumber(d.visibility_count) or 0,
+                policy_generation = 1,
+                effective_level = (type(ident) == 'table' and tonumber(ident.effective_level)) or 0,
+                magic_hidden_count = 0,
+                magic_shown_count = 0,
+                ability_hidden_count = 0,
+                total_hooks = tonumber(d.hooks_installed) or 0,
+                expected_hooks = tonumber(d.hooks_total) or 0,
+            }
+        end
+    end
     if not (ffi and vis_status_t) then return nil end
     local fn = resolveFn('GetVisibilityStatus')
     if not fn then return nil end

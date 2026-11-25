@@ -158,7 +158,8 @@ public sealed class ModernClientIntegrationTests
         Assert.Contains("configmenu=0", ini);
         Assert.Contains("gamesettings.extended=0", ini);
         Assert.Contains("renderer=d3d12", ini);
-        Assert.Contains("enabled=0", ini); // pivot disabled in Baseline
+        Assert.Contains("enabled=0", ini); // pivot & soulspire disabled in Baseline
+        Assert.Contains("[soulspire]\r\nenabled=0", ini.Replace("\r\n", "\n").Replace("\n", "\r\n"));
         Assert.DoesNotContain("[pivot.order]", ini);
         Assert.DoesNotContain("password=", ini, StringComparison.OrdinalIgnoreCase);
 
@@ -195,9 +196,10 @@ public sealed class ModernClientIntegrationTests
         Assert.Contains("singlemenu=0", ini);
         Assert.Contains("ashita.interface=4.30", ini);
         Assert.Contains("renderer=d3d11", ini);
+        Assert.Contains("[soulspire]\r\nenabled=1", ini.Replace("\r\n", "\n").Replace("\n", "\r\n"));
 
         var boot = ModernClientConfigGenerator.BuildBootScriptContent(settings, ClientEngineMode.ModernCompat);
-        Assert.Contains("/plugin load soulspire_native ashita", boot);
+        Assert.DoesNotContain("/plugin load soulspire_native", boot);
         Assert.Contains("/addon load crystalsocket ashita", boot);
         Assert.Contains("/addon load soulspire_core ashita", boot);
         Assert.Contains("/addon load soulspire_flintlock ashita", boot);

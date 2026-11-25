@@ -57,7 +57,17 @@ class VanaCoreCompatibilityTests(unittest.TestCase):
         self.assertIn('Path.Combine(compatDir, "plugins", "ashita", "data")', mis)
 
         mcg = (REPO_ROOT / "SoulspireLauncher" / "Services" / "ModernClientConfigGenerator.cs").read_text(encoding="utf-8")
-        self.assertIn("/plugin load soulspire_native ashita", mcg)
+        self.assertIn("[soulspire]", mcg)
+        self.assertIn("enabled={(isBaseline ? 0 : 1)}", mcg)
+        self.assertNotIn('sb.AppendLine("/plugin load soulspire_native ashita");', mcg)
+
+        # VanaCore-native vana.soulspire bridge in native_actions.lua & menu_bridge.lua (DEC-028)
+        na = (REPO_ROOT / "addons" / "ashita4" / "soulspire_soul_actions" / "native_actions.lua").read_text(encoding="utf-8")
+        self.assertIn("vana.soulspire", na)
+        self.assertIn("replace_actions", na)
+        self.assertIn("replace_visibility", na)
+        mb = (REPO_ROOT / "addons" / "ashita4" / "soulspire_core" / "core" / "menu_bridge.lua").read_text(encoding="utf-8")
+        self.assertIn("vana.soulspire", mb)
 
         # 2. Host-aware soul-weapon-config.json resolution for both Classic (../../) and VanaCore (../../../)
         cs_wc = (REPO_ROOT / "addons" / "ashita4" / "crystalsocket" / "weapon_config.lua").read_text(encoding="utf-8")

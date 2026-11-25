@@ -167,6 +167,9 @@ public sealed class ModernClientConfigGenerator
         sb.AppendLine();
         sb.AppendLine("[mcp]");
         sb.AppendLine("enabled=0");
+        sb.AppendLine();
+        sb.AppendLine("[soulspire]");
+        sb.AppendLine($"enabled={(isBaseline ? 0 : 1)}");
 
         return sb.ToString();
     }
@@ -181,8 +184,8 @@ public sealed class ModernClientConfigGenerator
             return sb.ToString();
         }
 
-        sb.AppendLine("# Modern — Soulspire Compatibility: progressive SoulspireXI native & addon boot script.");
-        sb.AppendLine("/plugin load soulspire_native ashita");
+        sb.AppendLine("# Modern — Soulspire Compatibility: VanaCore-native Soulspire engine ([soulspire] enabled=1) & addon boot script.");
+        sb.AppendLine("# Legacy external soulspire_native.dll is intentionally omitted so VanaCore's coordinated src/core/soulspire/ owns hooks (DEC-028).");
         sb.AppendLine("/wait 1");
         if (settings.AutoLoadCrystalSocketAddon)
         {

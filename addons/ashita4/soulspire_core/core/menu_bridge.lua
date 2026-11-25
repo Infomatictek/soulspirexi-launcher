@@ -48,6 +48,22 @@ function MenuBridge.probe_native_hook(custom_probe)
         return false, (ok and detail) or 'native hook probe failed'
     end
 
+    -- VanaCore-native Soulspire engine (DEC-028): report native subsystem status directly.
+    if type(vana) == 'table' and type(vana.soulspire) == 'table' and type(vana.soulspire.enabled) == 'function' then
+        local ok_en, enabled = pcall(vana.soulspire.enabled)
+        if ok_en and enabled == true then
+            local ok_d, diag = pcall(vana.soulspire.diagnostics)
+            if ok_d and type(diag) == 'table' then
+                local inst = tonumber(diag.hooks_installed) or 0
+                local tot  = tonumber(diag.hooks_total) or 0
+                if inst > 0 then
+                    return true, string.format('VanaCore-native Soulspire engine active (hooks=%d/%d)', inst, tot)
+                end
+                return false, string.format('VanaCore-native Soulspire engine initializing (hooks=%d/%d)', inst, tot)
+            end
+        end
+    end
+
     if NativeBridge and type(NativeBridge.main_menu_status) == 'function' then
         local st, err = NativeBridge.main_menu_status()
         if st then
@@ -124,6 +140,12 @@ function MenuBridge:consume_native_open_request()
     if type(self.open_consumer) == 'function' then
         local ok, count = pcall(self.open_consumer)
         return ok and (tonumber(count) or 0) or 0
+    end
+    if type(vana) == 'table' and type(vana.soulspire) == 'table' and type(vana.soulspire.consume_open_core) == 'function' then
+        local ok, count = pcall(vana.soulspire.consume_open_core)
+        if ok and (tonumber(count) or 0) > 0 then
+            return tonumber(count)
+        end
     end
     if NativeBridge and type(NativeBridge.consume_core_open_request) == 'function' then
         return NativeBridge.consume_core_open_request()
