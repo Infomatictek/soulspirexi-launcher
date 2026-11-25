@@ -12,7 +12,10 @@ import importlib.util
 import json
 import re
 import shutil
+import subprocess
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 TEXT_LF_SUFFIXES = {
@@ -30,6 +33,43 @@ def parse_testing_semver(version: str) -> tuple[int, int, int, int] | None:
     return tuple(int(part) for part in m.groups())
 
 
+def _fetch_remote_canonical_manifest_version(repo_root: Path, stable_manifest: dict) -> str | None:
+    """Fetch the current remote canonical Testing manifestVersion from main (HTTP raw or git origin/main)."""
+    repo_cfg = stable_manifest.get("repo") or {}
+    owner = str(repo_cfg.get("owner") or "Infomatictek").strip()
+    name = str(repo_cfg.get("name") or "soulspirexi-launcher").strip()
+    url = f"https://raw.githubusercontent.com/{owner}/{name}/main/channels/testing/manifest.json"
+    try:
+        req = urllib.request.Request(url, headers={"Cache-Control": "no-cache", "User-Agent": "SoulspireReleaseGov/1.0"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            if isinstance(data, dict):
+                ver = str(data.get("manifestVersion") or "").strip()
+                if ver:
+                    return ver
+    except Exception:
+        pass
+
+    # Fallback to local git tracking ref origin/main when offline
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(repo_root), "show", "origin/main:channels/testing/manifest.json"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            data = json.loads(proc.stdout)
+            if isinstance(data, dict):
+                ver = str(data.get("manifestVersion") or "").strip()
+                if ver:
+                    return ver
+    except Exception:
+        pass
+    return None
+
+
 def validate_canonical_testing_governance(
     repo_root: Path,
     testing_dir: Path,
@@ -38,12 +78,16 @@ def validate_canonical_testing_governance(
     repo_branch: str | None,
     allow_non_main_branch: bool = False,
     allow_same_version: bool = False,
+    remote_manifest_version: str | None = None,
+    check_remote: bool = True,
 ) -> None:
     """Enforce single authoritative Testing manifest governance:
     - Canonical Testing must target `main` (prevents feature-branch manifest collisions).
-    - Canonical Testing manifest versions must be strictly monotonically increasing SemVer.
+    - Canonical Testing manifest versions must be strictly monotonically increasing SemVer
+      against BOTH local AND remote canonical `main` manifests.
     - No stale addon override for the render probe may exist under channels/testing/payload/addons/.
     - Canonical probe Lua (when present) must include mandatory provenance fields.
+    - Registry hash compatibility (when registry_sync.json is present) must match manifest.json.
     """
     effective_branch = (repo_branch or "main").strip()
     if not allow_non_main_branch and effective_branch != "main":
@@ -59,6 +103,7 @@ def validate_canonical_testing_governance(
             "'MAJOR.MINOR.PATCH-testing.N' (e.g. '2.2.2-testing.2')."
         )
 
+    versions_to_check: list[tuple[str, str]] = []
     existing_manifest_path = testing_dir / "manifest.json"
     if existing_manifest_path.is_file():
         try:
@@ -67,19 +112,46 @@ def validate_canonical_testing_governance(
             existing_data = None
         if isinstance(existing_data, dict):
             existing_ver_str = str(existing_data.get("manifestVersion") or "").strip()
-            existing_ver = parse_testing_semver(existing_ver_str)
-            if existing_ver is not None:
-                if allow_same_version:
-                    if new_ver < existing_ver:
-                        raise ValueError(
-                            f"Refusing non-monotonic Testing manifest version {manifest_version!r} "
-                            f"< existing {existing_ver_str!r}."
-                        )
-                elif new_ver <= existing_ver:
+            if existing_ver_str:
+                versions_to_check.append(("local", existing_ver_str))
+
+    if remote_manifest_version:
+        versions_to_check.append(("remote", remote_manifest_version.strip()))
+    elif check_remote and (repo_root / ".git").exists():
+        stable_path = repo_root / "manifest.json"
+        stable_data = json.loads(stable_path.read_text(encoding="utf-8")) if stable_path.is_file() else {}
+        fetched_remote = _fetch_remote_canonical_manifest_version(repo_root, stable_data)
+        if fetched_remote:
+            versions_to_check.append(("remote", fetched_remote))
+
+    for source_label, existing_ver_str in versions_to_check:
+        existing_ver = parse_testing_semver(existing_ver_str)
+        if existing_ver is not None:
+            if allow_same_version:
+                if new_ver < existing_ver:
                     raise ValueError(
                         f"Refusing non-monotonic Testing manifest version {manifest_version!r} "
-                        f"<= existing {existing_ver_str!r}. Increment the testing revision."
+                        f"< {source_label} {existing_ver_str!r}."
                     )
+            elif new_ver <= existing_ver:
+                raise ValueError(
+                    f"Refusing non-monotonic Testing manifest version {manifest_version!r} "
+                    f"<= {source_label} {existing_ver_str!r}. Increment the testing revision."
+                )
+
+    # Verify registry compatibility when registry_sync.json is present
+    reg_sync_path = repo_root / "registry_sync.json"
+    stable_path = repo_root / "manifest.json"
+    if reg_sync_path.is_file() and stable_path.is_file():
+        reg_sync = json.loads(reg_sync_path.read_text(encoding="utf-8"))
+        stable_data = json.loads(stable_path.read_text(encoding="utf-8"))
+        sync_hash = str(reg_sync.get("registryHash") or "").strip()
+        manifest_reg_hash = str((stable_data.get("registry") or {}).get("hash") or "").strip()
+        if sync_hash and manifest_reg_hash and sync_hash != manifest_reg_hash:
+            raise ValueError(
+                f"Registry hash mismatch before Testing publication: "
+                f"registry_sync.json ({sync_hash}) != manifest.json ({manifest_reg_hash})."
+            )
 
     stale_probe_override = (
         testing_dir

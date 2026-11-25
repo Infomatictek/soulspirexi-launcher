@@ -458,6 +458,17 @@ class TestingChannelPublishTests(unittest.TestCase):
             self.assertEqual(data["manifestVersion"], "2.2.2-testing.2")
             self.assertEqual(data["repo"]["branch"], "main")
 
+            # Remote canonical manifest ahead of local branch MUST reject non-monotonic publish
+            with self.assertRaisesRegex(ValueError, "non-monotonic.*remote"):
+                publish_testing.validate_canonical_testing_governance(
+                    tmp_repo,
+                    tmp_repo / "channels" / "testing",
+                    manifest_version="2.2.2-testing.3",
+                    repo_branch="main",
+                    remote_manifest_version="2.2.2-testing.5",
+                    check_remote=False,
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

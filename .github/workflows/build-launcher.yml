@@ -547,6 +547,9 @@ jobs:
 
   publish-release:
     needs: [verify-manifest, build-and-test, build-soulspire-native]
+    concurrency:
+      group: canonical-release-publish
+      cancel-in-progress: false
     if: >-
       always() &&
       needs.verify-manifest.result == 'success' &&
