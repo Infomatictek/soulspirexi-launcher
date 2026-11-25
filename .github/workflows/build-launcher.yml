@@ -549,6 +549,83 @@ jobs:
           git commit -m "chore(soulspire-native): sync CI-verified 32-hook soulspire_native.dll"
           git push origin "HEAD:${{ github.ref_name }}"
 
+  sync-testing-native-binary:
+    needs: [verify-manifest, build-and-test, build-soulspire-native]
+    if: github.ref == 'refs/heads/feat/client-modern-001-vanacore-compat' && !startsWith(github.event.head_commit.message, 'chore(soulspire-native):')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Download verified Windows x86 soulspire-native-win-x86 artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: soulspire-native-win-x86
+          path: ci-native
+
+      - name: Sync Testing-only soulspire_native.dll and channels/testing/manifest.json (preserves Stable)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp ci-native/plugins/ashita4/soulspire_native.dll channels/testing/payload/plugins/ashita4/soulspire_native.dll
+          python scripts/verify-soulspire-native-dll.py \
+            channels/testing/payload/plugins/ashita4/soulspire_native.dll \
+            --build-info ci-native/soulspire_native-build-info.txt
+
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          dll = Path("channels/testing/payload/plugins/ashita4/soulspire_native.dll")
+          data = dll.read_bytes()
+          sha = hashlib.sha256(data).hexdigest()
+          size = len(data)
+          mf_path = Path("channels/testing/manifest.json")
+          mf = json.loads(mf_path.read_text(encoding="utf-8"))
+          mf["manifestVersion"] = "2.2.3-testing.7"
+          if isinstance(mf.get("serverCompatibility"), dict):
+              mf["serverCompatibility"]["notes"] = (
+                  "Unified canonical Testing payload (2.2.3-testing.7): Phase 2B VanaCore callee-detour support "
+                  "(0x1CAD80/0x121110/0x120FF0) + soulspire_native.log, Soulforge sibling module sync "
+                  "(soulspire_talents), live Soul HUD (soulspire_soulhud), kazenoeye + [OXMOB]| chat leak suppression."
+              )
+          updated = 0
+          for entry in mf.get("files", []):
+              if entry.get("sourcePath") == "channels/testing/payload/plugins/ashita4/soulspire_native.dll":
+                  entry["sha256"] = sha
+                  entry["size"] = size
+                  updated += 1
+          assert updated == 1, f"Expected 1 testing soulspire_native.dll entry, updated {updated}"
+          mf_path.write_text(json.dumps(mf, indent=2) + "\n", encoding="utf-8")
+          print(f"Synced Testing soulspire_native.dll: sha256={sha} size={size}")
+          PY
+
+          python scripts/verify-launcher-manifest.py --manifest channels/testing/manifest.json
+          python scripts/verify-launcher-manifest.py --manifest manifest.json
+
+      - name: Commit and push synced Testing-only soulspire_native.dll
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add channels/testing/payload/plugins/ashita4/soulspire_native.dll channels/testing/manifest.json
+          if git diff --cached --quiet; then
+            echo "No Testing native DLL changes to commit."
+            exit 0
+          fi
+          git commit -m "chore(soulspire-native): sync Testing-only 32-hook soulspire_native.dll for v2.2.3-testing.7"
+          git push origin "HEAD:${{ github.ref_name }}"
+
   publish-release:
     needs: [verify-manifest, build-and-test, build-soulspire-native]
     concurrency:
