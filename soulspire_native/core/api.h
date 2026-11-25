@@ -15,7 +15,7 @@ extern "C" {
 enum {
     SOULSPIRE_NATIVE_ABI_VERSION       = 2,
     SOULSPIRE_NATIVE_LEGACY_ABI_VER    = 1,
-    SOULSPIRE_NATIVE_EXPECTED_HOOKS    = 31
+    SOULSPIRE_NATIVE_EXPECTED_HOOKS    = 32
 };
 
 /* Initialization / lifecycle result codes:
@@ -60,7 +60,8 @@ enum {
     SOULSPIRE_NATIVE_CAP_SOUL_SUB_WEAPON     = 1u << 13,
     SOULSPIRE_NATIVE_CAP_SOUL_SUB_2H         = 1u << 14,
     SOULSPIRE_NATIVE_CAP_DAT_VIRTUALIZATION  = 1u << 15,
-    SOULSPIRE_NATIVE_CAP_COMMANDS_MENU_ENTRY = 1u << 16
+    SOULSPIRE_NATIVE_CAP_COMMANDS_MENU_ENTRY = 1u << 16,
+    SOULSPIRE_NATIVE_CAP_WEAPON_MODEL_RESOLVE = 1u << 17
 };
 
 /* Weapon template modes. */
@@ -181,6 +182,8 @@ typedef struct SoulspireNativeWeaponStatus {
 uint32_t SOULSPIRE_NATIVE_CALL SoulspireNativeReplaceWeaponRules(const SoulspireNativeWeaponRule* entries, uint32_t count);
 uint32_t SOULSPIRE_NATIVE_CALL SoulspireNativeClearWeaponRules(void);
 uint32_t SOULSPIRE_NATIVE_CALL SoulspireNativeGetWeaponStatus(SoulspireNativeWeaponStatus* status, uint32_t size);
+uint32_t SOULSPIRE_NATIVE_CALL SoulspireNativeSetLocalEquippedWeapons(uint32_t main_item_id, uint32_t main_skill, uint32_t sub_item_id, uint32_t sub_skill);
+uint32_t SOULSPIRE_NATIVE_CALL SoulspireNativeUpsertPeerSoul(uint32_t actor_id, uint32_t job, uint32_t branch, uint32_t effective_level);
 
 /* Per-hook initialization & live integrity diagnostics. */
 enum {

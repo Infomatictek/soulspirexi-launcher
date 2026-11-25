@@ -333,6 +333,29 @@ ashita.events.register('dinput_button', 'soulspire_core_dinput_button', function
     end
 end)
 
+-- Sync local Main/Sub equipped item IDs & skills to soulspire_native.dll (Hook #32).
+local function sync_local_equipped_weapons_to_native()
+    if not (AshitaCore and AshitaCore.GetMemoryManager and AshitaCore.GetResourceManager) then return end
+    local mm = AshitaCore:GetMemoryManager()
+    local inv = mm and mm:GetInventory()
+    local res = AshitaCore:GetResourceManager()
+    if not inv or not res then return end
+    local function read_slot(slot_idx)
+        local ok_eq, eq = pcall(inv.GetEquippedItem, inv, slot_idx)
+        if not ok_eq or not eq or not eq.Index or eq.Index == 0 then return 0, 0 end
+        local cont = math.floor(eq.Index / 256)
+        local iidx = eq.Index % 256
+        if iidx == 0 then return 0, 0 end
+        local ok_ci, ci = pcall(inv.GetContainerItem, inv, cont, iidx)
+        if not ok_ci or not ci or not ci.Id or ci.Id == 0 then return 0, 0 end
+        local ok_ri, ri = pcall(res.GetItemById, res, ci.Id)
+        return tonumber(ci.Id) or 0, (ok_ri and ri and tonumber(ri.Skill)) or 0
+    end
+    local main_id, main_sk = read_slot(0)
+    local sub_id, sub_sk = read_slot(1)
+    NativeBridge.set_local_equipped_weapons(main_id, main_sk, sub_id, sub_sk)
+end
+
 -- Cleanly blur/close on zone transitions and track authoritative OXSI peer Souls.
 ashita.events.register('packet_in', 'soulspire_core_packet_in', function(e)
     if type(e) ~= 'table' then return end
@@ -340,20 +363,29 @@ ashita.events.register('packet_in', 'soulspire_core_packet_in', function(e)
         safe_call('focus.blur_all', function() focus:blur_all('zone_change') end)
         safe_call('input.reset', function() input:reset() end)
         safe_call('weapon_pres.reset_peers', function() weapon_pres:reset_peers() end)
+        if e.id == 0x00A then
+            safe_call('native.sync_equipped', sync_local_equipped_weapons_to_native)
+        end
     elseif e.id == 0x1FC then
         local now_sec = now_seconds()
         safe_call('weapon_pres.observe_oxsi_packet', function()
-            weapon_pres:observe_oxsi_packet(e.data_modified or e.data, now_sec)
-        end)
-    elseif e.id == 0x050 and weapon_pres:is_diagnostics_enabled() then
-        local now_sec = now_seconds()
-        safe_call('weapon_equip_diag.packet_in', function()
-            local rec = WeaponEquipDiag.observe_equip_packet('in', e.data_modified or e.data, now_sec)
-            if rec then
-                log(('[weapondiag] S2C 0x050 equip_slot=%d inv_idx=%d container=%d'):format(
-                    rec.equipSlot, rec.invIndex, rec.container))
+            local peer = weapon_pres:observe_oxsi_packet(e.data_modified or e.data, now_sec)
+            if type(peer) == 'table' and tonumber(peer.actor_id) then
+                NativeBridge.upsert_peer_soul(peer.actor_id, peer.job or 0, peer.branch or 0, peer.effective_level or 0)
             end
         end)
+    elseif e.id == 0x050 then
+        safe_call('native.sync_equipped', sync_local_equipped_weapons_to_native)
+        if weapon_pres:is_diagnostics_enabled() then
+            local now_sec = now_seconds()
+            safe_call('weapon_equip_diag.packet_in', function()
+                local rec = WeaponEquipDiag.observe_equip_packet('in', e.data_modified or e.data, now_sec)
+                if rec then
+                    log(('[weapondiag] S2C 0x050 equip_slot=%d inv_idx=%d container=%d'):format(
+                        rec.equipSlot, rec.invIndex, rec.container))
+                end
+            end)
+        end
     end
 end)
 

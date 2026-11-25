@@ -18,6 +18,8 @@ EXPORTS
     SoulspireNativeReplaceWeaponRules=_SoulspireNativeReplaceWeaponRules@8
     SoulspireNativeClearWeaponRules=_SoulspireNativeClearWeaponRules@0
     SoulspireNativeGetWeaponStatus=_SoulspireNativeGetWeaponStatus@8
+    SoulspireNativeSetLocalEquippedWeapons=_SoulspireNativeSetLocalEquippedWeapons@16
+    SoulspireNativeUpsertPeerSoul=_SoulspireNativeUpsertPeerSoul@16
     SoulspireNativeGetHookDiagnostics=_SoulspireNativeGetHookDiagnostics@8
     SoulspireNativeGetIdentityDiagnostics=_SoulspireNativeGetIdentityDiagnostics@8
     SoulspireNativeGetInterfaceInfo=_SoulspireNativeGetInterfaceInfo@8

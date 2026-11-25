@@ -136,6 +136,12 @@ static uintptr_t soul_sub_menu_allow_resume = 0;
 static uintptr_t soul_sub_menu_skip_resume = 0;
 static uintptr_t soul_sub_2h_main_allow_resume = 0;
 static uintptr_t soul_sub_2h_main_deny_resume = 0;
+static uintptr_t soul_pc_sub_model_resume = 0;
+static std::atomic<uint32_t> pc_sub_model_remap_hits{0};
+static std::atomic<uint32_t> local_equip_main_item_id{0};
+static std::atomic<uint32_t> local_equip_main_skill{0};
+static std::atomic<uint32_t> local_equip_sub_item_id{0};
+static std::atomic<uint32_t> local_equip_sub_skill{0};
 
 static void** pname_sheet_slot = nullptr;
 static void** item_res_mgr_slot = nullptr;
@@ -1015,11 +1021,122 @@ static uint8_t __stdcall soul_allows_2h_main_with_sub(const uint8_t* main_res, c
     ReleaseSRWLockShared(&weapon_lock);
 
     if (allowed) {
+        local_equip_main_item_id.store(main_item_id, std::memory_order_relaxed);
+        local_equip_main_skill.store(main_skill, std::memory_order_relaxed);
+        local_equip_sub_item_id.store(sub_item_id, std::memory_order_relaxed);
+        local_equip_sub_skill.store(sub_skill, std::memory_order_relaxed);
         ++weapon_allow_hits;
         return 1;
     }
     ++weapon_deny_hits;
     return 0;
+}
+
+// Hook #32 (RVA 0xD3C45 in CXiSkeletonActor::LoadPcEquipmentModels):
+// Resolves authorized custom Sub-slot weapon models (slot 7) from the original
+// Main-slot FTABLE namespace (slot 6) at runtime while keeping slot 7 as the
+// attachment slot so FFXI reuses its native dual-wield Sub-weapon pipeline.
+static bool safe_read_actor_server_id(const uint8_t* actor, uint32_t& out_actor_id) noexcept {
+    out_actor_id = 0;
+    if (actor == nullptr) return false;
+#ifdef _MSC_VER
+    __try {
+        const uint8_t* ent = nullptr;
+        std::memcpy(&ent, actor + 0x70, sizeof(ent));
+        if (ent == nullptr) return false;
+        std::memcpy(&out_actor_id, ent + 0x78, sizeof(out_actor_id));
+        return out_actor_id != 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        out_actor_id = 0;
+        return false;
+    }
+#else
+    if (!readable_range(actor + 0x70, sizeof(const uint8_t*))) return false;
+    const uint8_t* ent = nullptr;
+    std::memcpy(&ent, actor + 0x70, sizeof(ent));
+    if (ent == nullptr || !readable_range(ent + 0x78, sizeof(uint32_t))) return false;
+    std::memcpy(&out_actor_id, ent + 0x78, sizeof(out_actor_id));
+    return out_actor_id != 0;
+#endif
+}
+
+static uint32_t __stdcall soul_resolve_pc_sub_model_table_slot(const uint8_t* actor, uint32_t look_word) noexcept {
+    if (!module_enabled(SOULSPIRE_NATIVE_MOD_RENDERING)) return 7u;
+#if !defined(SOULSPIRE_NATIVE_SELFTEST) && !defined(CRYSTALJOBS_SELFTEST)
+    if (!enabled.load(std::memory_order_acquire)) return 7u;
+#endif
+    const uint16_t sub_model_id = static_cast<uint16_t>(look_word & 0x0FFFu);
+    if (sub_model_id == 0 || is_vanilla_shield_model_id(sub_model_id)) {
+        return 7u;
+    }
+
+    uint32_t actor_id = 0;
+    if (!safe_read_actor_server_id(actor, actor_id)) {
+        return 7u;
+    }
+
+    AcquireSRWLockShared(&state_lock);
+    const uint32_t local_char_id = (transport.character != 0) ? transport.character : soul_override.character;
+    ReleaseSRWLockShared(&state_lock);
+
+    const bool is_local = (local_char_id != 0 && actor_id == local_char_id);
+    uint8_t job = 0, branch = 0;
+    bool soul_known = false;
+    uint8_t effective_level = 0;
+    bool has_equipped_skills = false;
+    uint16_t main_item_id = 0, main_skill = 0, sub_item_id = 0, sub_skill = 0;
+
+    if (is_local) {
+        soul_known = active_action_soul(job, branch);
+        effective_level = (main_lvl_slot != nullptr) ? *main_lvl_slot : 0u;
+        main_item_id = static_cast<uint16_t>(local_equip_main_item_id.load(std::memory_order_relaxed));
+        main_skill   = static_cast<uint16_t>(local_equip_main_skill.load(std::memory_order_relaxed));
+        sub_item_id  = static_cast<uint16_t>(local_equip_sub_item_id.load(std::memory_order_relaxed));
+        sub_skill    = static_cast<uint16_t>(local_equip_sub_skill.load(std::memory_order_relaxed));
+        if (main_skill == 0 || sub_skill == 0) {
+            return 7u;
+        }
+        has_equipped_skills = true;
+    } else if (sub_model_id == 84u) {
+        return 7u;
+    }
+
+    const uint32_t now_ms = static_cast<uint32_t>(GetTickCount());
+    AcquireSRWLockShared(&weapon_lock);
+    const bool remap = weapon_presentation_mgr.authorizes_sub_main_namespace(
+        actor_id, is_local, soul_known, job, branch, effective_level, sub_model_id, now_ms,
+        has_equipped_skills, main_skill, main_item_id, sub_skill, sub_item_id);
+    ReleaseSRWLockShared(&weapon_lock);
+
+    if (remap) {
+        pc_sub_model_remap_hits.fetch_add(1u, std::memory_order_relaxed);
+        return 6u;
+    }
+    return 7u;
+}
+
+static __declspec(naked) void soul_pc_sub_model_resolve_hook() {
+    __asm {
+        cmp ebp, 7
+        jne stock
+        pushfd
+        push eax
+        push edx
+        push ebx
+        push edi
+        call soul_resolve_pc_sub_model_table_slot
+        mov ecx, eax
+        pop edx
+        pop eax
+        popfd
+        lea ecx, [ecx + ecx*2]
+        shl ecx, 4
+        jmp dword ptr [soul_pc_sub_model_resume]
+    stock:
+        lea ecx, [ebp + ebp*2]
+        shl ecx, 4
+        jmp dword ptr [soul_pc_sub_model_resume]
+    }
 }
 
 static __declspec(naked) void soul_sub_2h_main_hook() {
@@ -1813,12 +1930,13 @@ static PrologueDetour soul_sub_weapon_detour{0x133D56, reinterpret_cast<void*>(&
 static PrologueDetour soul_sub_menu_filter_detour{0x21DF85, reinterpret_cast<void*>(&soul_sub_menu_filter_hook), 0x85u}; // Bit 28 (#26)
 static PrologueDetour soul_sub_2h_main_detour{0x133DD3, reinterpret_cast<void*>(&soul_sub_2h_main_hook), 0x68u};      // Bit 29 (#27)
 static PrologueDetour menuwind_key_item_detour{0x141800, reinterpret_cast<void*>(&menuwind_key_item_hook), 0x0Fu};    // Bit 30 (#31 / CMenuWind::OnKeyItem)
+static PrologueDetour soul_pc_sub_model_detour{0x0D3C45, reinterpret_cast<void*>(&soul_pc_sub_model_resolve_hook), 0x8Du}; // Bit 31 (#32 / PC Sub->Main FTABLE namespace)
 
 static constexpr uint32_t kPatchCount = static_cast<uint32_t>(sizeof(patches) / sizeof(*patches));
-static constexpr uint32_t kDetourCount = 6u;
+static constexpr uint32_t kDetourCount = 7u;
 static constexpr uint32_t kExpectedHooks = kPatchCount + kDetourCount;
 static_assert(kPatchCount == 25u);
-static_assert(kExpectedHooks == 31u);
+static_assert(kExpectedHooks == 32u);
 static_assert(kExpectedHooks == SOULSPIRE_NATIVE_EXPECTED_HOOKS);
 
 static PrologueDetour* detour_at(uint32_t idx) noexcept {
@@ -1829,6 +1947,7 @@ static PrologueDetour* detour_at(uint32_t idx) noexcept {
         case 3: return &soul_sub_menu_filter_detour;
         case 4: return &soul_sub_2h_main_detour;
         case 5: return &menuwind_key_item_detour;
+        case 6: return &soul_pc_sub_model_detour;
         default: return nullptr;
     }
 }
@@ -2017,6 +2136,10 @@ static void collect_hook_state(uint32_t& total, uint32_t& installed_mask, uint32
             ((installed_mask & (1u << (kPatchCount + 5u))) != 0)) {
             caps |= SOULSPIRE_NATIVE_CAP_COMMANDS_MENU_ENTRY;
         }
+        if (module_enabled(SOULSPIRE_NATIVE_MOD_RENDERING) &&
+            ((installed_mask & (1u << (kPatchCount + 6u))) != 0)) {
+            caps |= SOULSPIRE_NATIVE_CAP_WEAPON_MODEL_RESOLVE;
+        }
     }
 }
 
@@ -2191,6 +2314,7 @@ extern "C" uint32_t __stdcall SoulspireNativeInitialize() {
     // 0x133DCB (`je 0x133E05`) is the exact non-2H allow target in EquipMenu::TryEquipItem;
     // 0x133DEB sits inside the push 0x99 error-return tail (`xor al, al; ret 0x10`).
     soul_sub_2h_main_allow_resume = reinterpret_cast<uintptr_t>(base + 0x133E05);
+    soul_pc_sub_model_resume = reinterpret_cast<uintptr_t>(base + 0x0D3C4C);
 
     AcquireSRWLockExclusive(&weapon_lock);
     load_runtime_resources(pinned, action_row_max_chars, &weapon_rule_catalog, &weapon_presentation_mgr);
@@ -2502,6 +2626,33 @@ extern "C" uint32_t __stdcall SoulspireNativeGetWeaponStatus(SoulspireNativeWeap
     return 0;
 }
 
+extern "C" uint32_t __stdcall SoulspireNativeSetLocalEquippedWeapons(
+    uint32_t main_item_id, uint32_t main_skill, uint32_t sub_item_id, uint32_t sub_skill) {
+    local_equip_main_item_id.store(main_item_id & 0xFFFFu, std::memory_order_relaxed);
+    local_equip_main_skill.store(main_skill & 0xFFFFu, std::memory_order_relaxed);
+    local_equip_sub_item_id.store(sub_item_id & 0xFFFFu, std::memory_order_relaxed);
+    local_equip_sub_skill.store(sub_skill & 0xFFFFu, std::memory_order_relaxed);
+    return 0;
+}
+
+extern "C" uint32_t __stdcall SoulspireNativeUpsertPeerSoul(
+    uint32_t actor_id, uint32_t job, uint32_t branch, uint32_t effective_level) {
+    if (actor_id == 0) return 1;
+    const uint32_t now_ms = static_cast<uint32_t>(GetTickCount());
+    AcquireSRWLockExclusive(&weapon_lock);
+    bool ok = false;
+    if (job == 0 || branch == 0) {
+        weapon_presentation_mgr.peers().revoke(actor_id);
+        ok = true;
+    } else {
+        ok = weapon_presentation_mgr.peers().upsert(
+            actor_id, static_cast<uint8_t>(job), static_cast<uint8_t>(branch),
+            static_cast<uint8_t>(effective_level), now_ms);
+    }
+    ReleaseSRWLockExclusive(&weapon_lock);
+    return ok ? 0u : 1u;
+}
+
 extern "C" uint32_t __stdcall SoulspireNativeGetHookDiagnostics(SoulspireNativeHookDiagnostics* output, uint32_t size) {
     if (output == nullptr || size < sizeof(*output)) return 1;
     SoulspireNativeHookDiagnostics d{};
@@ -2563,7 +2714,8 @@ extern "C" uint32_t __stdcall SoulspireNativeGetInterfaceInfo(SoulspireNativeInt
     if ((info.capabilities & (SOULSPIRE_NATIVE_CAP_SOUL_SUB_WEAPON | SOULSPIRE_NATIVE_CAP_SOUL_SUB_2H)) != 0) {
         active_mask |= (1u << SOULSPIRE_NATIVE_MOD_EQUIPMENT);
     }
-    if (module_enabled(SOULSPIRE_NATIVE_MOD_RENDERING) && (info.capabilities & SOULSPIRE_NATIVE_CAP_SEARCH_SOUL_LABELS) != 0) {
+    if (module_enabled(SOULSPIRE_NATIVE_MOD_RENDERING) &&
+        (info.capabilities & (SOULSPIRE_NATIVE_CAP_SEARCH_SOUL_LABELS | SOULSPIRE_NATIVE_CAP_WEAPON_MODEL_RESOLVE)) != 0) {
         active_mask |= (1u << SOULSPIRE_NATIVE_MOD_RENDERING);
     }
     if ((info.capabilities & SOULSPIRE_NATIVE_CAP_DAT_VIRTUALIZATION) != 0) {

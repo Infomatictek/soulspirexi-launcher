@@ -1868,12 +1868,12 @@ int main() {
     assert(soul_sub_weapon_detour.install(memory));
     assert(memory[0x105] == 0xAA && memory[0x106] == 0xBB && memory[0x107] == 0xCC);
 
-    // Per-hook diagnostics bit position check for all 31 hooks (soul_sub_weapon_detour = kPatchCount + 2 = bit 27).
+    // Per-hook diagnostics bit position check for all 32 hooks (soul_sub_weapon_detour = kPatchCount + 2 = bit 27).
     hook_diag = {};
     hook_diag.init_stage = SOULSPIRE_NATIVE_INIT_OK;
     SoulspireNativeHookDiagnostics diag{};
     assert(SoulspireNativeGetHookDiagnostics(&diag, sizeof(diag)) == 0);
-    assert(diag.total_hooks == 1 && diag.expected_hooks == 31);
+    assert(diag.total_hooks == 1 && diag.expected_hooks == 32);
     assert((diag.installed_mask & (1u << (kPatchCount + 2u))) != 0);
     memory[0x100] = 0x90; // Simulate external overwrite.
     assert(SoulspireNativeGetHookDiagnostics(&diag, sizeof(diag)) == 0);
@@ -1922,7 +1922,8 @@ int main() {
         "SoulspireNativeSetActiveSoul", "SoulspireNativeClearActiveSoul", "SoulspireNativeGetActionStatus",
         "SoulspireNativeSetActionRowLimit", "SoulspireNativeReplaceVisibility", "SoulspireNativeClearVisibility",
         "SoulspireNativeGetVisibilityStatus", "SoulspireNativeReplaceWeaponRules", "SoulspireNativeClearWeaponRules",
-        "SoulspireNativeGetWeaponStatus", "SoulspireNativeGetHookDiagnostics", "SoulspireNativeGetIdentityDiagnostics",
+        "SoulspireNativeGetWeaponStatus", "SoulspireNativeSetLocalEquippedWeapons", "SoulspireNativeUpsertPeerSoul",
+        "SoulspireNativeGetHookDiagnostics", "SoulspireNativeGetIdentityDiagnostics",
         "SoulspireNativeGetInterfaceInfo", "SoulspireNativeGetMainMenuStatus", "SoulspireNativeConsumeCoreOpenRequest",
         "CrystalJobsInitialize", "CrystalJobsShutdown", "CrystalJobsGetStatus", "CrystalJobsSetState",
         "CrystalJobsReplaceCatalog", "CrystalJobsUpsertAction", "CrystalJobsClearCatalog",
@@ -1936,12 +1937,73 @@ int main() {
         assert(GetProcAddress(dll, name) != nullptr);
     }
 
+    // Hook #32 (RVA 0xD3C45): Registry-driven Sub-slot -> Main-slot FTABLE namespace resolver unit tests.
+    {
+        uint8_t fake_ent[0x100]{};
+        uint8_t fake_actor[0x100]{};
+        const uint32_t local_id = 0x01020304u;
+        const uint32_t peer_id  = 0x05060708u;
+        const uint8_t* ent_ptr = fake_ent;
+        std::memcpy(fake_actor + 0x70, &ent_ptr, sizeof(ent_ptr));
+        std::memcpy(fake_ent + 0x78, &local_id, sizeof(local_id));
+
+        uint8_t fake_lvl = 20;
+        uint8_t fake_job = 1;
+        main_lvl_slot = &fake_lvl;
+        main_job_slot = &fake_job;
+        SoulspireNativeSetActiveSoul(1, 2, local_id);
+
+        PresentationProfileRecord prof{};
+        std::snprintf(prof.id, sizeof(prof.id), "dual_2h_crossed_back_x");
+        prof.kind = PresentationProfileKind::Dual2HAttachments;
+        prof.has_races = true;
+        SoulWeaponBinding bind{};
+        std::snprintf(bind.soul_id, sizeof(bind.soul_id), "war_dps");
+        bind.job = 1; bind.branch = 2; bind.min_effective_level = 10;
+        bind.mode = SOULSPIRE_NATIVE_WEAPON_MODE_DUAL_2H;
+        bind.main_skill_mask = (1u << 6);
+        bind.sub_skill_mask  = (1u << 6);
+        bind.presentation_profile_index = 0;
+
+        AcquireSRWLockExclusive(&weapon_lock);
+        assert(weapon_presentation_mgr.replace_config({bind}, {prof}, "testreg", "testwep"));
+        weapon_presentation_mgr.peers().clear();
+        ReleaseSRWLockExclusive(&weapon_lock);
+
+        // Local WAR Berserker with Great Axe (skill 6) + Butterfly Axe (skill 6, model 94=0x5E) -> slot 6 (Main namespace).
+        assert(SoulspireNativeSetLocalEquippedWeapons(16705, 6, 16704, 6) == 0);
+        assert(soul_resolve_pc_sub_model_table_slot(fake_actor, 0x705Eu) == 6u);
+        // Vanilla shield model (0x0010) must ALWAYS remain slot 7.
+        assert(soul_resolve_pc_sub_model_table_slot(fake_actor, 0x7010u) == 7u);
+        // Local WAR Berserker dual-wielding 1H Axes (skill 5) must remain slot 7 (vanilla DW preserved).
+        assert(SoulspireNativeSetLocalEquippedWeapons(16640, 5, 16649, 5) == 0);
+        assert(soul_resolve_pc_sub_model_table_slot(fake_actor, 0x705Au) == 7u);
+        // Local WAR Commander (job 1, branch 1) must fail closed -> slot 7.
+        SoulspireNativeSetActiveSoul(1, 1, local_id);
+        assert(SoulspireNativeSetLocalEquippedWeapons(16705, 6, 16704, 6) == 0);
+        assert(soul_resolve_pc_sub_model_table_slot(fake_actor, 0x705Eu) == 7u);
+
+        // Remote peer: unknown Soul fails closed -> slot 7; confirmed OXSI war_dps peer -> slot 6; fallback model 84 -> slot 7.
+        std::memcpy(fake_ent + 0x78, &peer_id, sizeof(peer_id));
+        assert(soul_resolve_pc_sub_model_table_slot(fake_actor, 0x705Eu) == 7u);
+        assert(SoulspireNativeUpsertPeerSoul(peer_id, 1, 2, 20) == 0);
+        assert(soul_resolve_pc_sub_model_table_slot(fake_actor, 0x705Eu) == 6u);
+        assert(soul_resolve_pc_sub_model_table_slot(fake_actor, 0x7054u) == 7u); // 84 = compact_dual_axe fallback
+        assert(SoulspireNativeUpsertPeerSoul(peer_id, 0, 0, 0) == 0);
+        assert(soul_resolve_pc_sub_model_table_slot(fake_actor, 0x705Eu) == 7u);
+
+        SoulspireNativeClearActiveSoul();
+        SoulspireNativeSetLocalEquippedWeapons(0, 0, 0, 0);
+        main_lvl_slot = nullptr;
+        main_job_slot = nullptr;
+    }
+
     const auto get_iface_info = reinterpret_cast<uint32_t(__stdcall*)(SoulspireNativeInterfaceInfo*, uint32_t)>(
         GetProcAddress(dll, "SoulspireNativeGetInterfaceInfo"));
     SoulspireNativeInterfaceInfo info{};
     assert(get_iface_info(&info, sizeof(info)) == 0);
     assert(info.size == sizeof(info) && info.abi_version == SOULSPIRE_NATIVE_ABI_VERSION);
-    assert(info.expected_hooks == 31 && std::strcmp(info.project_name, "Soulspire Native") == 0);
+    assert(info.expected_hooks == 32 && std::strcmp(info.project_name, "Soulspire Native") == 0);
 
     const auto get_main_menu = reinterpret_cast<uint32_t(__stdcall*)(SoulspireNativeMainMenuStatus*, uint32_t)>(
         GetProcAddress(dll, "SoulspireNativeGetMainMenuStatus"));
@@ -1949,18 +2011,18 @@ int main() {
         GetProcAddress(dll, "SoulspireNativeConsumeCoreOpenRequest"));
     SoulspireNativeMainMenuStatus dll_mm{};
     assert(get_main_menu(&dll_mm, sizeof(dll_mm)) == 0);
-    assert(dll_mm.size == sizeof(dll_mm) && dll_mm.expected_hooks == 31 && dll_mm.button_id == 16);
+    assert(dll_mm.size == sizeof(dll_mm) && dll_mm.expected_hooks == 32 && dll_mm.button_id == 16);
     assert(consume_open() == 0);
 
     const auto get_diag = reinterpret_cast<uint32_t(__stdcall*)(SoulspireNativeHookDiagnostics*, uint32_t)>(
         GetProcAddress(dll, "SoulspireNativeGetHookDiagnostics"));
     SoulspireNativeHookDiagnostics dll_diag{};
-    assert(get_diag(&dll_diag, sizeof(dll_diag)) == 0 && dll_diag.expected_hooks == 31);
+    assert(get_diag(&dll_diag, sizeof(dll_diag)) == 0 && dll_diag.expected_hooks == 32);
 
     const auto get_compat_diag = reinterpret_cast<uint32_t(__stdcall*)(CrystalJobsHookDiagnostics*, uint32_t)>(
         GetProcAddress(dll, "CrystalJobsGetHookDiagnostics"));
     CrystalJobsHookDiagnostics compat_diag{};
-    assert(get_compat_diag(&compat_diag, sizeof(compat_diag)) == 0 && compat_diag.expected_hooks == 31);
+    assert(get_compat_diag(&compat_diag, sizeof(compat_diag)) == 0 && compat_diag.expected_hooks == 32);
 
     const auto get_iface = reinterpret_cast<double(__stdcall*)()>(GetProcAddress(dll, "expGetInterfaceVersion"));
     const auto create_plugin = reinterpret_cast<void*(__stdcall*)(const char*)>(GetProcAddress(dll, "expCreatePlugin"));
@@ -1973,6 +2035,6 @@ int main() {
     destroy_plugin(plugin);
     FreeLibrary(dll);
 
-    std::printf("[Soulspire Native] selftest PASSED (all 31 hooks, native Commands menu, ABI v2, and CrystalJobs compat verified).\n");
+    std::printf("[Soulspire Native] selftest PASSED (all 32 hooks, PC Sub->Main model resolver, native Commands menu, ABI v2, and CrystalJobs compat verified).\n");
     return 0;
 }
