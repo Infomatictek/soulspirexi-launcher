@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.2.2-testing.2",
+  "manifestVersion": "2.2.3-testing.1",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
-    "version": "main (Stage 2A Perf + 32-Hook Berserker + Core UI)",
+    "version": "main (Stage 2A Perf + 32-Hook Dual-Host Native + Opt-In Modern VanaCore)",
     "branch": "main",
     "commit": "989ca6e",
     "dockerImage": "soulspirexi/server:main-ws3-weap-002-989ca6e",
     "crystalJobsHooks": 32,
-    "notes": "Unified canonical Testing payload: Stage 2A Performance Diagnostics, Testing QoL, Core UI & Soulforge, ECDSA self-updater, 32-hook Soulspire Native (Hook #32 + Commands Menu), centralized 66-Soul & weapon registry, Berserker dual Great Axe equipment/diagnostics, Flintlock, and v19 weapon render probe with mandatory provenance."
+    "notes": "Unified canonical Testing payload (2.2.3-testing.1): Stage 2A Perf, Testing QoL, Core UI & Soulforge, ECDSA self-updater, dual-host 32-hook Soulspire Native (Ashita + VanaCore), v19 weapon render probe, and opt-in experimental Modern (VanaCore Baseline & Soulspire Compatibility) client engine."
   },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
@@ -116,8 +116,8 @@
       "category": "plugin",
       "sourcePath": "channels/testing/payload/plugins/ashita4/soulspire_native.dll",
       "targetPath": "soulspire_native.dll",
-      "sha256": "2944449c8d868e3a7218df4c9a8471803a8262a66b4c82ab36394c9e7023b5bb",
-      "size": 226816
+      "sha256": "3916e33d1c92d09f217285a24ac938cb03950ff11b43678967daa2524a36f9a4",
+      "size": 227840
     },
     {
       "category": "addon",
@@ -10267,7 +10267,7 @@
     "hash": "cf86aa59ff8d16c6",
     "idLockStatus": "locked",
     "nativeDllCompiledHash": "cf86aa59ff8d16c6",
-    "nativeDllSha256": "2944449c8d868e3a7218df4c9a8471803a8262a66b4c82ab36394c9e7023b5bb",
+    "nativeDllSha256": "3916e33d1c92d09f217285a24ac938cb03950ff11b43678967daa2524a36f9a4",
     "nativeDllClientVerified": false,
     "nativeHooks": 32,
     "crystalJobsHooks": 32
@@ -10282,5 +10282,39 @@
     "manifestSha256": "1169eec7c6a68adc4c83da6d7fa6ff7e61873b3c8479211818ec0424660c25ea",
     "packageCount": 6
   },
-  "candidateId": "default-27hook"
+  "candidateId": "default-27hook",
+  "modernClient": {
+    "engine": "vanacore",
+    "version": "0.9.9-soulspire",
+    "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
+    "experimentalEligible": true,
+    "clientVerified": false,
+    "minimumAshitaInterface": "4.30",
+    "baseline": {
+      "profile": "baseline",
+      "version": "0.9.9",
+      "tag": "v0.9.9-soulspire-baseline.1",
+      "commitSha": "56ef560c02",
+      "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-baseline.1/soulspirexi-client-experimental-0.9.9-56ef560c02-win32.zip",
+      "packageSha256": "218a6b1f56fb72f266b1f0e0d6eefccc90ada563b2ca4bbcf18d702973570f83",
+      "packageSize": 98950990,
+      "experimentalEligible": true,
+      "clientVerified": false,
+      "notes": "Phase 1 minimal VanaCore Baseline: disables all Soulspire native hooks, addons, Pivot overlays, and experimental menu hooks for clean first-login certification against play.soulspirexi.com."
+    },
+    "compat": {
+      "profile": "compat",
+      "version": "0.9.9",
+      "tag": "v0.9.9-soulspire-compat.1",
+      "commitSha": "a506b8bd6f",
+      "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-compat.1/soulspirexi-client-experimental-0.9.9-a506b8bd6f-win32.zip",
+      "packageSha256": "0b1cb39239eacc7e3911d0dd07c2c94ee5032796a72d996fc7074841f1064835",
+      "packageSize": 98948388,
+      "experimentalEligible": true,
+      "clientVerified": false,
+      "notes": "Phase 2 Soulspire Compatibility build: FFXiMain 0x6AE818B4 & input sig scans, Ashita v4.30 default, dinput_state/xinput_state adapters, singlemenu guard, and progressive dual-host soulspire_native.dll + Soulspire Core + Pivot support."
+    }
+  }
 }
