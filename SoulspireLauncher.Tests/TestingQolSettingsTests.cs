@@ -206,6 +206,7 @@ public sealed class TestingQolSettingsTests
                 "# Player custom script",
                 "/load addons",
                 "/wait 3",
+                "/addon load fps",
                 "/bind F11 /ambient",
                 "/addon load custom_user_addon"), Encoding.UTF8);
 
