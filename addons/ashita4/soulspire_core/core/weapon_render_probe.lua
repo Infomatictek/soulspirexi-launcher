@@ -561,6 +561,77 @@ function M.scan_text_buffer(text_bytes, text_rva, pe_info, actor_summary, extra_
         }
     end
 
+    -- 2j. Full PC equipment model loader slice (0xD385C..0xD3EE8, Cases 0/1 of 0xD3774 switch).
+    do
+        local slice_start = 0xD385C
+        local slice_len   = 0x68C
+        local matches = {}
+        local callee_matches = {}
+        if slice_start >= text_rva and (slice_start + slice_len) <= text_end_rva then
+            local sbytes = {}
+            local s0 = (slice_start - text_rva) + 1
+            for p = s0, s0 + slice_len - 1 do
+                sbytes[#sbytes + 1] = text_bytes[p]
+            end
+            matches[#matches + 1] = {
+                rva              = string.format('0x%X', slice_start),
+                va_normalized    = string.format('0x%08X', M.NORMALIZED_IMAGE_BASE + slice_start),
+                window_start_rva = string.format('0x%X', slice_start),
+                window_len       = #sbytes,
+                code_hex         = bytes_to_hex(sbytes),
+            }
+            -- Follow direct E8 callees inside 0xD385C..0xD3EE8 to capture PC FTABLE DAT resolver in one pass.
+            local seen_callees = {}
+            for p = s0, s0 + slice_len - 5 do
+                if #callee_matches >= 20 then break end
+                if text_bytes[p] == 0xE8 then
+                    local rel = read_u32_le(text_bytes, p)
+                    if rel then
+                        if rel >= 0x80000000 then rel = rel - 0x100000000 end
+                        local call_rva = text_rva + (p - 1)
+                        local dst = call_rva + 5 + rel
+                        if dst >= text_rva and dst < text_end_rva and not seen_callees[dst] then
+                            seen_callees[dst] = true
+                            callee_matches[#callee_matches + 1] = capture_window(dst)
+                        end
+                    end
+                end
+            end
+        end
+        findings[#findings + 1] = {
+            id          = 'pc_equip_model_loader_slice',
+            description = 'Full .text slice for PC equipment model loader 0xD385C..0xD3EE8 (0xD3774 cases 0/1)',
+            match_count = #matches,
+            matches     = matches,
+        }
+        findings[#findings + 1] = {
+            id          = 'pc_equip_loader_callees',
+            description = 'Direct callee windows invoked by PC equipment model loader 0xD385C..0xD3EE8 (PC FTABLE lookup)',
+            match_count = #callee_matches,
+            matches     = callee_matches,
+        }
+    end
+
+    -- 2k. CXiSkeletonActor references to dual-wield stance/animation/visibility offsets 0x87C, 0x888, 0x8B4.
+    do
+        local matches = {}
+        local lo = math.max(1, (0xC0000 - text_rva) + 1)
+        local hi = math.min(text_len - 4, (0xE0000 - text_rva))
+        for i = lo, hi do
+            if #matches >= M.MAX_MATCHES_PER_RULE then break end
+            local b0, b1, b2, b3 = text_bytes[i], text_bytes[i + 1], text_bytes[i + 2], text_bytes[i + 3]
+            if b2 == 0x00 and b3 == 0x00 and b1 == 0x08 and (b0 == 0x7C or b0 == 0x88 or b0 == 0xB4) then
+                matches[#matches + 1] = capture_window(text_rva + (i - 1))
+            end
+        end
+        findings[#findings + 1] = {
+            id          = 'actor_dw_stance_vis_87c_888_8b4_refs',
+            description = 'CXiSkeletonActor .text references to 0x87C (stance), 0x888 (DW anim), 0x8B4 (weapon vis)',
+            match_count = #matches,
+            matches     = matches,
+        }
+    end
+
     -- 3. Strictly non-PII numeric actor model summary (optional)
     local safe_actor = nil
     if type(actor_summary) == 'table' then
