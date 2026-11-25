@@ -584,39 +584,115 @@ for _, res in ipairs({ { 1920, 1080, '1080p' }, { 2560, 1440, '1440p' } }) do
     assert_eq(h.ml.acquire_count, 1, 'S12 ' .. label .. ' clicking tab did not re-acquire lifecycle')
 end
 
--- Double-cursor prevention when Ashita ImGui sets ImGuiConfigFlags_NoMouseCursorChange:
-do
+-- Strict single-cursor invariant tests (both ConfigFlags=0 and NoMouseCursorChange=64):
+local function assert_single_cursor(h, ctx)
+    local hw = (h.platform.os_cursor_visible == true) and 1 or 0
+    local sw = (h.io.MouseDrawCursor == true) and 1 or 0
+    assert_eq(hw + sw, 1, ctx .. ': must have EXACTLY 1 visible cursor (never 0, never 2)')
+end
+
+-- Exact Windows double-cursor repro: ConfigFlags=0 (Ashita default) + OS hardware cursor visible!
+for _, cfg_case in ipairs({
+    { 0, 'ConfigFlags=0' },
+    { MouseLifecycle.IMGUI_CONFIG_NO_MOUSE_CURSOR_CHANGE, 'NoMouseCursorChange=64' },
+}) do
+    local flags, label = cfg_case[1], cfg_case[2]
     local h = create_harness({
-        initial_config_flags = MouseLifecycle.IMGUI_CONFIG_NO_MOUSE_CURSOR_CHANGE,
+        initial_config_flags = flags,
         os_cursor_visible    = true,
     })
-    h.focus:open_hub(1, false)
-    assert_eq(h.io.MouseDrawCursor, false, 'Double-cursor guard: OS cursor visible + NoMouseCursorChange -> MouseDrawCursor stays false')
-    assert_eq(h.ml.cursor_mode, 'os_hardware', 'Double-cursor guard: cursor_mode == os_hardware')
 
-    -- If FFXI subsequently hides the OS hardware cursor while Core is open, ImGui software cursor activates immediately!
+    -- Open via /soulspire with hardware cursor already visible -> MUST stay hardware (no double cursor!)
+    h.focus:open_hub(1, false)
+    h.present_frame()
+    assert_eq(h.io.MouseDrawCursor, false, label .. ': OS visible -> MouseDrawCursor MUST stay false')
+    assert_eq(h.ml.cursor_mode, 'hardware', label .. ': cursor_mode == hardware')
+    assert_eq(h.ml.fallback_active, false, label .. ': fallback_active == false')
+    assert_eq(h.ml.fallback_reason, 'none', label .. ': fallback_reason == none')
+    assert_single_cursor(h, label .. ' open with OS visible')
+
+    -- Move mouse and switch tabs -> still strictly 1 hardware cursor
+    h.send_mouse(MouseLifecycle.WM_MOUSEMOVE, 700, 400)
+    h.focus:select_module('weapon_mastery')
+    h.present_frame()
+    assert_eq(h.io.MouseDrawCursor, false, label .. ': mouse move + tab switch keeps hardware cursor')
+    assert_single_cursor(h, label .. ' after mouse move + tab switch')
+
+    -- OS hardware cursor disappears (e.g., FFXI hides it) -> immediately switches to software_fallback (1 cursor)
     h.platform.os_cursor_visible = false
     h.present_frame()
-    assert_eq(h.io.MouseDrawCursor, true, 'Double-cursor guard: OS cursor vanished -> ImGui software cursor enabled')
-    assert_eq(h.ml.cursor_mode, 'imgui_software', 'Double-cursor guard: cursor_mode == imgui_software')
+    assert_eq(h.io.MouseDrawCursor, true, label .. ': OS hidden -> MouseDrawCursor enabled as fallback')
+    assert_eq(h.ml.cursor_mode, 'software_fallback', label .. ': cursor_mode == software_fallback')
+    assert_eq(h.ml.fallback_active, true, label .. ': fallback_active == true')
+    assert_eq(h.ml.fallback_reason, 'os_cursor_hidden', label .. ': fallback_reason == os_cursor_hidden')
+    assert_single_cursor(h, label .. ' OS hidden fallback')
 
-    -- If OS cursor reappears later, ImGui software cursor yields cleanly (still no double cursor!)
+    -- OS hardware cursor reappears (e.g., moving mouse after gamepad) -> software fallback yields immediately!
+    h.platform.os_cursor_visible = true
+    h.send_mouse(MouseLifecycle.WM_MOUSEMOVE, 740, 430)
+    h.present_frame()
+    assert_eq(h.io.MouseDrawCursor, false, label .. ': OS returned -> MouseDrawCursor disabled immediately')
+    assert_eq(h.ml.cursor_mode, 'hardware', label .. ': cursor_mode returned to hardware')
+    assert_eq(h.ml.fallback_active, false, label .. ': fallback_active cleared')
+    assert_single_cursor(h, label .. ' OS returned after gamepad->mouse')
+
+    -- Alt+Tab out -> cursor_mode == none; Alt+Tab back with OS visible -> strictly hardware (1 cursor)
+    h.platform.window_focused = false
+    h.present_frame()
+    assert_eq(h.ml.cursor_mode, 'none', label .. ': unfocused cursor_mode == none')
+    assert_eq(h.io.MouseDrawCursor, false, label .. ': unfocused MouseDrawCursor == false')
+
+    h.platform.window_focused = true
     h.platform.os_cursor_visible = true
     h.present_frame()
-    assert_eq(h.io.MouseDrawCursor, false, 'Double-cursor guard: OS cursor returned -> ImGui software cursor disabled')
-    assert_eq(h.ml.cursor_mode, 'os_hardware', 'Double-cursor guard: cursor_mode back to os_hardware')
+    assert_eq(h.ml.cursor_mode, 'hardware', label .. ': Alt+Tab regain with OS visible -> hardware')
+    assert_single_cursor(h, label .. ' Alt+Tab regain with OS visible')
+
+    -- Close & reopen alternating OS visible/hidden -> strictly 1 cursor every cycle
+    for cycle = 1, 6 do
+        h.focus:close_hub(nil)
+        assert_eq(h.ml.cursor_mode, 'none', label .. ' close cycle ' .. cycle .. ' mode == none')
+        h.platform.os_cursor_visible = (cycle % 2 == 0)
+        h.focus:open_from_native_menu(1)
+        h.present_frame()
+        assert_single_cursor(h, label .. ' reopen cycle ' .. cycle)
+    end
+end
+
+-- Unobservable OS cursor probe (nil): prefer hardware mode (never blindly create a double cursor)
+do
+    local h = create_harness({
+        initial_config_flags = 0,
+        os_cursor_visible    = nil,
+    })
+    h.focus:open_hub(1, false)
+    h.present_frame()
+    assert_eq(h.io.MouseDrawCursor, false, 'Unobservable probe must NOT blindly enable MouseDrawCursor')
+    assert_eq(h.ml.cursor_mode, 'hardware', 'Unobservable probe defaults to hardware mode')
+    assert_eq(h.ml.fallback_active, false, 'Unobservable probe fallback_active == false')
+    assert_eq(h.ml.fallback_reason, 'probe_unavailable_prefer_hardware', 'Unobservable probe reason recorded')
 end
 
 -- Diagnostics schema & non-sensitive logging verification:
 do
     local h = create_harness({ os_cursor_visible = false })
     h.focus:open_hub(1, false)
+    local d_open = h.ml:diagnostics()
+    assert_eq(d_open.cursor_mode, 'software_fallback', 'Diag open cursor_mode')
+    assert_eq(d_open.os_cursor_visible, false, 'Diag open os_cursor_visible')
+    assert_eq(d_open.imgui_draw_cursor, true, 'Diag open imgui_draw_cursor')
+    assert_eq(d_open.fallback_active, true, 'Diag open fallback_active')
+    assert_eq(d_open.fallback_reason, 'os_cursor_hidden', 'Diag open fallback_reason')
+    assert_eq(d_open.fallback_activations, 1, 'Diag open fallback_activations')
+
     h.send_mouse(MouseLifecycle.WM_MOUSEMOVE, 1337, 733)
     h.focus:close_hub(nil)
 
     local d = h.ml:diagnostics()
     assert_eq(d.core_open, false, 'Diag core_open')
     assert_eq(d.owner, 'ffxi', 'Diag owner')
+    assert_eq(d.cursor_mode, 'none', 'Diag closed cursor_mode')
+    assert_eq(d.fallback_active, false, 'Diag closed fallback_active')
     assert_eq(d.mouse_captured, false, 'Diag mouse_captured')
     assert_eq(d.window_focused, true, 'Diag window_focused')
     assert_eq(d.acquire_count, 1, 'Diag acquire_count')
@@ -625,6 +701,8 @@ do
 
     local status_line = h.ml:format_status_line()
     assert_true(status_line:find('input_lifecycle', 1, true) ~= nil, 'Diag status line has prefix')
+    assert_true(status_line:find('cursor_mode=', 1, true) ~= nil, 'Diag status line includes cursor_mode')
+    assert_true(status_line:find('fallback=', 1, true) ~= nil, 'Diag status line includes fallback status')
     assert_true(status_line:find('1337', 1, true) == nil, 'Diag status line must never log raw mouse coordinates')
     assert_true(status_line:find('733', 1, true) == nil, 'Diag status line must never log raw mouse coordinates')
 end

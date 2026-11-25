@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.2.0-testing.core-ui.6",
+  "manifestVersion": "2.2.0-testing.core-ui.7",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
     "version": "client_data_cache_overhaul (761260a / OXTL v2 + O(N) Precomp + Level Sync META)",
@@ -9,7 +9,7 @@
     "commit": "761260a",
     "dockerImage": "soulspirexi/server:stg-core-ui-761260a",
     "crystalJobsHooks": 31,
-    "notes": "Soulforge Approved Visual Target + Balanced Mouse/Cursor Input Lifecycle Fix + Centralized Reactive CharacterState + Budgeted Incremental Cache Warmup + OXTL v2 Reliability paired with isolated Core UI staging (56xxx, stg-core-ui-761260a)."
+    "notes": "Soulforge Approved Visual Target + Strict Single-Cursor Policy Fix (no double cursor) + Centralized Reactive CharacterState + Budgeted Incremental Cache Warmup + OXTL v2 Reliability paired with isolated Core UI staging (56xxx, stg-core-ui-761260a)."
   },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
@@ -6129,8 +6129,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/mouse_lifecycle.lua",
       "targetPath": "soulspire_core/core/mouse_lifecycle.lua",
-      "sha256": "d53666d6b5f787b8901628fe8908668e524db8f66642f947aab519f989bcf816",
-      "size": 25271
+      "sha256": "0ef5feb63e758336e3e4080ce9d3794258bce54d611c997d12f87758b79ef3c7",
+      "size": 26841
     },
     {
       "category": "addon",
@@ -6199,8 +6199,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/soulspire_core.lua",
       "targetPath": "soulspire_core/soulspire_core.lua",
-      "sha256": "949d0b2ee23df260149eb79ce593ac8798fec082ef58fc7fb17448b7b680899b",
-      "size": 39338
+      "sha256": "7fef381fbc7a7e8ef360ccb6227b3e3fa3f39bb6b01aa1b4edc3849d9a46955e",
+      "size": 39403
     },
     {
       "category": "addon",
@@ -6227,8 +6227,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/tests/mouse_lifecycle_test.lua",
       "targetPath": "soulspire_core/tests/mouse_lifecycle_test.lua",
-      "sha256": "f7f6ae92b43ebea6befa9c61750c1211f1e264add9769c87294e04b99d9d3b1a",
-      "size": 30266
+      "sha256": "2a2d19484def46cb88f84210e917a8328608b8f89138bc70f5b536fddf4c6962",
+      "size": 34453
     },
     {
       "category": "addon",

@@ -1,21 +1,22 @@
 -- SoulspireXI Core: Balanced Mouse, Cursor & Window Focus Ownership Lifecycle.
 --
--- Solves the Ashita v4 / Windows FFXI cursor-disappearing bug cleanly without
--- ever hammering global Win32 ShowCursor every frame:
---   1. Explicit state machine: 'ffxi' -> 'core' <-> 'suspended_unfocused' -> 'ffxi'
---   2. Acquires cursor & mouse ownership ONCE on closed -> open (idempotent;
+-- Solves both invisible-cursor and double-cursor defects on Windows / Ashita v4
+-- without ever hammering global Win32 ShowCursor every frame:
+--   1. Explicit input ownership state machine:
+--        'ffxi' -> 'core' <-> 'suspended_unfocused' -> 'ffxi'
+--   2. Strict single-cursor policy (explicit cursor modes):
+--        - 'none'              : Core closed or unfocused (FFXI owns cursor).
+--        - 'hardware'          : OS/FFXI hardware cursor is visible (or probe
+--                                unavailable); io.MouseDrawCursor is ALWAYS
+--                                false so two cursors can never appear.
+--        - 'software_fallback' : Win32 GetCursorInfo() explicitly confirms the
+--                                OS/FFXI cursor is hidden; io.MouseDrawCursor
+--                                is enabled as a single-cursor fallback and
+--                                immediately disabled if the OS cursor returns.
+--   3. Acquires cursor & mouse ownership ONCE on closed -> open (idempotent;
 --      never re-acquires or releases during module tab switches).
---   3. Restores prior ImGui cursor/mouse flags cleanly on close, zone change,
+--   4. Restores prior ImGui cursor/mouse flags cleanly on close, zone change,
 --      logout, disconnect, Alt+Tab focus loss, and addon unload.
---   4. Double-cursor-safe visibility policy:
---        - If ImGuiConfigFlags_NoMouseCursorChange is NOT set: sets
---          io.MouseDrawCursor = true (ImGui_ImplWin32 automatically hides the
---          OS cursor and draws a single crisp arrow cursor, then restores it
---          on release).
---        - If ImGuiConfigFlags_NoMouseCursorChange IS set: probes read-only
---          Win32 GetCursorInfo() and enables io.MouseDrawCursor ONLY when the
---          OS cursor is hidden or unobservable, preventing both invisible
---          cursors and double cursors.
 --   5. Releases stale FFXI Win32 mouse capture (ReleaseCapture) strictly as a
 --      single-shot guard on acquire/resume when GetCapture() is non-null.
 --   6. Tracks per-button press ownership so clicking Core's X close button
@@ -50,6 +51,11 @@ MouseLifecycle.IMGUI_CONFIG_NO_MOUSE               = 16 -- 1 << 4
 MouseLifecycle.IMGUI_CONFIG_NO_MOUSE_CURSOR_CHANGE = 64 -- 1 << 6
 MouseLifecycle.IMGUI_CURSOR_NONE                   = -1
 MouseLifecycle.IMGUI_CURSOR_ARROW                  = 0
+
+-- Explicit single-cursor ownership modes.
+MouseLifecycle.CURSOR_MODE_NONE              = 'none'
+MouseLifecycle.CURSOR_MODE_HARDWARE          = 'hardware'
+MouseLifecycle.CURSOR_MODE_SOFTWARE_FALLBACK = 'software_fallback'
 
 local CURSOR_SHOWING = 0x00000001
 local MAX_TRANSITIONS = 12
@@ -229,9 +235,12 @@ function MouseLifecycle.new(opts)
         owner                     = 'ffxi', -- 'ffxi' | 'core' | 'suspended_unfocused'
         mouse_captured_by_core    = false,
         window_focused            = true,
-        cursor_mode               = 'ffxi', -- 'ffxi' | 'imgui_software' | 'os_hardware'
+        cursor_mode               = MouseLifecycle.CURSOR_MODE_NONE, -- 'none' | 'hardware' | 'software_fallback'
         imgui_draw_cursor_applied = false,
         os_cursor_visible         = nil,
+        fallback_active           = false,
+        fallback_reason           = 'core_inactive',
+        fallback_activations      = 0,
 
         saved_valid               = false,
         saved_mouse_draw_cursor   = false,
@@ -340,48 +349,62 @@ function MouseLifecycle:_restore_io(imgui)
         end
     end
     self.imgui_draw_cursor_applied = false
-    self.cursor_mode = 'ffxi'
+    self.fallback_active = false
+    self.fallback_reason = 'core_inactive'
+    self.cursor_mode = MouseLifecycle.CURSOR_MODE_NONE
 end
 
--- Apply double-cursor-safe ImGui cursor visibility while Core owns focused input.
--- Never invokes Win32 ShowCursor; only updates io.MouseDrawCursor when the desired
--- state actually changes.
+-- Enforce strict single-cursor policy while Core owns focused input:
+--   - If OS/FFXI hardware cursor is confirmed visible (os_vis == true):
+--       mode = 'hardware', io.MouseDrawCursor = false (NEVER draw a second cursor!)
+--   - If OS/FFXI hardware cursor is explicitly confirmed hidden (os_vis == false):
+--       mode = 'software_fallback', io.MouseDrawCursor = true (single visible cursor)
+--   - If OS cursor visibility is unobservable (os_vis == nil):
+--       mode = 'hardware', io.MouseDrawCursor = false (prefer hardware cursor;
+--       never risk creating a double cursor without confirming OS cursor is hidden)
+-- Never invokes Win32 ShowCursor; only writes io.MouseDrawCursor when changed.
 function MouseLifecycle:_sync_cursor_visibility(imgui)
     local io = safe_get_io(imgui)
     local os_vis = self:_probe_os_cursor_visible()
     self.os_cursor_visible = os_vis
 
-    if io == nil then
-        self.cursor_mode = (os_vis == true) and 'os_hardware' or 'imgui_software'
-        return
-    end
+    local prev_fallback = self.fallback_active
+    local want_imgui_cursor = (os_vis == false)
+    local next_mode
+    local next_reason
 
-    local flags = tonumber(safe_read_field(io, 'ConfigFlags', 0)) or 0
-    -- Ensure ImGui mouse input is never stuck disabled while Core owns focus.
-    if bit.band(flags, MouseLifecycle.IMGUI_CONFIG_NO_MOUSE) ~= 0 then
-        local cleared = bit.band(flags, bit.bnot(MouseLifecycle.IMGUI_CONFIG_NO_MOUSE))
-        safe_write_field(io, 'ConfigFlags', cleared)
-        flags = cleared
-    end
-
-    local no_cursor_change = bit.band(flags, MouseLifecycle.IMGUI_CONFIG_NO_MOUSE_CURSOR_CHANGE) ~= 0
-    local want_imgui_cursor
-    if no_cursor_change then
-        -- ImGui will not call SetCursor(NULL), so draw ImGui's software cursor
-        -- ONLY when the OS cursor is hidden (false) or unobservable (nil).
-        want_imgui_cursor = (os_vis ~= true)
+    if os_vis == false then
+        next_mode = MouseLifecycle.CURSOR_MODE_SOFTWARE_FALLBACK
+        next_reason = 'os_cursor_hidden'
+    elseif os_vis == true then
+        next_mode = MouseLifecycle.CURSOR_MODE_HARDWARE
+        next_reason = 'none'
     else
-        -- ImGui's Win32 backend hides the OS cursor automatically while
-        -- MouseDrawCursor is true, guaranteeing a single crisp arrow cursor.
-        want_imgui_cursor = true
+        next_mode = MouseLifecycle.CURSOR_MODE_HARDWARE
+        next_reason = 'probe_unavailable_prefer_hardware'
     end
 
-    local cur_draw = safe_read_field(io, 'MouseDrawCursor', false) == true
-    if cur_draw ~= want_imgui_cursor then
-        safe_write_field(io, 'MouseDrawCursor', want_imgui_cursor)
+    if io ~= nil then
+        local flags = tonumber(safe_read_field(io, 'ConfigFlags', 0)) or 0
+        -- Ensure ImGui mouse input is never stuck disabled while Core owns focus.
+        if bit.band(flags, MouseLifecycle.IMGUI_CONFIG_NO_MOUSE) ~= 0 then
+            local cleared = bit.band(flags, bit.bnot(MouseLifecycle.IMGUI_CONFIG_NO_MOUSE))
+            safe_write_field(io, 'ConfigFlags', cleared)
+        end
+
+        local cur_draw = safe_read_field(io, 'MouseDrawCursor', false) == true
+        if cur_draw ~= want_imgui_cursor then
+            safe_write_field(io, 'MouseDrawCursor', want_imgui_cursor)
+        end
     end
+
     self.imgui_draw_cursor_applied = want_imgui_cursor
-    self.cursor_mode = want_imgui_cursor and 'imgui_software' or 'os_hardware'
+    self.fallback_active = want_imgui_cursor
+    self.fallback_reason = next_reason
+    self.cursor_mode = next_mode
+    if want_imgui_cursor and not prev_fallback then
+        self.fallback_activations = self.fallback_activations + 1
+    end
 
     if want_imgui_cursor and type(imgui) == 'table'
         and type(imgui.GetMouseCursor) == 'function'
@@ -406,7 +429,9 @@ function MouseLifecycle:acquire(imgui, reason, now)
         self.window_focused = false
         self.owner = 'suspended_unfocused'
         self.mouse_captured_by_core = false
-        self.cursor_mode = 'ffxi'
+        self.cursor_mode = MouseLifecycle.CURSOR_MODE_NONE
+        self.fallback_active = false
+        self.fallback_reason = 'core_inactive'
         self:_record_transition(prev_owner, self.owner, tostring(reason or 'open') .. ':unfocused', now)
         return false
     end
@@ -621,6 +646,9 @@ function MouseLifecycle:diagnostics()
         cursor_mode             = self.cursor_mode,
         imgui_draw_cursor       = self.imgui_draw_cursor_applied,
         os_cursor_visible       = self.os_cursor_visible,
+        fallback_active         = self.fallback_active,
+        fallback_reason         = self.fallback_reason,
+        fallback_activations    = self.fallback_activations,
         window_focused          = self.window_focused,
         last_transition         = self.last_transition,
         acquire_count           = self.acquire_count,
@@ -637,13 +665,15 @@ end
 function MouseLifecycle:format_status_line()
     local d = self:diagnostics()
     local os_vis = (d.os_cursor_visible == nil) and 'unobserved' or tostring(d.os_cursor_visible)
-    return ('input_lifecycle open=%s owner=%s capture=%s cursor=%s imgui_cursor=%s os_cursor=%s win_focus=%s acq=%d rel=%d susp=%d res=%d cap_rel=%d last=%s'):format(
+    return ('input_lifecycle open=%s owner=%s capture=%s cursor_mode=%s os_cursor=%s imgui_cursor=%s fallback=%s(%s) win_focus=%s acq=%d rel=%d susp=%d res=%d cap_rel=%d last=%s'):format(
         tostring(d.core_open),
         tostring(d.owner),
         tostring(d.mouse_captured),
         tostring(d.cursor_mode),
-        tostring(d.imgui_draw_cursor),
         os_vis,
+        tostring(d.imgui_draw_cursor),
+        tostring(d.fallback_active),
+        tostring(d.fallback_reason),
         tostring(d.window_focused),
         d.acquire_count,
         d.release_count,

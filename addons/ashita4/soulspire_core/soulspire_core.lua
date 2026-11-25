@@ -582,8 +582,9 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
     elseif sub == 'inputdiag' then
         local d = mouse_lifecycle:diagnostics()
         log(mouse_lifecycle:format_status_line())
-        log(('input_counters last_device=%s blocked_mouse=%d absorbed_releases=%d held_core_buttons=%s'):format(
+        log(('input_counters last_device=%s fallback_activations=%d blocked_mouse=%d absorbed_releases=%d held_core_buttons=%s'):format(
             tostring(input.last_device),
+            d.fallback_activations or 0,
             d.blocked_mouse_events,
             d.absorbed_release_events,
             tostring(mouse_lifecycle:has_held_core_buttons())
