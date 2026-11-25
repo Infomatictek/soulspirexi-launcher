@@ -1,19 +1,19 @@
 {
   "dllPath": "plugins/ashita4/soulspire_native.dll",
-  "dllSha256": "2944449c8d868e3a7218df4c9a8471803a8262a66b4c82ab36394c9e7023b5bb",
+  "dllSha256": "b2bc4ceaf955b5ad563d3adbd6b3280493bbd677be7f6250474a33a9172acdb3",
   "compiledRegistryHash": "cf86aa59ff8d16c6",
   "runtimeIdentityLoader": true,
   "identitySchemaVersion": 1,
   "nativeHooks": 32,
-  "sourceCommit": "09ede9296029d8e770a2914a10ce191a8386b952",
+  "sourceCommit": "cb0d3194e92ee1f25067ccca4fb3ad1cede63551",
   "buildTarget": "Win32-x86-MSVC",
-  "ciRunId": "45543076122",
-  "ciRunUrl": "https://github.com/Infomatictek/soulspirexi-launcher/actions/runs/45543076122",
+  "ciRunId": "45559389840",
+  "ciRunUrl": "https://github.com/Infomatictek/soulspirexi-launcher/actions/runs/45559389840",
   "ciVerified": true,
   "clientVerified": false,
   "notes": "CI-built 32-hook soulspire_native.dll (runtime PC Sub->Main FTABLE model resolver + native Commands menu entry) synced from GitHub Actions windows-latest MSVC x86 build. Client verification requires manual Windows Ashita v4 playtesting.",
-  "dllSize": 226816,
+  "dllSize": 231424,
   "expectedHooks": 32,
   "abiVersion": 2,
-  "branch": "feat/ws3-weap-002-render-xref-probe"
+  "branch": "feat/ws3-weap-002-offhand-bone-reuse"
 }

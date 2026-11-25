@@ -115,8 +115,8 @@
       "category": "plugin",
       "sourcePath": "plugins/ashita4/soulspire_native.dll",
       "targetPath": "soulspire_native.dll",
-      "sha256": "2944449c8d868e3a7218df4c9a8471803a8262a66b4c82ab36394c9e7023b5bb",
-      "size": 226816
+      "sha256": "b2bc4ceaf955b5ad563d3adbd6b3280493bbd677be7f6250474a33a9172acdb3",
+      "size": 231424
     },
     {
       "category": "addon",
@@ -10266,7 +10266,7 @@
     "hash": "cf86aa59ff8d16c6",
     "idLockStatus": "locked",
     "nativeDllCompiledHash": "cf86aa59ff8d16c6",
-    "nativeDllSha256": "2944449c8d868e3a7218df4c9a8471803a8262a66b4c82ab36394c9e7023b5bb",
+    "nativeDllSha256": "b2bc4ceaf955b5ad563d3adbd6b3280493bbd677be7f6250474a33a9172acdb3",
     "nativeDllClientVerified": false,
     "nativeHooks": 32,
     "crystalJobsHooks": 32
