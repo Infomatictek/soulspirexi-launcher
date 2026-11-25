@@ -575,7 +575,9 @@ public sealed class ManifestUpdateService
             normalized.Equals("soulspire-server.json", StringComparison.Ordinal) ||
             normalized.Equals("overlords-server.json", StringComparison.Ordinal) ||
             normalized.StartsWith("config/addons/", StringComparison.Ordinal) ||
-            normalized.StartsWith("config/boot/", StringComparison.Ordinal))
+            normalized.StartsWith("config/boot/", StringComparison.Ordinal) ||
+            normalized.Equals("scripts/soulspirexi.txt", StringComparison.Ordinal) ||
+            normalized.Equals("scripts/default.txt", StringComparison.Ordinal))
         {
             return true;
         }
