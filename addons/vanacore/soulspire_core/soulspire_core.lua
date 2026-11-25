@@ -1,21 +1,44 @@
--- SoulspireXI Phase C — Unified VanaCore-Native Soulspire Core Addon (WIP / Regression-Hardened)
--- Uses ONLY verified VanaCore native events ('load', 'present', 'command', 'packet_in', 'unload'),
--- explicit fail-loud per-module startup diagnostics, native main Commands menu activation via
--- `vana.soulspire.consume_open_core()`, and full slash-command parity.
+-- SoulspireXI — Full VanaCore-Native Soulspire Core (CLIENT-MODERN-001 / DEC-028)
+--
+-- Single unified VanaCore-native addon (`addons/vanacore/soulspire_core/`) with ZERO Ashita
+-- dependencies (`AshitaCore`, `ashita.*`, `d3d8`, `soulspire_native.dll`, `crystaljobs.dll`).
+-- Preserves 100% of the polished Soulspire Core UI shell, Soul Sanctum, Soulforge Constellation
+-- talent trees (with live-verified WS allocation/refund), Soul Talents, 66-Soul Universal HUD,
+-- Soul Actions, CrystalSocket, Flintlock state, Mob Status, and authoritative VanaCore-managed
+-- input & cursor ownership (`vana.soulspire.acquire_ui_input` / `release_ui_input`).
 
 addon.name    = 'soulspire_core'
 addon.author  = 'SoulspireXI'
-addon.version = '3.1.0-vanacore'
-addon.desc    = 'VanaCore-native Soulspire Core coordinator & modules (Phase C)'
+addon.version = '4.0.0-vanacore'
+addon.desc    = 'Unified VanaCore-native Soulspire Core (Shell, Soul Sanctum, Soulforge, 66-Soul HUD, Actions, Diagnostics)'
 
 local addon_dir = (type(addon) == 'table' and type(addon.path) == 'string' and addon.path ~= '')
     and addon.path:gsub('[/\\]+$', '')
     or '.'
+local install_dir = (type(vana) == 'table' and vana.paths and type(vana.paths.install) == 'string' and vana.paths.install ~= '')
+    and vana.paths.install:gsub('[/\\]+$', '')
+    or addon_dir:gsub('[/\\]addons[/\\]vanacore[/\\]soulspire_core$', '')
+
+-- Configure module search paths strictly inside addons/vanacore/soulspire_core/
+package.path = table.concat({
+    addon_dir .. '/?.lua',
+    addon_dir .. '/?/init.lua',
+    addon_dir .. '/soulforge/?.lua',
+    addon_dir .. '/soulhud/?.lua',
+    addon_dir .. '/crystalsocket/?.lua',
+    package.path,
+}, ';')
+
+-- Expose VanaCore's native ImGui table to ported UI modules via standard require('imgui')
+if type(vana) == 'table' and type(vana.imgui) == 'table' then
+    package.loaded['imgui'] = vana.imgui
+end
 
 local startup_report = {
-    ok = true,
+    ok      = true,
+    version = addon.version,
     modules = {},
-    errors = {},
+    errors  = {},
 }
 
 local function log_msg(msg)
@@ -26,52 +49,153 @@ local function log_msg(msg)
     print(line)
 end
 
-local function load_mod(name, rel)
-    local full_path = addon_dir .. '/' .. rel
-    local fn, err = loadfile(full_path)
-    if not fn then
-        startup_report.ok = false
-        startup_report.modules[name] = 'FAIL: ' .. tostring(err)
-        startup_report.errors[#startup_report.errors + 1] = name .. ': ' .. tostring(err)
-        log_msg('ERROR loading module ' .. name .. ' (' .. full_path .. '): ' .. tostring(err))
-        return nil
-    end
-    local ok, mod = pcall(fn)
-    if not ok then
+local function load_mod(name, mod_name)
+    local ok, mod = pcall(require, mod_name)
+    if not ok or mod == nil then
         startup_report.ok = false
         startup_report.modules[name] = 'FAIL: ' .. tostring(mod)
         startup_report.errors[#startup_report.errors + 1] = name .. ': ' .. tostring(mod)
-        log_msg('ERROR executing module ' .. name .. ': ' .. tostring(mod))
+        log_msg('ERROR loading module ' .. name .. ' (' .. mod_name .. '): ' .. tostring(mod))
         return nil
     end
     startup_report.modules[name] = 'OK'
     return mod
 end
 
-local IdentityMod      = load_mod('identity',       'core/identity.lua')
-local ActionsMod       = load_mod('actions',        'core/actions.lua')
-local HudMod           = load_mod('hud',            'core/hud.lua')
-local SoulforgeMod     = load_mod('soulforge',      'core/soulforge.lua')
-local WeaponMasteryMod = load_mod('weapon_mastery', 'core/weapon_mastery.lua')
-local CrystalSocketMod = load_mod('crystalsocket',  'core/crystalsocket.lua')
-local FlintlockMod     = load_mod('flintlock',      'core/flintlock.lua')
-local MobStatusMod     = load_mod('mob_status',     'core/mob_status.lua')
+local RegistryMod    = load_mod('registry',       'core.registry')
+local FocusMod       = load_mod('focus',          'core.focus')
+local InputMod       = load_mod('input',          'core.input')
+local AssetsMod      = load_mod('assets',         'core.assets')
+local DataServiceMod = load_mod('data_service',   'core.data_service')
+local UiMod          = load_mod('ui',             'core.ui')
+local IdentityMod    = load_mod('identity',       'core.identity')
+local ActionsMod     = load_mod('actions',        'core.actions')
+local FlintlockMod   = load_mod('flintlock',      'core.flintlock')
+local MobStatusMod   = load_mod('mob_status',     'core.mob_status')
+local SoulHudBridge  = load_mod('soulhud_bridge', 'core.soulhud_bridge')
 
-local install_dir = addon_dir:gsub('[/\\]addons[/\\]vanacore[/\\]soulspire_core$', '')
-local identity, actions, hud, soulforge, weapon_mastery, crystalsocket, flintlock, mob_status
-local hub_open = false
-local active_tab = 'soulforge' -- 'soulforge' | 'souls' | 'actions' | 'flintlock' | 'mobs' | 'diag'
+local CharacterMod   = load_mod('character',      'modules.character')
+local WeaponMod      = load_mod('weapon_mastery', 'modules.weapon_mastery')
+local SoulTalentsMod = load_mod('soul_talents',   'modules.soul_talents')
+local AbilitiesMod   = load_mod('abilities',      'modules.abilities')
+local StatusDiagMod  = load_mod('status_diag',    'modules.status_and_diag')
 
-local function toggle_hub(tab)
-    if type(tab) == 'string' and tab ~= '' then
-        active_tab = tab
-        hub_open = true
+local CsProto        = load_mod('cs_protocol',    'crystalsocket.protocol')
+local CsStateMod     = load_mod('cs_state',       'crystalsocket.state')
+local SfArt          = load_mod('sf_art',         'soulforge.art')
+local SfStateMod     = load_mod('sf_state',       'soulforge.soulforge_state')
+local WsReg          = load_mod('ws_registry',    'soulforge.ws_registry_generated')
+local SfUi           = load_mod('sf_ui',          'soulforge.soulforge_ui')
+
+-- Runtime instances
+local settings_store = nil
+local registry       = nil
+local focus          = nil
+local input          = nil
+local assets         = nil
+local data_service   = nil
+local ui             = nil
+local identity       = nil
+local actions        = nil
+local flintlock      = nil
+local mob_status     = nil
+local soulhud        = nil
+local character_mod  = nil
+local weapon_mod     = nil
+local soul_talents   = nil
+local abilities_mod  = nil
+local status_diag    = nil
+local sf_state       = nil
+local sf_actions     = nil
+
+local ui_input_held  = false
+
+local function acquire_native_ui_input()
+    if type(vana) == 'table' and vana.soulspire and type(vana.soulspire.acquire_ui_input) == 'function' then
+        vana.soulspire.acquire_ui_input('soulspire_core', {
+            block_mouse     = true,
+            capture_gamepad = true,
+            show_cursor     = true,
+            lease_ms        = 2000,
+        })
+        ui_input_held = true
+    elseif type(vana) == 'table' and vana.gamepad and type(vana.gamepad.nav) == 'function' then
+        vana.gamepad.nav(true)
+        ui_input_held = true
+    end
+end
+
+local function release_native_ui_input(reason)
+    if not ui_input_held then return end
+    ui_input_held = false
+    if type(vana) == 'table' and vana.soulspire and type(vana.soulspire.release_ui_input) == 'function' then
+        vana.soulspire.release_ui_input('soulspire_core', reason or 'closed')
+    elseif type(vana) == 'table' and vana.gamepad and type(vana.gamepad.nav) == 'function' then
+        vana.gamepad.nav(false)
+    end
+end
+
+local function save_core_settings()
+    if settings_store and type(settings_store.save) == 'function' then
+        if ui then settings_store.data.ui_scale = ui.ui_scale end
+        if input then settings_store.data.bindings = input:get_bindings() end
+        pcall(function() settings_store:save() end)
+    end
+end
+
+local function open_hub(module_id)
+    if not focus then return end
+    if type(module_id) == 'string' and module_id ~= '' and registry then
+        local idx = registry:find_index(module_id)
+        local m = idx and registry:get(idx) or nil
+        if m then
+            focus:select_module(m.id)
+        end
+    end
+    focus:open_hub()
+    if ui then ui:request_window_focus() end
+    acquire_native_ui_input()
+    if input and input.arm_confirm_guard then
+        input:arm_confirm_guard(0.22)
+    end
+    if sf_actions and sf_state and (not sf_state.synced or #(sf_state.catalog or {}) == 0) then
+        sf_actions.sync()
+    end
+end
+
+local function close_hub(reason)
+    if focus and focus:is_hub_open() then
+        focus:close_hub()
+    end
+    release_native_ui_input(reason or 'closed')
+end
+
+local function toggle_hub(module_id)
+    if not focus then return end
+    if type(module_id) == 'string' and module_id ~= '' then
+        open_hub(module_id)
+    elseif focus:is_hub_open() then
+        close_hub('toggle_off')
     else
-        hub_open = not hub_open
+        open_hub(nil)
     end
-    if hub_open and soulforge and not soulforge.synced then
-        soulforge:request_sync()
+end
+
+local function is_chat_or_text_active()
+    if type(vana) == 'table' and vana.game and type(vana.game.world) == 'function' then
+        local w = vana.game.world()
+        if type(w) == 'table' and w.chat_open == true then
+            return true
+        end
     end
+    local imgui = type(vana) == 'table' and vana.imgui or nil
+    if imgui and type(imgui.GetIO) == 'function' then
+        local ok, io_obj = pcall(imgui.GetIO)
+        if ok and io_obj and io_obj.WantTextInput == true then
+            return true
+        end
+    end
+    return false
 end
 
 local function print_status()
@@ -79,16 +203,18 @@ local function print_status()
         and vana.soulspire.diagnostics() or {}
     local caps = tonumber(d.capabilities) or 0
     local has_cmd_menu = (math.floor(caps / 65536) % 2) == 1
-    log_msg(string.format('Status: enabled=%s api=v%d hooks=%d/%d caps=0x%X cmd_menu=%s actions=%d vis=%d startup_ok=%s',
-        tostring(d.enabled), tonumber(d.api_version) or 0,
+    local has_tex = (math.floor(caps / 1048576) % 2) == 1
+    local has_input = (math.floor(caps / 2097152) % 2) == 1
+    log_msg(string.format(
+        'Status: v%s enabled=%s api=v%d hooks=%d/%d caps=0x%X cmd_menu=%s tex=%s input=%s ashita_compat=%s actions=%d vis=%d startup_ok=%s',
+        addon.version, tostring(d.enabled), tonumber(d.api_version) or 0,
         tonumber(d.hooks_installed) or 0, tonumber(d.hooks_total) or 0,
-        caps, tostring(has_cmd_menu),
+        caps, tostring(has_cmd_menu), tostring(has_tex), tostring(has_input),
+        tostring(d.ashita_compat_enabled),
         tonumber(d.action_count) or 0, tonumber(d.visibility_count) or 0,
         tostring(startup_report.ok)))
-    if #startup_report.errors > 0 then
-        for _, e in ipairs(startup_report.errors) do
-            log_msg('  STARTUP ERROR: ' .. tostring(e))
-        end
+    for _, err in ipairs(startup_report.errors) do
+        log_msg('  STARTUP ERROR: ' .. tostring(err))
     end
 end
 
@@ -114,187 +240,321 @@ local function print_soulactions_status(show_caps)
     end
 end
 
-local function render_actions_tab(imgui)
-    local diag = (vana.soulspire and vana.soulspire.diagnostics) and vana.soulspire.diagnostics() or {}
-    imgui.TextColored({ 0.85, 0.70, 0.25, 1.0 }, 'SOUL ACTIONS & VISIBILITY INSPECTOR')
-    imgui.Text(string.format('Catalog: %d actions | Visibility rules: %d | Row limit: %d chars',
-        tonumber(diag.action_count) or 0, tonumber(diag.visibility_count) or 0, tonumber(diag.action_row_limit) or 16))
-    if imgui.SmallButton('Reload Actions & Visibility') and actions then
-        local a, v = actions:sync_to_native()
-        log_msg(string.format('Synced %d actions and %d visibility rules to vana.soulspire.', a, v))
+local function init_all()
+    if type(vana) == 'table' and vana.settings and type(vana.settings.register) == 'function' then
+        local ok, store = pcall(vana.settings.register, {
+            name     = 'soulspire_core',
+            scope    = 'global',
+            defaults = { ui_scale = 1.0, bindings = {} },
+        })
+        if ok and store then settings_store = store end
     end
-    imgui.Separator()
-    local rows = actions and actions:search(actions.search_query or '', 64) or {}
-    if #rows == 0 then
-        imgui.Text('No custom Soul actions active for current Soul.')
-    else
-        for _, r in ipairs(rows) do
-            local vis = actions:check_visibility(r.kind, r.id, 0)
-            imgui.Text(string.format('[%s #%d] %s  (vis=%s)',
-                r.kind == 1 and 'Spell' or (r.kind == 3 and 'WS' or 'JA'),
-                r.id, tostring(r.name), tostring(vis)))
-            if r.description and r.description ~= '' then
-                imgui.TextColored({ 0.72, 0.78, 0.88, 1.0 }, '   ' .. tostring(r.description))
-            end
+
+    local saved_scale = (settings_store and settings_store.data and tonumber(settings_store.data.ui_scale)) or 1.0
+    local saved_binds = (settings_store and settings_store.data and type(settings_store.data.bindings) == 'table')
+        and settings_store.data.bindings or nil
+
+    assets   = AssetsMod and AssetsMod.new(addon_dir, install_dir) or nil
+    registry = RegistryMod and RegistryMod.new() or nil
+    focus    = (FocusMod and registry) and FocusMod.new(registry) or nil
+    input    = InputMod and InputMod.new({
+        bindings = saved_binds,
+        clock    = (type(vana) == 'table' and vana.time and vana.time.clock) or os.clock,
+    }) or nil
+
+    if SfArt and SfArt.setRoot then
+        SfArt.setRoot(addon_dir, install_dir)
+        package.loaded['art'] = SfArt
+    end
+
+    data_service = DataServiceMod and DataServiceMod.new({
+        addon_path = addon_dir,
+        auto_load  = true,
+    }) or nil
+
+    identity   = IdentityMod and IdentityMod.new(install_dir) or nil
+    actions    = ActionsMod and ActionsMod.new(install_dir, identity) or nil
+    flintlock  = FlintlockMod and FlintlockMod.new(identity) or nil
+    mob_status = MobStatusMod and MobStatusMod.new() or nil
+    soulhud    = SoulHudBridge and SoulHudBridge.new(addon_dir, install_dir, identity) or nil
+
+    -- 1. Soul Sanctum / Character Identity (CrystalSocket)
+    if CharacterMod and CsProto and CsStateMod and registry then
+        local cs_state = CsStateMod.new()
+        character_mod = CharacterMod.new({
+            protocol      = CsProto,
+            crystal_state = cs_state,
+            soul_registry = RegistryMod and RegistryMod.souls or nil,
+            data_service  = data_service,
+            assets        = assets,
+            dll_status_fn = function()
+                local d = (type(vana) == 'table' and vana.soulspire and vana.soulspire.diagnostics)
+                    and vana.soulspire.diagnostics() or {}
+                return {
+                    loaded          = d.enabled == true,
+                    hooks_installed = tonumber(d.hooks_installed) or 0,
+                    hooks_total     = tonumber(d.hooks_total) or 0,
+                    mode            = 'VanaCore Native',
+                }
+            end,
+        })
+        registry:attach_controller('character', character_mod, true)
+    end
+
+    -- 2. Weapon Mastery (Soulforge Constellation) & 3. Soul Talents
+    if SfStateMod and SfUi and WeaponMod and registry then
+        sf_state, sf_actions = SfStateMod.new({
+            soulRegistry = RegistryMod and RegistryMod.souls or nil,
+            wsRegistry   = WsReg,
+            dataService  = data_service,
+            savePrefs    = save_core_settings,
+            clock        = (type(vana) == 'table' and vana.time and vana.time.clock) or os.clock,
+        })
+        weapon_mod = WeaponMod.new(sf_state, sf_actions, SfUi)
+        registry:attach_controller('weapon_mastery', weapon_mod, true)
+
+        if SoulTalentsMod then
+            soul_talents = SoulTalentsMod.new(sf_state, sf_actions, SfUi, {
+                soul_registry = RegistryMod and RegistryMod.souls or nil,
+                data_service  = data_service,
+                assets        = assets,
+                on_jump_to_ws = function(ws_id, node_key)
+                    if focus then focus:select_module('weapon_mastery') end
+                    if weapon_mod then weapon_mod:focus_ws_and_node(ws_id, node_key) end
+                end,
+            })
+            registry:attach_controller('soul_talents', soul_talents, true)
         end
     end
-end
 
-local function render_diag_tab(imgui)
-    local d = (vana.soulspire and vana.soulspire.diagnostics) and vana.soulspire.diagnostics() or {}
-    imgui.TextColored({ 0.85, 0.70, 0.25, 1.0 }, 'VANACORE-NATIVE DIAGNOSTICS (DEC-028)')
-    imgui.Text(string.format('Enabled: %s | API v%d | Caps: 0x%X | Hooks: %d/%d',
-        tostring(d.enabled), tonumber(d.api_version) or 0, tonumber(d.capabilities) or 0,
-        tonumber(d.hooks_installed) or 0, tonumber(d.hooks_total) or 0))
-    imgui.Text(string.format('Registry: %d Souls (hash=%s) | Weapon Rules: %d (hash=%s)',
-        tonumber(d.registry_soul_count) or 0, tostring(d.registry_hash or ''),
-        tonumber(d.weapon_rule_count) or 0, tostring(d.weapon_config_hash or '')))
-    imgui.Text(string.format('Packets: 1FF=%d 1FC=%d 1FD=%d 1FE=%d | OXHUD=%d OXMOB=%d OXTAL=%d | Suppressed=%d',
-        tonumber(d.packets_1ff) or 0, tonumber(d.packets_1fc) or 0,
-        tonumber(d.packets_1fd) or 0, tonumber(d.packets_1fe) or 0,
-        tonumber(d.packets_oxhud) or 0, tonumber(d.packets_oxmob) or 0,
-        tonumber(d.packets_oxtal) or 0, tonumber(d.suppressed_chat_frames) or 0))
-    imgui.Separator()
-    for _, h in ipairs(d.hooks or {}) do
-        imgui.Text(string.format('[%s] %-24s (%s / %s) +0x%X hits=%d — %s',
-            h.installed and 'OK' or 'FAIL', tostring(h.id), tostring(h.owner),
-            tostring(h.disposition or ''), tonumber(h.rva) or 0,
-            tonumber(h.hit_count) or 0, tostring(h.detail or '')))
+    -- 4. Soul Actions
+    if AbilitiesMod and registry then
+        abilities_mod = AbilitiesMod.new(actions, identity)
+        registry:attach_controller('abilities', abilities_mod, true)
+    end
+
+    -- 5. Diagnostics, Mob Status & Flintlock
+    if StatusDiagMod and registry then
+        status_diag = StatusDiagMod.new(flintlock, mob_status, startup_report)
+        registry:attach_controller('journal', status_diag, true)
+    end
+
+    -- 6. Full-Screen Dark-Fantasy RPG Shell
+    local imgui = type(vana) == 'table' and vana.imgui or nil
+    if UiMod and imgui and registry and focus then
+        ui = UiMod.new(imgui, registry, focus, assets, {
+            ui_scale        = saved_scale,
+            on_scale_change = function() save_core_settings() end,
+            get_identity    = function() return identity and identity:active() or nil end,
+            get_last_device = function() return input and input.last_device or 'gamepad' end,
+        })
+    end
+
+    local a_cnt, v_cnt = 0, 0
+    if actions then
+        a_cnt, v_cnt = actions:sync_to_native()
+    end
+
+    if not (type(vana) == 'table' and vana.soulspire and type(vana.soulspire.enabled) == 'function' and vana.soulspire.enabled()) then
+        startup_report.ok = false
+        startup_report.errors[#startup_report.errors + 1] = 'vana.soulspire native subsystem disabled or unavailable'
+    end
+    if not imgui then
+        startup_report.ok = false
+        startup_report.errors[#startup_report.errors + 1] = 'vana.imgui unavailable'
+    end
+
+    log_msg(string.format(
+        'Initialized VanaCore-Native Core v%s (startup_ok=%s, souls=%d, actions=%d, visibility=%d). Commands: /soulspire, /talents, /soulhud, /soulactions.',
+        addon.version, tostring(startup_report.ok), identity and #(identity.souls or {}) or 0, a_cnt, v_cnt))
+    if not startup_report.ok then
+        print_status()
     end
 end
 
-local function render_hub(imgui)
-    if not hub_open or not imgui then return end
-
-    if vana.gamepad and type(vana.gamepad.nav) == 'function' then
-        vana.gamepad.nav(true)
-    end
-
-    imgui.SetNextWindowSize({ 780, 500 }, 2)
-    local open = imgui.Begin('Soulspire Core (VanaCore Native)###soulspire_core_hub', true)
-    if not open then
-        hub_open = false
-        imgui.End()
-        return
-    end
-
-    local tabs = {
-        { id = 'soulforge', label = 'Soulforge' },
-        { id = 'souls',     label = 'CrystalSocket' },
-        { id = 'actions',   label = 'Soul Actions' },
-        { id = 'flintlock', label = 'Flintlock' },
-        { id = 'mobs',      label = 'Mob Status' },
-        { id = 'diag',      label = 'Diagnostics' },
-    }
-    for i, t in ipairs(tabs) do
-        if i > 1 then imgui.SameLine() end
-        local lbl = (active_tab == t.id) and ('[' .. t.label .. ']') or t.label
-        if imgui.Button(lbl .. '##tab_' .. t.id) then
-            active_tab = t.id
-            if t.id == 'soulforge' and soulforge and not soulforge.synced then
-                soulforge:request_sync()
-            end
-        end
-    end
-    imgui.SameLine()
-    if imgui.SmallButton('Close##hub_close') then
-        hub_open = false
-    end
-    imgui.Separator()
-
-    if active_tab == 'soulforge' and weapon_mastery then
-        weapon_mastery:render(imgui)
-    elseif active_tab == 'souls' and crystalsocket then
-        crystalsocket:render(imgui)
-    elseif active_tab == 'actions' then
-        render_actions_tab(imgui)
-    elseif active_tab == 'flintlock' and flintlock then
-        flintlock:render(imgui)
-    elseif active_tab == 'mobs' and mob_status then
-        mob_status:render(imgui)
-    elseif active_tab == 'diag' then
-        render_diag_tab(imgui)
-    end
-
-    imgui.End()
-end
-
+-- Event registration (strictly verified VanaCore native events)
 if type(vana) == 'table' and vana.events then
     vana.events.on('load', function()
-        identity       = IdentityMod and IdentityMod.new(install_dir) or nil
-        actions        = ActionsMod and ActionsMod.new(install_dir, identity) or nil
-        hud            = HudMod and HudMod.new(identity) or nil
-        soulforge      = SoulforgeMod and SoulforgeMod.new() or nil
-        weapon_mastery = WeaponMasteryMod and WeaponMasteryMod.new(soulforge) or nil
-        crystalsocket  = CrystalSocketMod and CrystalSocketMod.new(identity) or nil
-        flintlock      = FlintlockMod and FlintlockMod.new(identity) or nil
-        mob_status     = MobStatusMod and MobStatusMod.new() or nil
-
-        local a_cnt, v_cnt = 0, 0
-        if actions then
-            a_cnt, v_cnt = actions:sync_to_native()
-        end
-
-        if not (vana.soulspire and type(vana.soulspire.enabled) == 'function' and vana.soulspire.enabled()) then
-            startup_report.ok = false
-            startup_report.errors[#startup_report.errors + 1] = 'vana.soulspire native subsystem disabled or unavailable'
-        end
-        if not vana.imgui then
-            startup_report.ok = false
-            startup_report.errors[#startup_report.errors + 1] = 'vana.imgui unavailable'
-        end
-
-        log_msg(string.format('Initialized v%s (startup_ok=%s, souls=%d, actions=%d, visibility=%d). Commands: /soulspire, /talents, /soulactions, /soulhud.',
-            addon.version, tostring(startup_report.ok), identity and #(identity.souls or {}) or 0, a_cnt, v_cnt))
-        if not startup_report.ok then
-            print_status()
-        end
+        init_all()
     end)
 
-    -- Real VanaCore per-frame render event is 'present' (src/core/addons.cpp kEvents[]).
     vana.events.on('present', function()
-        local now = os.clock()
-        if soulforge then
-            soulforge:tick(now)
-        end
+        local now = (vana.time and vana.time.clock and vana.time.clock()) or os.clock()
+
+        -- Native main Commands menu activation (Hooks #28-#31: Status -> Soulspire -> Equipment)
         if vana.soulspire and type(vana.soulspire.consume_open_core) == 'function' then
             if vana.soulspire.consume_open_core() > 0 then
-                toggle_hub()
+                toggle_hub(nil)
             end
         end
-        if vana.imgui then
-            if hud then hud:render(vana.imgui) end
-            if hub_open then render_hub(vana.imgui) end
+
+        -- Tick Soulforge pending-op timeout / sync recovery
+        if sf_actions and type(sf_actions.tick) == 'function' then
+            sf_actions.tick(now)
+        end
+
+        -- Tick directional hold-to-repeat when hub is open
+        local hub_open = focus ~= nil and focus:is_hub_open()
+        if hub_open then
+            acquire_native_ui_input()
+            if input and type(input.tick) == 'function' then
+                local repeats = input:tick(now)
+                if type(repeats) == 'table' then
+                    for _, act in ipairs(repeats) do
+                        focus:handle_action(act, nil)
+                    end
+                end
+            end
+        elseif ui_input_held then
+            release_native_ui_input('hub_closed')
+        end
+
+        local imgui = vana.imgui
+        if imgui then
+            if soulhud then
+                soulhud:render(imgui, hub_open)
+            end
+            if hub_open and ui then
+                ui:draw_hub()
+                if not focus:is_hub_open() then
+                    release_native_ui_input('ui_closed')
+                end
+            end
         end
     end)
 
     vana.events.on('packet_in', function(e)
         if type(e) ~= 'table' then return end
-        local data = e.data
-        if soulforge and soulforge:handle_packet_in(e.id, data) then
-            return
+        local id, data = e.id, e.data
+        if sf_actions and type(sf_actions.handlePacket) == 'function' then
+            sf_actions.handlePacket(id, data)
         end
-        if e.id == 0x00A or e.id == 0x00B then
-            if soulforge then
-                soulforge.pending_op = nil
-                soulforge.synced = false
+        if character_mod and type(character_mod.handle_packet) == 'function' then
+            character_mod:handle_packet(id, data)
+        end
+        if id == 0x00A or id == 0x00B then
+            close_hub(id == 0x00A and 'zone_in' or 'zone_out')
+            if sf_actions and type(sf_actions.onZone) == 'function' then
+                sf_actions.onZone()
             end
         end
     end)
 
-    vana.events.on('command', function(e)
-        if type(e) ~= 'table' or type(e.command) ~= 'string' then return end
-        local cmd = e.command:match('^%s*(.-)%s*$')
-        local low = string.lower(cmd)
-        if low == '/soulspire' or low == '/ss' or low == '/talents' or low == '/soulforge' then
-            toggle_hub((low == '/talents' or low == '/soulforge') and 'soulforge' or nil)
+    -- Authoritative native XInput controller routing (LB=8 / RB=9 module switching, D-Pad, A/B/X/Y, L-Stick)
+    vana.events.on('xinput_button', function(e)
+        if type(e) ~= 'table' or not focus or not focus:is_hub_open() then return false end
+        if input and type(input.on_xinput_button) == 'function' then
+            local consumed = input:on_xinput_button(e, function(act)
+                if act == 'cancel' and not (focus:active_module() and focus:active_module().controller and focus:active_module().controller.has_modal and focus:active_module().controller:has_modal()) then
+                    local handled = focus:handle_action(act, nil)
+                    if not focus:is_hub_open() then release_native_ui_input('gamepad_cancel') end
+                    return handled
+                end
+                return focus:handle_action(act, nil)
+            end, true)
+            if consumed then
+                e.blocked = true
+                return true
+            end
+        end
+        -- While Core Hub is active, consume ALL gamepad events so nothing leaks to FFXI gameplay
+        e.blocked = true
+        return true
+    end)
+
+    -- Authoritative native DirectInput controller routing (L1=4 / R1=5 module switching, POV, buttons)
+    vana.events.on('dinput_button', function(e)
+        if type(e) ~= 'table' or not focus or not focus:is_hub_open() then return false end
+        if input and type(input.on_dinput_button) == 'function' then
+            local consumed = input:on_dinput_button(e, function(act)
+                local handled = focus:handle_action(act, nil)
+                if not focus:is_hub_open() then release_native_ui_input('gamepad_cancel') end
+                return handled
+            end, true)
+            if consumed then
+                e.blocked = true
+                return true
+            end
+        end
+        e.blocked = true
+        return true
+    end)
+
+    -- Keyboard navigation while Core Hub is open (respects chat & ImGui text inputs)
+    vana.events.on('key', function(e)
+        if type(e) ~= 'table' or not focus or not focus:is_hub_open() then return false end
+        if is_chat_or_text_active() then return false end
+        local vk = tonumber(e.wparam) or 0
+        local is_down = (e.down == true) or ((tonumber(e.lparam) or 0) >= 0)
+        if not is_down then return false end
+        local vk_to_action = {
+            [0x1B] = 'cancel',      -- VK_ESCAPE
+            [0x51] = 'module_prev', -- Q
+            [0x45] = 'module_next', -- E
+            [0xDB] = 'module_prev', -- [
+            [0xDD] = 'module_next', -- ]
+            [0x26] = 'up',          -- VK_UP
+            [0x28] = 'down',        -- VK_DOWN
+            [0x25] = 'left',        -- VK_LEFT
+            [0x27] = 'right',       -- VK_RIGHT
+            [0x0D] = 'confirm',     -- VK_RETURN
+            [0x52] = 'respec_ws',   -- R
+            [0x54] = 'toggle_paths',-- T
+        }
+        local act = vk_to_action[vk]
+        if act then
+            if input then input.last_device = 'keyboard' end
+            focus:handle_action(act, nil)
+            if not focus:is_hub_open() then
+                release_native_ui_input('keyboard_cancel')
+            end
+            e.blocked = true
             return true
         end
-        if low == '/soulhud' then
-            if hud then
-                hud.visible = not hud.visible
-                log_msg('Soul HUD ' .. (hud.visible and 'shown' or 'hidden'))
+        return false
+    end)
+
+    vana.events.on('command', function(e)
+        if type(e) ~= 'table' or type(e.command) ~= 'string' then return false end
+        local cmd = e.command:match('^%s*(.-)%s*$')
+        local low = string.lower(cmd)
+
+        if low == '/soulspire' or low == '/ss' then
+            toggle_hub(nil)
+            return true
+        end
+        if low == '/talents' or low == '/soulforge' or low == '/soulspire talents' or low == '/soulspire soulforge' then
+            toggle_hub('weapon_mastery')
+            return true
+        end
+        if low == '/crystals' or low == '/soulspire character' or low == '/soulspire souls' then
+            toggle_hub('character')
+            return true
+        end
+        if low == '/soulspire soultalents' then
+            toggle_hub('soul_talents')
+            return true
+        end
+        if low == '/flintlock' or low == '/mobstatus' or low == '/soulspire diag' or low == '/soulspire diagnostics' then
+            if status_diag then
+                status_diag.subtab = (low == '/flintlock' and 'flintlock') or (low == '/mobstatus' and 'mobs') or 'diag'
             end
+            toggle_hub('journal')
+            return true
+        end
+        if low == '/soulhud' or low == '/soulspire hud' then
+            if soulhud then
+                local vis = soulhud:toggle()
+                log_msg('Soul HUD ' .. (vis and 'shown' or 'hidden'))
+            end
+            return true
+        end
+        if low == '/soulhud lock' then
+            if soulhud then soulhud:set_locked(true) log_msg('Soul HUD locked.') end
+            return true
+        end
+        if low == '/soulhud unlock' then
+            if soulhud then soulhud:set_locked(false) log_msg('Soul HUD unlocked.') end
             return true
         end
         if low == '/soulactions status' or low == '/soulactions' then
@@ -305,46 +565,45 @@ if type(vana) == 'table' and vana.events then
             print_soulactions_status(true)
             return true
         end
-        if low == '/soulactions reload' and actions then
-            local a, v = actions:sync_to_native()
-            log_msg(string.format('[soulactions] Reloaded %d actions and %d visibility rules.', a, v))
-            return true
-        end
-        local sub = low:match('^/soulspire%s+(%S+)')
-        if sub then
-            if sub == 'hud' and hud then
-                hud.visible = not hud.visible
-                log_msg('Soul HUD ' .. (hud.visible and 'shown' or 'hidden'))
-            elseif sub == 'status' then
-                print_status()
-            elseif sub == 'forge' or sub == 'talents' then
-                toggle_hub('soulforge')
-            elseif sub == 'souls' or sub == 'crystal' then
-                toggle_hub('souls')
-            elseif sub == 'actions' then
-                toggle_hub('actions')
-            elseif sub == 'flintlock' then
-                toggle_hub('flintlock')
-            elseif sub == 'mobs' then
-                toggle_hub('mobs')
-            elseif sub == 'diag' then
-                toggle_hub('diag')
-            else
-                toggle_hub()
+        if low == '/soulactions reload' then
+            if actions then
+                local a, v = actions:sync_to_native()
+                log_msg(string.format('[soulactions] Reloaded %d actions and %d visibility rules.', a, v))
             end
             return true
         end
+        if low == '/soulspire status' or low == '/ss status' then
+            print_status()
+            return true
+        end
+        if low == '/soulspire reload' or low == '/ss reload' then
+            if vana.soulspire and vana.soulspire.reload then vana.soulspire.reload() end
+            local a, v = actions and actions:sync_to_native() or 0, 0
+            log_msg(string.format('Reloaded native registries + %d actions + %d visibility rules.', a, v))
+            return true
+        end
+        return false
+    end)
+
+    vana.events.on('zone_change', function()
+        close_hub('zone_change')
+    end)
+
+    vana.events.on('logout', function()
+        close_hub('logout')
     end)
 
     vana.events.on('unload', function()
-        hub_open = false
+        close_hub('addon_unload')
+        save_core_settings()
+        if soulhud then soulhud:save() end
+        if assets then assets:release_all() end
     end)
 end
 
--- Expose test inspection hook for full-entrypoint VanaCore lifecycle regression tests.
 return {
     startup_report = startup_report,
-    is_hub_open = function() return hub_open end,
-    active_tab = function() return active_tab end,
-    get_soulforge = function() return soulforge end,
+    open_hub       = open_hub,
+    close_hub      = close_hub,
+    toggle_hub     = toggle_hub,
 }

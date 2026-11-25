@@ -1,0 +1,63 @@
+{
+  "authorityNotice": "Client presentation cache only. Server remains 100% authoritative over all ownership, eligibility, talent progression, resource costs, and combat outcomes.",
+  "contentHash": "59e26a02047c",
+  "contentVersion": "2026.11.22-66-souls-approved+cf86aa59.59e26a02047c",
+  "counts": {
+    "abilities": 547,
+    "equipmentItems": 13,
+    "souls": 66,
+    "talentTrees": 219,
+    "weaponSkills": 219
+  },
+  "entitiesVersion": "2026.11.22-phase4-complete",
+  "idLockStatus": "locked",
+  "minCompatibleSchemaVersion": 1,
+  "packages": {
+    "abilities": {
+      "file": "abilities.json",
+      "recordCount": 547,
+      "schemaVersion": 1,
+      "sha256": "bf42e6da64afd73d7ea89e0617b281fe66172fcf8870002d98a9396b5621a483",
+      "size": 194798
+    },
+    "equipment": {
+      "file": "equipment.json",
+      "recordCount": 13,
+      "schemaVersion": 1,
+      "sha256": "f7ade9a959c77f5cd4edaa7d67ea81bfc7024fe5fa9fffa30b89fcfa90127608",
+      "size": 4222
+    },
+    "souls": {
+      "file": "souls.json",
+      "recordCount": 66,
+      "schemaVersion": 1,
+      "sha256": "ec23edd88050b2bbdc4bc8db150fb5be0f680903ce79d7692cc0df672ca4d6ef",
+      "size": 128976
+    },
+    "talents": {
+      "file": "talents.json",
+      "recordCount": 219,
+      "schemaVersion": 1,
+      "sha256": "c56bc02cf7b043d11f39f7e232b8b5e8c14f4878d1dff1ddb2dc32117a40d650",
+      "size": 6838898
+    },
+    "ui_metadata": {
+      "file": "ui_metadata.json",
+      "recordCount": 6,
+      "schemaVersion": 1,
+      "sha256": "9adf2b9f86b7193d9fc7e1b3274b48a8489fc6de633f2a0b781e0fcc895c4f0f",
+      "size": 9751
+    },
+    "weapon_skills": {
+      "file": "weapon_skills.json",
+      "recordCount": 219,
+      "schemaVersion": 1,
+      "sha256": "b187f33859d44a0794224d261d22df5382bee327efab90b3b9aa2ad55861d768",
+      "size": 132641
+    }
+  },
+  "protocolVersion": 2,
+  "registryHash": "cf86aa59ff8d16c6",
+  "registryVersion": "2026.11.22-66-souls-approved",
+  "schemaVersion": 1
+}

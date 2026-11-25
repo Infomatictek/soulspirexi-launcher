@@ -6,7 +6,8 @@ public enum ClientEngineMode
 {
     Classic = 0,
     ModernBaseline = 1,
-    ModernCompat = 2
+    ModernCompat = 2,
+    ModernNative = 3
 }
 
 public enum WindowModeOption

@@ -398,6 +398,79 @@ public sealed class ModernClientInstallService
         return copied;
     }
 
+    /// <summary>
+    /// Prepares the isolated ModernClient\native\ profile for the pure VanaCore-native Soulspire Core.
+    /// Copies ONLY the single unified VanaCore addon (addons\vanacore\soulspire_core\), authoritative
+    /// registry/action data, visual artwork assets, and Pivot DAT overlays — NEVER copies soulspire_native.dll
+    /// or any Ashita compatibility addons.
+    /// </summary>
+    public static int SyncNativeOverlayFromAshita(string ashitaDir, string nativeDir)
+    {
+        if (string.IsNullOrWhiteSpace(ashitaDir) || !Directory.Exists(ashitaDir))
+        {
+            return 0;
+        }
+
+        var copied = 0;
+
+        // 1. Authoritative JSON data only (zero soulspire_native.dll)
+        var srcPluginData = Path.Combine(ashitaDir, "plugins", "data");
+        if (Directory.Exists(srcPluginData))
+        {
+            copied += CopyDirectoryContents(srcPluginData, Path.Combine(nativeDir, "data"));
+        }
+
+        // 2. Single unified VanaCore-native addon + self-contained data & visual artwork
+        var srcVanaCoreAddon = Path.Combine(ashitaDir, "addons", "vanacore", "soulspire_core");
+        if (Directory.Exists(srcVanaCoreAddon))
+        {
+            var destVanaCoreAddon = Path.Combine(nativeDir, "addons", "vanacore", "soulspire_core");
+            copied += CopyDirectoryContents(srcVanaCoreAddon, destVanaCoreAddon, preserveExistingSettings: true);
+
+            var destDataDir = Path.Combine(destVanaCoreAddon, "data");
+            Directory.CreateDirectory(destDataDir);
+            var srcActionsData = Path.Combine(ashitaDir, "addons", "soulspire_soul_actions", "data");
+            if (Directory.Exists(srcActionsData))
+            {
+                copied += CopyDirectoryContents(srcActionsData, destDataDir);
+            }
+            var srcIdentities = Path.Combine(ashitaDir, "plugins", "data", "soul-identities.json");
+            if (File.Exists(srcIdentities))
+            {
+                File.Copy(srcIdentities, Path.Combine(destDataDir, "soul-identities.json"), overwrite: true);
+                copied++;
+            }
+
+            // Bundle polished Soulforge, CrystalSocket, and Soul HUD artwork PNGs directly under soulspire_core\assets\
+            var destAssets = Path.Combine(destVanaCoreAddon, "assets");
+            foreach (var (srcRel, destSub) in new[]
+                     {
+                         (Path.Combine("addons", "soulspire_talents", "assets"), "soulspire_talents"),
+                         (Path.Combine("addons", "crystalsocket", "assets"), "crystalsocket"),
+                         (Path.Combine("addons", "soulspire_soulhud", "assets", "status_icons"), "status_icons"),
+                     })
+            {
+                var srcArt = Path.Combine(ashitaDir, srcRel);
+                if (Directory.Exists(srcArt))
+                {
+                    copied += CopyDirectoryContents(srcArt, Path.Combine(destAssets, destSub));
+                }
+            }
+        }
+
+        // 3. Pivot DAT overlays
+        foreach (var overlay in new[] { AshitaConfigGenerator.OverlayFolderName, AshitaConfigGenerator.FlintlockOverlayFolderName })
+        {
+            var srcOverlay = Path.Combine(ashitaDir, "polplugins", "DATs", overlay);
+            if (Directory.Exists(srcOverlay))
+            {
+                copied += CopyDirectoryContents(srcOverlay, Path.Combine(nativeDir, "pivot", overlay));
+            }
+        }
+
+        return copied;
+    }
+
     private static int CopyDirectoryContents(string sourceDir, string targetDir, bool preserveExistingSettings = false)
     {
         var count = 0;

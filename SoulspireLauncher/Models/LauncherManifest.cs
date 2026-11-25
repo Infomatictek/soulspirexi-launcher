@@ -424,6 +424,9 @@ public sealed class ManifestModernClient
     [JsonPropertyName("compat")]
     public ManifestModernClientPackage? Compat { get; set; }
 
+    [JsonPropertyName("native")]
+    public ManifestModernClientPackage? Native { get; set; }
+
     public ManifestModernClientPackage? ResolvePackage(ClientEngineMode mode)
     {
         if (mode == ClientEngineMode.ModernBaseline && Baseline is not null)
@@ -431,17 +434,27 @@ public sealed class ManifestModernClient
             return Baseline;
         }
 
+        if (mode == ClientEngineMode.ModernNative && (Native ?? Compat) is not null)
+        {
+            return Native ?? Compat;
+        }
+
         if (mode == ClientEngineMode.ModernCompat && Compat is not null)
         {
             return Compat;
         }
 
-        if (mode is ClientEngineMode.ModernBaseline or ClientEngineMode.ModernCompat &&
+        if (mode is ClientEngineMode.ModernBaseline or ClientEngineMode.ModernCompat or ClientEngineMode.ModernNative &&
             (!string.IsNullOrWhiteSpace(PackageUrl) || !string.IsNullOrWhiteSpace(Version) || ExperimentalEligible || ClientVerified))
         {
             return new ManifestModernClientPackage
             {
-                Profile = mode == ClientEngineMode.ModernCompat ? "compat" : "baseline",
+                Profile = mode switch
+                {
+                    ClientEngineMode.ModernNative => "native",
+                    ClientEngineMode.ModernCompat => "compat",
+                    _ => "baseline"
+                },
                 Version = Version,
                 UpstreamCommit = UpstreamCommit,
                 PackageUrl = PackageUrl,

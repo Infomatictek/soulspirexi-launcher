@@ -1113,14 +1113,16 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     [
         ClientEngineMode.Classic,
         ClientEngineMode.ModernBaseline,
-        ClientEngineMode.ModernCompat
+        ClientEngineMode.ModernCompat,
+        ClientEngineMode.ModernNative
     ];
 
     public bool CanSelectModernEngine =>
         IsTestingChannel ||
         _manifest.ModernClient?.ClientVerified == true ||
         _manifest.ModernClient?.Baseline?.ClientVerified == true ||
-        _manifest.ModernClient?.Compat?.ClientVerified == true;
+        _manifest.ModernClient?.Compat?.ClientVerified == true ||
+        _manifest.ModernClient?.Native?.ClientVerified == true;
 
     public ClientEngineMode SelectedClientEngine
     {
@@ -1144,6 +1146,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 {
                     ClientEngineMode.ModernBaseline => "Selected Modern — VanaCore Baseline (Experimental) in isolated ModernClient\\baseline folder.",
                     ClientEngineMode.ModernCompat => "Selected Modern — Soulspire Compatibility (Experimental) in isolated ModernClient\\compat folder.",
+                    ClientEngineMode.ModernNative => "Selected Modern — Soulspire Native (Experimental, zero Ashita compat) in isolated ModernClient\\native folder.",
                     _ => "Selected Classic — Ashita v4 client engine."
                 });
             }
@@ -2268,6 +2271,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                     var syncedCompat = ModernClientInstallService.SyncCompatibilityOverlayFromAshita(_settings.AshitaPath, profileDir);
                     Log($"Prepared isolated Modern Compatibility overlay ({syncedCompat} files copied; Classic Ashita untouched).");
                 }
+                else if (effectiveEngine == ClientEngineMode.ModernNative)
+                {
+                    StatusMessage = "Syncing pure VanaCore-native Soulspire Core, assets & Pivot overlays into isolated Modern native folder...";
+                    var syncedNative = ModernClientInstallService.SyncNativeOverlayFromAshita(_settings.AshitaPath, profileDir);
+                    Log($"Prepared isolated Modern Native overlay ({syncedNative} files copied; zero Ashita addons or legacy DLLs).");
+                }
 
                 StatusMessage = "Auto-detecting FFXI & PlayOnline paths and generating VanaCore config...";
                 var diag = _detector.Inspect(_settings, _manifest);
@@ -2297,9 +2306,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                     string.IsNullOrWhiteSpace(ffxiDir) ? null : ffxiDir);
                 _perfDiag.RecordSpan(IsPerfDiagActive, "config_write", cfgSwModern, true, "complete", "client_only");
 
-                var engineLabel = effectiveEngine == ClientEngineMode.ModernBaseline
-                    ? "Modern — VanaCore Baseline"
-                    : "Modern — Soulspire Compatibility";
+                var engineLabel = effectiveEngine switch
+                {
+                    ClientEngineMode.ModernBaseline => "Modern — VanaCore Baseline",
+                    ClientEngineMode.ModernNative => "Modern — Soulspire Native",
+                    _ => "Modern — Soulspire Compatibility"
+                };
                 StatusMessage = $"Launching {engineLabel} -> {plan.DisplayHost} (secure --password-stdin)...";
                 Log(StatusMessage);
                 var launchSwModern = PerformanceDiagnosticsService.StartSpanIfEnabled(IsPerfDiagActive);
@@ -2912,6 +2924,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             if (effectiveEngine == ClientEngineMode.ModernCompat)
             {
                 ModernClientInstallService.SyncCompatibilityOverlayFromAshita(_settings.AshitaPath, profileDir);
+            }
+            else if (effectiveEngine == ClientEngineMode.ModernNative)
+            {
+                ModernClientInstallService.SyncNativeOverlayFromAshita(_settings.AshitaPath, profileDir);
             }
 
             StatusMessage = result.Downloaded

@@ -163,6 +163,7 @@ public sealed class ClientEngineToLabelConverter : IValueConverter
             {
                 ClientEngineMode.ModernBaseline => "Modern — VanaCore Baseline (Experimental)",
                 ClientEngineMode.ModernCompat => "Modern — Soulspire Compatibility (Experimental)",
+                ClientEngineMode.ModernNative => "Modern — Soulspire Native (Experimental)",
                 _ => "Classic — Ashita v4 (Default)"
             }
             : value?.ToString() ?? string.Empty;

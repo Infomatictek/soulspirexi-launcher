@@ -405,6 +405,62 @@ public sealed class ModernClientIntegrationTests
         }
     }
 
+    [Fact]
+    public void ModernNative_Profile_DisablesAshitaCompat_And_LoadsSingleUnifiedAddon()
+    {
+        var settings = new LauncherSettings
+        {
+            UpdateChannel = UpdateChannel.Testing,
+            ClientEngine = ClientEngineMode.ModernNative,
+            Username = "offset",
+            EnablePivotOverlay = true
+        };
+
+        var folder = ModernClientConfigGenerator.GetProfileFolderName(ClientEngineMode.ModernNative);
+        Assert.Equal("native", folder);
+        Assert.True(ModernClientConfigGenerator.IsModernEngine(ClientEngineMode.ModernNative));
+
+        var ini = ModernClientConfigGenerator.BuildIniContent(settings, ClientEngineMode.ModernNative, "play.soulspirexi.com", null, null);
+        Assert.Contains("[soulspire]", ini);
+        Assert.Contains("enabled=1", ini);
+        Assert.Contains("ashita.enabled=0", ini);
+        Assert.Contains("singlemenu=0", ini);
+
+        var boot = ModernClientConfigGenerator.BuildBootScriptContent(settings, ClientEngineMode.ModernNative);
+        Assert.Contains("/addon load soulspire_core vanacore", boot);
+        Assert.DoesNotContain("ashita", boot, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("soulspire_native", boot, StringComparison.OrdinalIgnoreCase);
+
+        // Verify SyncNativeOverlayFromAshita copies ONLY VanaCore-native addon + data + artwork (zero Ashita addons or DLLs)
+        var root = Path.Combine(Path.GetTempPath(), $"sxi-native-overlay-{Guid.NewGuid():N}");
+        var ashitaDir = Path.Combine(root, "Ashita");
+        var nativeDir = Path.Combine(root, "ModernClient", "native");
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(ashitaDir, "plugins", "data"));
+            File.WriteAllText(Path.Combine(ashitaDir, "plugins", "soulspire_native.dll"), "legacy-dll");
+            File.WriteAllText(Path.Combine(ashitaDir, "plugins", "data", "soul-identities.json"), "{\"souls\":[]}");
+            Directory.CreateDirectory(Path.Combine(ashitaDir, "addons", "vanacore", "soulspire_core"));
+            File.WriteAllText(Path.Combine(ashitaDir, "addons", "vanacore", "soulspire_core", "soulspire_core.lua"), "-- native");
+            Directory.CreateDirectory(Path.Combine(ashitaDir, "addons", "soulspire_core"));
+            File.WriteAllText(Path.Combine(ashitaDir, "addons", "soulspire_core", "soulspire_core.lua"), "-- ashita");
+
+            var copied = ModernClientInstallService.SyncNativeOverlayFromAshita(ashitaDir, nativeDir);
+            Assert.True(copied >= 2);
+            Assert.True(File.Exists(Path.Combine(nativeDir, "addons", "vanacore", "soulspire_core", "soulspire_core.lua")));
+            Assert.True(File.Exists(Path.Combine(nativeDir, "data", "soul-identities.json")));
+            Assert.False(File.Exists(Path.Combine(nativeDir, "plugins", "ashita", "soulspire_native.dll")));
+            Assert.False(Directory.Exists(Path.Combine(nativeDir, "addons", "ashita")));
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     private static byte[] BuildStubModernZipBytes(string exeBody, string coreBody)
     {
         using var ms = new MemoryStream();

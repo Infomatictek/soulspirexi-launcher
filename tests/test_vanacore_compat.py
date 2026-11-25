@@ -147,6 +147,68 @@ class VanaCoreCompatibilityTests(unittest.TestCase):
         core = (REPO_ROOT / "addons" / "ashita4" / "soulspire_core" / "soulspire_core.lua").read_text(encoding="utf-8")
         self.assertIn("'[OXMOB]|'", core)
 
+    def test_full_vanacore_native_soulspire_core_has_zero_ashita_dependencies_and_polished_parity(self):
+        vc_root = REPO_ROOT / "addons" / "vanacore" / "soulspire_core"
+        # Polished UI, Soul Sanctum, Soulforge Constellation, 66-Soul HUD, and Core artwork must all be present
+        required_files = [
+            "soulspire_core.lua",
+            "core/ui.lua",
+            "core/foundations.lua",
+            "core/theme.lua",
+            "core/focus.lua",
+            "core/input.lua",
+            "core/registry.lua",
+            "core/assets.lua",
+            "core/soulhud_bridge.lua",
+            "modules/character.lua",
+            "modules/weapon_mastery.lua",
+            "modules/soul_talents.lua",
+            "modules/abilities.lua",
+            "modules/status_and_diag.lua",
+            "soulforge/soulforge_state.lua",
+            "soulforge/soulforge_ui.lua",
+            "soulforge/premium_ui.lua",
+            "soulforge/art.lua",
+            "soulforge/ws_registry_generated.lua",
+            "soulhud/soulhud_layout.lua",
+            "soulhud/soulhud_gauge.lua",
+            "soulhud/soulhud_roster_generated.lua",
+            "soulhud/ox_icons.lua",
+            "assets/soulspire_crest.png",
+            "assets/soulforge_backdrop.png",
+            "assets/character_chamber_bg.png",
+        ]
+        for rel in required_files:
+            self.assertTrue((vc_root / rel).is_file(), f"Missing VanaCore-native parity asset/module: {rel}")
+
+        # Zero Ashita / d3d8 / legacy DLL calls anywhere in addons/vanacore/soulspire_core/ (excluding tests/)
+        forbidden_tokens = [
+            "AshitaCore:",
+            "AshitaCore.",
+            "ashita.events.",
+            "ashita.memory.",
+            "ashita.packets.",
+            "ashita.fs.",
+            "ashita.time.",
+            "require('d3d8')",
+            'require("d3d8")',
+            "D3DXCreateTexture",
+            "GetModuleHandleA('soulspire_native.dll')",
+            "GetModuleHandleA('crystaljobs.dll')",
+        ]
+        for lua_file in vc_root.rglob("*.lua"):
+            if "tests" in lua_file.parts:
+                continue
+            text = lua_file.read_text(encoding="utf-8", errors="replace")
+            for tok in forbidden_tokens:
+                self.assertNotIn(tok, text, f"Forbidden Ashita/legacy token '{tok}' found in {lua_file.relative_to(REPO_ROOT)}")
+
+        # ModernNative profile must disable Ashita compat & load exactly one unified VanaCore addon
+        mcg = (REPO_ROOT / "SoulspireLauncher" / "Services" / "ModernClientConfigGenerator.cs").read_text(encoding="utf-8")
+        self.assertIn("ClientEngineMode.ModernNative", mcg)
+        self.assertIn("ashita.enabled={(isNative ? 0 : 1)}", mcg)
+        self.assertIn("/addon load soulspire_core vanacore", mcg)
+
 
 if __name__ == "__main__":
     unittest.main()
