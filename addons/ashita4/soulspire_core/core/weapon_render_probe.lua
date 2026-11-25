@@ -14,7 +14,9 @@
 
 local M = {}
 
-M.SCHEMA_VERSION        = 2
+M.SCHEMA_VERSION        = 3
+M.PROBE_VERSION         = 'v19'
+M.PROBE_SOURCE_COMMIT   = '2.2.0-testing.19'
 M.EXPECTED_TIMESTAMP    = 0x6AE818B4
 M.EXPECTED_IMAGE_SIZE   = 0x00C17000
 M.NORMALIZED_IMAGE_BASE = 0x10000000
@@ -23,15 +25,93 @@ M.WINDOW_AFTER          = 192
 M.MAX_MATCHES_PER_RULE  = 24
 M.MAX_SNAPSHOTS         = 12
 
--- Accumulated in-memory comparative snapshots for the active developer session.
+local function resolve_loaded_lua_path()
+    if type(debug) == 'table' and type(debug.getinfo) == 'function' then
+        local info = debug.getinfo(1, 'S')
+        if info and type(info.source) == 'string' and info.source ~= '' then
+            local src = info.source
+            if src:sub(1, 1) == '@' then
+                src = src:sub(2)
+            end
+            return src
+        end
+    end
+    return 'unknown'
+end
+
+M.LOADED_LUA_PATH = resolve_loaded_lua_path()
+
+-- Accumulated in-memory comparative snapshots and monotonic capture sequence for the active developer session.
 local comparative_snapshots = {}
+local capture_seq = 0
+local last_utc_stamp = ''
+local same_second_seq = 0
 
 function M.clear_snapshots()
+    local prev = #comparative_snapshots
     comparative_snapshots = {}
+    return {
+        cleared_count   = prev,
+        probe_version   = M.PROBE_VERSION,
+        loaded_lua_path = M.LOADED_LUA_PATH,
+    }
 end
 
 function M.snapshot_count()
     return #comparative_snapshots
+end
+
+-- Read-only lookup of <AshitaPath>/.soulspire-state.json written by SoulspireLauncher.
+function M.read_launcher_state(ashita_root_dir)
+    if type(ashita_root_dir) ~= 'string' or ashita_root_dir == '' then
+        return { manifest_version = 'unavailable', channel = 'unavailable', state_path = '' }
+    end
+    local sep = ashita_root_dir:find('\\', 1, true) and '\\' or '/'
+    local clean_root = ashita_root_dir:gsub('[/\\]+$', '')
+    local state_path = clean_root .. sep .. '.soulspire-state.json'
+    local f = io.open(state_path, 'rb')
+    if not f then
+        return { manifest_version = 'unavailable', channel = 'unavailable', state_path = state_path }
+    end
+    local body = f:read('*a') or ''
+    f:close()
+    local mver = body:match('"[Mm]anifestVersion"%s*:%s*"([^"]*)"')
+    local chan = body:match('"[Cc]hannel"%s*:%s*"([^"]*)"')
+    return {
+        manifest_version = (mver and mver ~= '') and mver or 'unavailable',
+        channel          = (chan and chan ~= '') and chan or 'unavailable',
+        state_path       = state_path,
+    }
+end
+
+-- Read-only query of active Soulspire Native DLL version/hook/capability summary.
+function M.query_native_dll_version()
+    local ok_nb, NativeBridge = pcall(require, 'core.native_bridge')
+    if not (ok_nb and type(NativeBridge) == 'table') then
+        return 'unavailable'
+    end
+    if type(NativeBridge.get_interface_info) == 'function' then
+        local ok_ii, ii = pcall(NativeBridge.get_interface_info)
+        if ok_ii and type(ii) == 'table' and ii.abi_version then
+            return string.format('abi=v%d hooks=%d/%d caps=0x%X',
+                tonumber(ii.abi_version) or 0,
+                tonumber(ii.installed_hooks) or 0,
+                tonumber(ii.expected_hooks) or 0,
+                tonumber(ii.capabilities) or 0)
+        end
+    end
+    return 'unavailable'
+end
+
+-- Build a uniquely named report path in output_dir:
+--   soul-weapon-render-probe-<probeVersion>-<YYYYMMDD-HHMMSS>[-NN].json
+function M.build_unique_output_path(output_dir, probe_version, utc_file_stamp, same_sec_idx)
+    local sep = output_dir:find('\\', 1, true) and '\\' or '/'
+    local clean_dir = output_dir:gsub('[/\\]+$', '')
+    local ver = tostring(probe_version or M.PROBE_VERSION):gsub('[^%w_%-]', '')
+    local stamp = tostring(utc_file_stamp or os.date('!%Y%m%d-%H%M%S'))
+    local suffix = (same_sec_idx and same_sec_idx > 1) and string.format('-%02d', same_sec_idx) or ''
+    return string.format('%s%ssoul-weapon-render-probe-%s-%s%s.json', clean_dir, sep, ver, stamp, suffix)
 end
 
 -- Subset of already-verified layout.h RVAs (TS=0x6AE818B4) used strictly as
@@ -691,6 +771,7 @@ function M.scan_text_buffer(text_bytes, text_rva, pe_info, actor_summary, extra_
 
     return {
         schema_version        = M.SCHEMA_VERSION,
+        provenance            = extra_opts.provenance,
         scope                 = 'narrow_text_code_windows_and_non_pii_actor_comparative_diff',
         normalized_image_base = string.format('0x%08X', M.NORMALIZED_IMAGE_BASE),
         pe                    = pe_info,
@@ -709,6 +790,30 @@ function M.serialize_report_json(report)
     local lines = {}
     lines[#lines + 1] = '{'
     lines[#lines + 1] = ('  "schemaVersion": %d,'):format(report.schema_version)
+    local prov = report.provenance or {}
+    lines[#lines + 1] = '  "provenance": {'
+    lines[#lines + 1] = ('    "captureId": "%s",'):format(json_escape(prov.capture_id or ''))
+    lines[#lines + 1] = ('    "generatedAtUtc": "%s",'):format(json_escape(prov.generated_at_utc or ''))
+    lines[#lines + 1] = ('    "probeVersion": "%s",'):format(json_escape(prov.probe_version or M.PROBE_VERSION))
+    lines[#lines + 1] = ('    "probeSourceCommit": "%s",'):format(json_escape(prov.probe_source_commit or M.PROBE_SOURCE_COMMIT))
+    lines[#lines + 1] = ('    "loadedLuaPath": "%s",'):format(json_escape(prov.loaded_lua_path or M.LOADED_LUA_PATH))
+    lines[#lines + 1] = ('    "activeLauncherManifestVersion": "%s",'):format(json_escape(prov.active_launcher_manifest_version or 'unavailable'))
+    lines[#lines + 1] = ('    "activeLauncherChannel": "%s",'):format(json_escape(prov.active_launcher_channel or 'unavailable'))
+    lines[#lines + 1] = ('    "nativeDllVersion": "%s",'):format(json_escape(prov.native_dll_version or 'unavailable'))
+    local labels_out = {}
+    for _, lbl in ipairs(prov.capture_labels or {}) do
+        labels_out[#labels_out + 1] = '"' .. json_escape(lbl) .. '"'
+    end
+    lines[#lines + 1] = ('    "captureLabels": [%s],'):format(table.concat(labels_out, ', '))
+    local req_sec = prov.required_diagnostic_sections or {}
+    local sec_out = {}
+    for _, sec in ipairs(req_sec) do
+        sec_out[#sec_out + 1] = ('{"id": "%s", "present": %s, "count": %d}'):format(
+            json_escape(sec.id or ''), sec.present and 'true' or 'false', tonumber(sec.count) or 0)
+    end
+    lines[#lines + 1] = ('    "requiredDiagnosticSections": [%s],'):format(table.concat(sec_out, ', '))
+    lines[#lines + 1] = ('    "outputPath": "%s"'):format(json_escape(prov.output_path or ''))
+    lines[#lines + 1] = '  },'
     lines[#lines + 1] = ('  "scope": "%s",'):format(json_escape(report.scope))
     lines[#lines + 1] = ('  "normalizedImageBase": "%s",'):format(json_escape(report.normalized_image_base))
     local pe = report.pe or {}
@@ -1147,6 +1252,39 @@ function M.run_live_probe(opts)
     end
     local comp_diff = M.compute_comparative_diff(comparative_snapshots)
 
+    -- Compute unique capture ID, UTC timestamps, and uniquely named output path.
+    capture_seq = capture_seq + 1
+    local utc_iso = (type(opts.utc_iso_override) == 'string' and opts.utc_iso_override ~= '')
+        and opts.utc_iso_override or os.date('!%Y-%m-%dT%H:%M:%SZ')
+    local utc_file_stamp = (type(opts.utc_file_stamp_override) == 'string' and opts.utc_file_stamp_override ~= '')
+        and opts.utc_file_stamp_override or os.date('!%Y%m%d-%H%M%S')
+    if utc_file_stamp == last_utc_stamp then
+        same_second_seq = same_second_seq + 1
+    else
+        last_utc_stamp = utc_file_stamp
+        same_second_seq = 1
+    end
+    local capture_id = string.format('wpr-%s-%s-%03d', M.PROBE_VERSION, utc_file_stamp, capture_seq)
+
+    local final_output_path = ''
+    if type(opts.output_dir) == 'string' and opts.output_dir ~= '' then
+        final_output_path = M.build_unique_output_path(opts.output_dir, M.PROBE_VERSION, utc_file_stamp, same_second_seq)
+    elseif type(opts.output_path) == 'string' and opts.output_path ~= '' then
+        final_output_path = opts.output_path
+    end
+
+    local launcher_state = (type(opts.launcher_state_override) == 'table')
+        and opts.launcher_state_override
+        or M.read_launcher_state(opts.ashita_root_dir)
+    local native_dll_ver = (type(opts.native_dll_version_override) == 'string' and opts.native_dll_version_override ~= '')
+        and opts.native_dll_version_override
+        or M.query_native_dll_version()
+
+    local capture_labels = {}
+    for _, sn in ipairs(comparative_snapshots) do
+        capture_labels[#capture_labels + 1] = sn.label
+    end
+
     local report, serr = M.scan_text_buffer(text_bytes, pe_info.text_rva, pe_info, actor_summary, {
         rdata_bytes           = rdata_bytes,
         rdata_rva             = pe_info.rdata_rva,
@@ -1160,16 +1298,75 @@ function M.run_live_probe(opts)
         return false, serr
     end
 
+    local findings_by_id = {}
+    for _, f in ipairs(report.findings or {}) do
+        findings_by_id[f.id] = f
+    end
+    local has_model_part0 = false
+    for _, sn in ipairs(comparative_snapshots) do
+        for _, sm in ipairs(sn.sub_model_slots or {}) do
+            if sm.offset == '0x6B8_modelPart0' then
+                has_model_part0 = true
+                break
+            end
+        end
+    end
+    local required_sections = {
+        {
+            id      = 'attach_equip_model_downstream_slices',
+            present = findings_by_id.attach_equip_model_downstream_slices ~= nil,
+            count   = (findings_by_id.attach_equip_model_downstream_slices and findings_by_id.attach_equip_model_downstream_slices.match_count) or 0,
+        },
+        {
+            id      = 'pc_equip_model_loader_slice',
+            present = findings_by_id.pc_equip_model_loader_slice ~= nil,
+            count   = (findings_by_id.pc_equip_model_loader_slice and findings_by_id.pc_equip_model_loader_slice.match_count) or 0,
+        },
+        {
+            id      = 'actor_vtable_methods',
+            present = findings_by_id.actor_vtable_methods ~= nil,
+            count   = (findings_by_id.actor_vtable_methods and findings_by_id.actor_vtable_methods.match_count) or 0,
+        },
+        {
+            id      = 'comparativeSnapshots',
+            present = #comparative_snapshots > 0,
+            count   = #comparative_snapshots,
+        },
+        {
+            id      = 'modelPart0Inspection',
+            present = has_model_part0,
+            count   = has_model_part0 and 1 or 0,
+        },
+    }
+
+    report.provenance = {
+        capture_id                       = capture_id,
+        generated_at_utc                 = utc_iso,
+        probe_version                    = M.PROBE_VERSION,
+        probe_source_commit              = M.PROBE_SOURCE_COMMIT,
+        loaded_lua_path                  = M.LOADED_LUA_PATH,
+        active_launcher_manifest_version = launcher_state.manifest_version or 'unavailable',
+        active_launcher_channel          = launcher_state.channel or 'unavailable',
+        native_dll_version               = native_dll_ver,
+        capture_labels                   = capture_labels,
+        required_diagnostic_sections     = required_sections,
+        output_path                      = final_output_path,
+    }
+
     local json_text = M.serialize_report_json(report)
-    if type(opts.output_path) == 'string' and opts.output_path ~= '' then
-        local f, ferr = io.open(opts.output_path, 'wb')
+    if final_output_path ~= '' then
+        local f, ferr = io.open(final_output_path, 'wb')
         if not f then
             return false, 'failed to write probe report: ' .. tostring(ferr)
         end
-        f:write(json_text)
+        local wok, werr = f:write(json_text)
+        f:flush()
         f:close()
+        if not wok then
+            return false, 'failed to write probe report bytes: ' .. tostring(werr)
+        end
     end
-    return true, report, opts.output_path
+    return true, report, final_output_path
 end
 
 return M

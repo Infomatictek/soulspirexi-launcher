@@ -159,6 +159,91 @@ do
     assert(san_words[0x764] == 'rva:0xC5190', 'module pointer must normalize to RVA')
     assert(san_words[0x814] == 'ptr:nonnull', 'raw heap pointer must never be emitted')
     Probe.clear_snapshots()
+
+    -- 4. Mandatory diagnostic provenance, unique report filenames, .soulspire-state.json parsing, and probe clear isolation.
+    local tmp_dir = '/tmp/soulspire_probe_prov_test'
+    os.execute('rm -rf ' .. tmp_dir .. ' && mkdir -p ' .. tmp_dir)
+    local sf = assert(io.open(tmp_dir .. '/.soulspire-state.json', 'wb'))
+    sf:write('{"Channel":"testing","ManifestVersion":"2.2.0-testing.19","LastSyncedUtc":"2026-11-25T05:00:00Z"}')
+    sf:close()
+
+    local lst = Probe.read_launcher_state(tmp_dir)
+    assert(lst.manifest_version == '2.2.0-testing.19', 'expected parsed ManifestVersion')
+    assert(lst.channel == 'testing', 'expected parsed Channel')
+
+    local ok_p1, rep_p1, path_p1 = Probe.run_live_probe({
+        diagnostics_enabled = true,
+        memory = mock_mem,
+        module_base = 0x77000000,
+        output_dir = tmp_dir,
+        ashita_root_dir = tmp_dir,
+        native_dll_version_override = 'abi=v2 hooks=32/32 caps=0x37FFF',
+        utc_iso_override = '2026-11-25T05:10:00Z',
+        utc_file_stamp_override = '20261125-051000',
+        label = 'dual_1h_ref',
+        actor_summary = { race_id = 2, look_main = 0x605A, look_sub = 0x704C, status_id = 0, has_render_ptr = true },
+    })
+    assert(ok_p1 == true and type(rep_p1) == 'table', 'provenance probe 1 must succeed')
+    assert(path_p1 == (tmp_dir .. '/soul-weapon-render-probe-' .. Probe.PROBE_VERSION .. '-20261125-051000.json'),
+        'expected unique timestamped filename, got: ' .. tostring(path_p1))
+
+    -- Same-second second capture must generate a distinct filename (-02) and distinct captureId.
+    local ok_p2, rep_p2, path_p2 = Probe.run_live_probe({
+        diagnostics_enabled = true,
+        memory = mock_mem,
+        module_base = 0x77000000,
+        output_dir = tmp_dir,
+        ashita_root_dir = tmp_dir,
+        native_dll_version_override = 'abi=v2 hooks=32/32 caps=0x37FFF',
+        utc_iso_override = '2026-11-25T05:10:00Z',
+        utc_file_stamp_override = '20261125-051000',
+        label = 'dual_ga_hook32',
+        actor_summary = { race_id = 2, look_main = 0x625B, look_sub = 0x705F, status_id = 0, has_render_ptr = true },
+    })
+    assert(ok_p2 == true and path_p2 ~= path_p1, 'second capture must write a uniquely named file')
+    assert(path_p2 == (tmp_dir .. '/soul-weapon-render-probe-' .. Probe.PROBE_VERSION .. '-20261125-051000-02.json'),
+        'expected -02 collision suffix, got: ' .. tostring(path_p2))
+    assert(rep_p2.provenance.capture_id ~= rep_p1.provenance.capture_id, 'captureId must be unique per run')
+
+    -- Verify file on disk contains all 10 mandatory provenance fields and required sections.
+    local rf = assert(io.open(path_p2, 'rb'))
+    local disk_json = rf:read('*a')
+    rf:close()
+    for _, key in ipairs({
+        '"provenance"',
+        '"captureId"',
+        '"generatedAtUtc": "2026-11-25T05:10:00Z"',
+        '"probeVersion": "' .. Probe.PROBE_VERSION .. '"',
+        '"probeSourceCommit": "' .. Probe.PROBE_SOURCE_COMMIT .. '"',
+        '"loadedLuaPath"',
+        '"activeLauncherManifestVersion": "2.2.0-testing.19"',
+        '"nativeDllVersion": "abi=v2 hooks=32/32 caps=0x37FFF"',
+        '"captureLabels": ["dual_1h_ref", "dual_ga_hook32"]',
+        '"requiredDiagnosticSections"',
+        '"attach_equip_model_downstream_slices"',
+        '"outputPath": "' .. path_p2 .. '"',
+    }) do
+        assert(disk_json:find(key, 1, true) ~= nil, 'missing mandatory provenance key/value on disk: ' .. key)
+    end
+
+    -- Verify probe clear removes all previous comparative snapshots completely.
+    local clr = Probe.clear_snapshots()
+    assert(clr.cleared_count == 2 and Probe.snapshot_count() == 0, 'clear_snapshots must remove all prior snapshots')
+    local ok_p3, rep_p3 = Probe.run_live_probe({
+        diagnostics_enabled = true,
+        memory = mock_mem,
+        module_base = 0x77000000,
+        output_dir = tmp_dir,
+        ashita_root_dir = tmp_dir,
+        utc_iso_override = '2026-11-25T05:10:05Z',
+        utc_file_stamp_override = '20261125-051005',
+        label = 'fresh_only',
+        actor_summary = { race_id = 2, look_main = 0x605F, look_sub = 0x705E, status_id = 0, has_render_ptr = true },
+    })
+    assert(ok_p3 == true and #rep_p3.provenance.capture_labels == 1 and rep_p3.provenance.capture_labels[1] == 'fresh_only',
+        'after clear, captureLabels must contain ONLY the new label')
+    os.execute('rm -rf ' .. tmp_dir)
+    Probe.clear_snapshots()
 end
 
 print('weapon_render_probe_test: ALL PASSED')

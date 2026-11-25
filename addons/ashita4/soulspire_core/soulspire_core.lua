@@ -95,9 +95,12 @@ ashita.events.register('load', 'soulspire_core_load', function()
     if type(addon.path) == 'string' and addon.path ~= '' then
         local sep = addon.path:find('\\', 1, true) and '\\' or '/'
         local base_dir = addon.path:gsub('[/\\]+$', '')
-        local data_dir = base_dir .. sep .. '..' .. sep .. '..' .. sep .. 'plugins' .. sep .. 'data' .. sep
+        local ashita_root = base_dir .. sep .. '..' .. sep .. '..'
+        local data_dir = ashita_root .. sep .. 'plugins' .. sep .. 'data' .. sep
+        weapon_pres.ashita_root_dir = ashita_root
         weapon_pres.config_path = data_dir .. 'soul-weapon-config.json'
         weapon_pres.calibration_path = data_dir .. 'soul-weapon-calibration.local.json'
+        weapon_pres.probe_output_dir = data_dir
         weapon_pres.probe_output_path = data_dir .. 'soul-weapon-render-probe.local.json'
         weapon_pres.equip_diag_output_path = data_dir .. 'soul-weapon-equip-diag.local.json'
         safe_call('weapon_pres.load_file', function() weapon_pres:load_file() end)
@@ -258,12 +261,16 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
         elseif action == 'probe' then
             local label = arg:gsub('[^%w_%-]', '_')
             if label:lower() == 'clear' or label:lower() == 'reset' then
-                WeaponProbe.clear_snapshots()
-                log('Weapon render probe comparative snapshots CLEARED.')
+                local clr = WeaponProbe.clear_snapshots()
+                log(('Weapon render probe comparative snapshots CLEARED (removed=%d probe=%s loaded=%s).'):format(
+                    (type(clr) == 'table' and clr.cleared_count) or 0,
+                    tostring(WeaponProbe.PROBE_VERSION or 'unknown'),
+                    tostring(WeaponProbe.LOADED_LUA_PATH or 'unknown')))
             else
                 local ok, res, out_path = WeaponProbe.run_live_probe({
                     diagnostics_enabled = weapon_pres:is_diagnostics_enabled(),
-                    output_path = weapon_pres.probe_output_path,
+                    output_dir = weapon_pres.probe_output_dir,
+                    ashita_root_dir = weapon_pres.ashita_root_dir,
                     label = (label ~= '') and label or nil,
                 })
                 if ok and type(res) == 'table' then
@@ -271,9 +278,18 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
                     for _, f in ipairs(res.findings or {}) do total = total + (f.match_count or 0) end
                     local snaps = #(res.comparative_snapshots or {})
                     local diffs = #(res.comparative_diff or {})
-                    log(('Weapon render probe COMPLETE [%s]: anchors=%d/%d findings=%d snapshots=%d diffs=%d output=%s'):format(
+                    local prov = res.provenance or {}
+                    log(('Weapon render probe COMPLETE [%s]: id=%s utc=%s probe=%s manifest=%s findings=%d snapshots=%d diffs=%d'):format(
                         (label ~= '' and label or ('snap_' .. snaps)),
-                        res.anchor_matched or 0, res.anchor_total or 0, total, snaps, diffs, tostring(out_path)))
+                        tostring(prov.capture_id or 'none'),
+                        tostring(prov.generated_at_utc or 'unknown'),
+                        tostring(prov.probe_version or 'unknown'),
+                        tostring(prov.active_launcher_manifest_version or 'unavailable'),
+                        total, snaps, diffs))
+                    log(('Probe output=%s | loaded=%s | dll=%s'):format(
+                        tostring(out_path),
+                        tostring(prov.loaded_lua_path or 'unknown'),
+                        tostring(prov.native_dll_version or 'unavailable')))
                 else
                     log('Weapon render probe refused/failed: ' .. tostring(res))
                 end

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.2.0-testing.18",
+  "manifestVersion": "2.2.0-testing.19",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
     "version": "main (Soulspire Native 27-hook)",
@@ -9,7 +9,7 @@
     "commit": "989ca6e",
     "dockerImage": "soulspirexi/server:main-ws3-weap-002-989ca6e",
     "crystalJobsHooks": 32,
-    "notes": "WS3-WEAP-002: consolidated Phase 1 1H-vs-2H native offhand attachment probe (AttachResourceToModelPart 0xCFA50, CXiModelPart 0x29D30..0x2A930, live modelPart0)"
+    "notes": "WS3-WEAP-002: mandatory weapon render probe provenance (captureId, UTC, probeVersion v19, loadedLuaPath, manifestVersion, nativeDllVersion), unique timestamped filenames, and delivery parity tests"
   },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
@@ -6066,15 +6066,15 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/weapon_render_probe.lua",
       "targetPath": "soulspire_core/core/weapon_render_probe.lua",
-      "sha256": "0f295a42d1a72a07922c5a5ba1f69e73f9c1bff4f9e81fe508df3fb86fa4a1f5",
-      "size": 51705
+      "sha256": "ead2a68893cf7a5919268f3ab9699c969e0a02c95ff7bc2973471e1631889197",
+      "size": 61093
     },
     {
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/soulspire_core.lua",
       "targetPath": "soulspire_core/soulspire_core.lua",
-      "sha256": "137172256e5dc3e51e7ebd08802012c4b7fbdc82ed8d4507558a30812e5d8540",
-      "size": 26101
+      "sha256": "ad09013916eb337f1d182c7dd66aa427acc6d4e3d3373d1120dee1b22e6021cd",
+      "size": 27118
     },
     {
       "category": "addon",
@@ -6108,8 +6108,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/tests/weapon_render_probe_test.lua",
       "targetPath": "soulspire_core/tests/weapon_render_probe_test.lua",
-      "sha256": "c13c3b1395407abc916d683c268ce3eacce746e6f88bacc9be18bb0aa17e9093",
-      "size": 7694
+      "sha256": "a7c20bccaf9d7826e965a05838aa4e8a9ad16755c8f39012b320b30a134864bc",
+      "size": 12133
     },
     {
       "category": "addon",
