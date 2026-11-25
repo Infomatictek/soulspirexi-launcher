@@ -632,13 +632,14 @@ function M.scan_text_buffer(text_bytes, text_rva, pe_info, actor_summary, extra_
         }
     end
 
-    -- 2l. Full AttachEquipModel (0xD0B50..0xD0D40) + model part container (0x2B5C0) slices.
+    -- 2l. Full AttachEquipModel (0xD0B50), CXiModelBase (0x2B4B0), part attach (0x85030), and Actor::Draw (0xC63D0) slices.
     do
         local attach_matches = {}
         local targets = {
             { rva = 0xD0B50, len = 0x200 },
-            { rva = 0x2B5C0, len = 0x180 },
-            { rva = 0x85030, len = 0x140 },
+            { rva = 0x2B4B0, len = 0x1000 },
+            { rva = 0x85030, len = 0x180 },
+            { rva = 0xC63D0, len = 0x600 },
         }
         for _, t in ipairs(targets) do
             local idx = (t.rva - text_rva) + 1
