@@ -159,6 +159,7 @@ function M.parse_pe_header(hdr)
     local img_size = read_u32_le(hdr, opt_off + 56)
 
     local text_va, text_vsz = nil, nil
+    local rdata_va, rdata_vsz = nil, nil
     local sec_off = opt_off + opt_sz
     for i = 0, (num_sec or 0) - 1 do
         local s = sec_off + i * 40
@@ -173,7 +174,9 @@ function M.parse_pe_header(hdr)
         if name == '.text' then
             text_vsz = read_u32_le(hdr, s + 8)
             text_va  = read_u32_le(hdr, s + 12)
-            break
+        elseif name == '.rdata' then
+            rdata_vsz = read_u32_le(hdr, s + 8)
+            rdata_va  = read_u32_le(hdr, s + 12)
         end
     end
 
@@ -184,13 +187,16 @@ function M.parse_pe_header(hdr)
         preferred_base     = img_base,
         text_rva           = text_va,
         text_virtual_size  = text_vsz,
+        rdata_rva          = rdata_va,
+        rdata_virtual_size = rdata_vsz,
         fingerprint_match  = (ts == M.EXPECTED_TIMESTAMP and img_size == M.EXPECTED_IMAGE_SIZE),
     }, nil
 end
 
 -- Scan a bounded `.text` byte buffer (1-based array of uint8 starting at text_rva)
 -- strictly for the narrowly scoped weapon-attachment probe rules.
-function M.scan_text_buffer(text_bytes, text_rva, pe_info, actor_summary)
+function M.scan_text_buffer(text_bytes, text_rva, pe_info, actor_summary, extra_opts)
+    extra_opts = extra_opts or {}
     if type(text_bytes) ~= 'table' or #text_bytes == 0 then
         return nil, 'empty .text buffer'
     end
@@ -287,6 +293,135 @@ function M.scan_text_buffer(text_bytes, text_rva, pe_info, actor_summary)
         findings[#findings + 1] = {
             id          = rule.id,
             description = rule.desc,
+            match_count = #matches,
+            matches     = matches,
+        }
+    end
+
+    local function capture_window(match_rva)
+        local win_start_rva = math.max(text_rva, match_rva - M.WINDOW_BEFORE)
+        local win_end_rva   = math.min(text_end_rva, match_rva + M.WINDOW_AFTER)
+        local win_bytes = {}
+        local start_idx = (win_start_rva - text_rva) + 1
+        local end_idx   = (win_end_rva - text_rva)
+        for p = start_idx, end_idx do
+            win_bytes[#win_bytes + 1] = text_bytes[p]
+        end
+        return {
+            rva              = string.format('0x%X', match_rva),
+            va_normalized    = string.format('0x%08X', M.NORMALIZED_IMAGE_BASE + match_rva),
+            window_start_rva = string.format('0x%X', win_start_rva),
+            window_len       = #win_bytes,
+            code_hex         = bytes_to_hex(win_bytes),
+        }
+    end
+
+    -- 2b. Callers of CDx::SetTransform (RVA 0xBD50) preceded by push 0x100 (D3DTS_WORLD).
+    do
+        local target_rva = 0xBD50
+        local matches = {}
+        for i = 1, text_len - 5 do
+            if #matches >= M.MAX_MATCHES_PER_RULE then break end
+            if text_bytes[i] == 0xE8 then
+                local rel = read_u32_le(text_bytes, i)
+                if rel then
+                    if rel >= 0x80000000 then rel = rel - 0x100000000 end
+                    local call_rva = text_rva + (i - 1)
+                    if (call_rva + 5 + rel) == target_rva then
+                        local has_world = false
+                        local back = math.max(1, i - 24)
+                        for j = back, i - 5 do
+                            if text_bytes[j] == 0x68 and text_bytes[j + 1] == 0x00
+                                and text_bytes[j + 2] == 0x01 and text_bytes[j + 3] == 0x00
+                                and text_bytes[j + 4] == 0x00 then
+                                has_world = true
+                                break
+                            end
+                        end
+                        if has_world then
+                            matches[#matches + 1] = capture_window(call_rva)
+                        end
+                    end
+                end
+            end
+        end
+        findings[#findings + 1] = {
+            id          = 'cdx_set_transform_world_callers',
+            description = 'Direct callers of CDx::SetTransform (0xBD50) with push 0x100 (D3DTS_WORLD)',
+            match_count = #matches,
+            matches     = matches,
+        }
+    end
+
+    -- 2c. .rdata string cross-references for weapon tags (wep0, wep1, wep2).
+    if type(extra_opts.rdata_bytes) == 'table' and extra_opts.rdata_rva and extra_opts.module_base then
+        local rbytes = extra_opts.rdata_bytes
+        local rlen = #rbytes
+        local rrva = extra_opts.rdata_rva
+        local mbase = extra_opts.module_base
+        local tags = {
+            { id = 'rdata_xref_wep0', bytes = { 0x77, 0x65, 0x70, 0x30 } },
+            { id = 'rdata_xref_wep1', bytes = { 0x77, 0x65, 0x70, 0x31 } },
+            { id = 'rdata_xref_wep2', bytes = { 0x77, 0x65, 0x70, 0x32 } },
+        }
+        for _, tg in ipairs(tags) do
+            local va_targets = {}
+            for ri = 1, rlen - 3 do
+                if rbytes[ri] == tg.bytes[1] and rbytes[ri + 1] == tg.bytes[2]
+                    and rbytes[ri + 2] == tg.bytes[3] and rbytes[ri + 3] == tg.bytes[4] then
+                    local live_va = mbase + rrva + (ri - 1)
+                    va_targets[#va_targets + 1] = {
+                        b1 = live_va % 256,
+                        b2 = math.floor(live_va / 256) % 256,
+                        b3 = math.floor(live_va / 65536) % 256,
+                        b4 = math.floor(live_va / 16777216) % 256,
+                    }
+                    if #va_targets >= 8 then break end
+                end
+            end
+            local matches = {}
+            for _, vt in ipairs(va_targets) do
+                for ti = 1, text_len - 3 do
+                    if #matches >= M.MAX_MATCHES_PER_RULE then break end
+                    if text_bytes[ti] == vt.b1 and text_bytes[ti + 1] == vt.b2
+                        and text_bytes[ti + 2] == vt.b3 and text_bytes[ti + 3] == vt.b4 then
+                        matches[#matches + 1] = capture_window(text_rva + (ti - 1))
+                    end
+                end
+            end
+            findings[#findings + 1] = {
+                id          = tg.id,
+                description = '.text cross-references to .rdata tag ' .. tg.id:sub(-4),
+                match_count = #matches,
+                matches     = matches,
+            }
+        end
+    end
+
+    -- 2d. GrapIDTbl 0x051 decoder pattern: shr reg, 12 (c1 e8..ef 0c) with nearby 0x0FFF mask.
+    do
+        local matches = {}
+        for i = 1, text_len - 3 do
+            if #matches >= M.MAX_MATCHES_PER_RULE then break end
+            if text_bytes[i] == 0xC1 and text_bytes[i + 1] >= 0xE8 and text_bytes[i + 1] <= 0xEF
+                and text_bytes[i + 2] == 0x0C then
+                local has_fff = false
+                local s_lo = math.max(1, i - 24)
+                local s_hi = math.min(text_len - 1, i + 24)
+                for j = s_lo, s_hi do
+                    if text_bytes[j] == 0xFF and text_bytes[j + 1] == 0x0F then
+                        has_fff = true
+                        break
+                    end
+                end
+                if has_fff then
+                    matches[#matches + 1] = capture_window(text_rva + (i - 1))
+                end
+            end
+        end
+        findings[#findings + 1] = {
+            id          = 'grap_slot_shift12_mask0fff',
+            description = 'shr reg, 12 with nearby 0x0FFF mask (0x051 GrapIDTbl slot/model decoder)',
             match_count = #matches,
             matches     = matches,
         }
@@ -429,6 +564,15 @@ function M.run_live_probe(opts)
         return false, 'failed to read loaded .text section'
     end
 
+    local rdata_bytes = nil
+    if pe_info.rdata_rva and pe_info.rdata_virtual_size and pe_info.rdata_virtual_size > 0 then
+        local rlen = math.min(pe_info.rdata_virtual_size, 0x200000)
+        local ok_rd, rb = pcall(mem.read_array, base + pe_info.rdata_rva, rlen)
+        if ok_rd and type(rb) == 'table' and #rb > 0 then
+            rdata_bytes = rb
+        end
+    end
+
     local actor_summary = opts.actor_summary
     if not actor_summary and AshitaCore and AshitaCore.GetMemoryManager then
         local ok_ent, summary = pcall(function()
@@ -437,18 +581,27 @@ function M.run_live_probe(opts)
             local ent = mm:GetEntity()
             local idx = party and party:GetMemberTargetIndex(0) or 0
             if not ent or not idx or idx == 0 then return nil end
+            local function safe_get(fn_name)
+                if type(ent[fn_name]) ~= 'function' then return nil end
+                local ok_v, v = pcall(ent[fn_name], ent, idx)
+                return ok_v and tonumber(v) or nil
+            end
             return {
-                race_id        = ent:GetRace(idx) or 0,
-                look_main      = ent:GetLookMain(idx) or 0,
-                look_sub       = ent:GetLookSub(idx) or 0,
-                status_id      = ent:GetStatus(idx) or 0,
-                has_render_ptr = (ent:GetRenderPointer(idx) or 0) ~= 0,
+                race_id        = safe_get('GetRace') or 0,
+                look_main      = safe_get('GetLookMain') or safe_get('GetLookWeaponMain') or 0,
+                look_sub       = safe_get('GetLookSub') or safe_get('GetLookWeaponSub') or 0,
+                status_id      = safe_get('GetStatus') or 0,
+                has_render_ptr = (safe_get('GetRenderPointer') or 0) ~= 0,
             }
         end)
         if ok_ent then actor_summary = summary end
     end
 
-    local report, serr = M.scan_text_buffer(text_bytes, pe_info.text_rva, pe_info, actor_summary)
+    local report, serr = M.scan_text_buffer(text_bytes, pe_info.text_rva, pe_info, actor_summary, {
+        rdata_bytes = rdata_bytes,
+        rdata_rva   = pe_info.rdata_rva,
+        module_base = base,
+    })
     if not report then
         return false, serr
     end
