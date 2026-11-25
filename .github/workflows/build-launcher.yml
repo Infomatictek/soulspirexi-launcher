@@ -355,7 +355,7 @@ jobs:
 
   sync-soulspire-native-binary:
     needs: [verify-manifest, build-and-test, build-soulspire-native]
-    if: (github.ref == 'refs/heads/feat/soulspire-native-foundation' || github.ref == 'refs/heads/feat/dat-virtualization-poc' || github.ref == 'refs/heads/feat/berserker-dual-great-axe' || github.ref == 'refs/heads/feat/soulspire-core-native-ui-gamepad' || github.ref == 'refs/heads/fix/ws3-weap-002-equip-sync-diag' || github.ref == 'refs/heads/fix/ws3-weap-002-hook27-allow-resume') && !startsWith(github.event.head_commit.message, 'chore(soulspire-native):')
+    if: (github.ref == 'refs/heads/feat/soulspire-native-foundation' || github.ref == 'refs/heads/feat/dat-virtualization-poc' || github.ref == 'refs/heads/feat/berserker-dual-great-axe' || github.ref == 'refs/heads/feat/soulspire-core-native-ui-gamepad' || github.ref == 'refs/heads/fix/ws3-weap-002-equip-sync-diag' || github.ref == 'refs/heads/fix/ws3-weap-002-hook27-allow-resume' || github.ref == 'refs/heads/feat/ws3-weap-002-render-xref-probe') && !startsWith(github.event.head_commit.message, 'chore(soulspire-native):')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -397,6 +397,7 @@ jobs:
               "dllSha256": prov["dllSha256"],
               "dllSize": prov["dllSize"],
               "compiledRegistryHash": prov["compiledRegistryHash"],
+              "nativeHooks": 32,
               "expectedHooks": 32,
               "abiVersion": 2,
               "runtimeIdentityLoader": True,
@@ -407,7 +408,7 @@ jobs:
               "ciRunUrl": prov["ciRunUrl"],
               "ciVerified": True,
               "clientVerified": False,
-              "notes": "CI-built 31-hook soulspire_native.dll (native Commands menu entry) synced from GitHub Actions windows-latest MSVC x86 build. Client verification requires manual Windows Ashita v4 playtesting.",
+              "notes": "CI-built 32-hook soulspire_native.dll (runtime PC Sub->Main FTABLE model resolver + native Commands menu entry) synced from GitHub Actions windows-latest MSVC x86 build. Client verification requires manual Windows Ashita v4 playtesting.",
           })
           state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
           PY
@@ -427,7 +428,7 @@ jobs:
             echo "No binary/manifest changes to commit."
             exit 0
           fi
-          git commit -m "chore(soulspire-native): sync CI-verified 31-hook soulspire_native.dll"
+          git commit -m "chore(soulspire-native): sync CI-verified 32-hook soulspire_native.dll"
           git push origin "HEAD:${{ github.ref_name }}"
 
   publish-release:
