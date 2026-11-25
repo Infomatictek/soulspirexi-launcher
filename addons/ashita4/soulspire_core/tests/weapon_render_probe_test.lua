@@ -117,6 +117,48 @@ do
     assert(by_id.grap_empty_main_6000.match_count == 1 and by_id.grap_empty_main_6000.matches[1].rva == '0x1500')
     assert(by_id.grap_empty_sub_7000.match_count == 1 and by_id.grap_empty_sub_7000.matches[1].rva == '0x1600')
     assert(report.actor_model_summary.race_id == 2 and report.actor_model_summary.look_main == 94 and report.actor_model_summary.look_sub == 93)
+
+    -- 3. Comparative labeled snapshot accumulation & automatic CXiSkeletonActor diff test.
+    Probe.clear_snapshots()
+    assert(Probe.snapshot_count() == 0)
+    local ok_a, rep_a = Probe.run_live_probe({
+        diagnostics_enabled = true,
+        memory = mock_mem,
+        module_base = 0x77000000,
+        label = '1h_single',
+        actor_summary = { race_id = 2, look_main = 0x6010, look_sub = 0x7000, status_id = 0, has_render_ptr = true },
+        actor_words_override = { [0x764] = 'obj:vt=0xC5190', [0x814] = '0' },
+    })
+    assert(ok_a == true and #rep_a.comparative_snapshots == 1 and #rep_a.comparative_diff == 0)
+
+    local ok_b, rep_b = Probe.run_live_probe({
+        diagnostics_enabled = true,
+        memory = mock_mem,
+        module_base = 0x77000000,
+        label = '1h_dual',
+        actor_summary = { race_id = 2, look_main = 0x6010, look_sub = 0x7011, status_id = 0, has_render_ptr = true },
+        actor_words_override = { [0x764] = 'obj:vt=0xC5190', [0x814] = 'obj:vt=0xC5190' },
+    })
+    assert(ok_b == true and #rep_b.comparative_snapshots == 2)
+    assert(#rep_b.comparative_diff == 1 and rep_b.comparative_diff[1].offset == '0x814',
+        'expected exact diff at 0x814 between 1h_single and 1h_dual')
+    local json_b = Probe.serialize_report_json(rep_b)
+    assert(json_b:find('"1h_single"', 1, true) ~= nil and json_b:find('"1h_dual"', 1, true) ~= nil)
+    assert(json_b:find('77000000', 1, true) == nil, 'ASLR base must never leak in comparative JSON')
+
+    -- Verify sanitize_actor_struct never leaks raw heap pointers or ASLR bases.
+    local mock_actor_mem = {
+        read_uint32 = function(addr)
+            if addr == 0x12345600 + 0x764 then return 0x770C5190 end -- inside FFXiMain.dll
+            if addr == 0x12345600 + 0x814 then return 0x22334455 end -- raw heap ptr
+            if addr == 0x22334455 then return 0xDEADBEEF end         -- non-vtable heap data
+            return 0
+        end,
+    }
+    local san_words = Probe.sanitize_actor_struct(0x12345600, mock_actor_mem, 0x77000000, 0x00C17000)
+    assert(san_words[0x764] == 'rva:0xC5190', 'module pointer must normalize to RVA')
+    assert(san_words[0x814] == 'ptr:nonnull', 'raw heap pointer must never be emitted')
+    Probe.clear_snapshots()
 end
 
 print('weapon_render_probe_test: ALL PASSED')

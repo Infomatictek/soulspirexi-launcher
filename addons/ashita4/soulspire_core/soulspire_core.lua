@@ -182,7 +182,10 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
                 i, win.name, win.left, win.top, win.right, win.bottom, tostring(win.is_current)))
         end
     elseif sub == 'weapondiag' then
-        local action = (rest or ''):lower():gsub('^%s+', ''):gsub('%s+$', '')
+        local trimmed = (rest or ''):gsub('^%s+', ''):gsub('%s+$', '')
+        local action, arg = trimmed:match('^(%S+)%s*(.-)$')
+        action = (action or ''):lower()
+        arg = (arg or ''):gsub('^%s+', ''):gsub('%s+$', '')
         if action == 'on' then
             weapon_pres:set_diagnostics_enabled(true)
             weapon_pres:load_calibration_file()
@@ -250,21 +253,31 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
                 log('Weapon equip diag refused/failed: ' .. tostring(rep))
             end
         elseif action == 'probe' then
-            local ok, res, out_path = WeaponProbe.run_live_probe({
-                diagnostics_enabled = weapon_pres:is_diagnostics_enabled(),
-                output_path = weapon_pres.probe_output_path,
-            })
-            if ok and type(res) == 'table' then
-                local total = 0
-                for _, f in ipairs(res.findings or {}) do total = total + (f.match_count or 0) end
-                log(('Weapon render probe COMPLETE: anchors=%d/%d findings=%d output=%s (private local file, never commit)'):format(
-                    res.anchor_matched or 0, res.anchor_total or 0, total, tostring(out_path)))
+            local label = arg:gsub('[^%w_%-]', '_')
+            if label:lower() == 'clear' or label:lower() == 'reset' then
+                WeaponProbe.clear_snapshots()
+                log('Weapon render probe comparative snapshots CLEARED.')
             else
-                log('Weapon render probe refused/failed: ' .. tostring(res))
+                local ok, res, out_path = WeaponProbe.run_live_probe({
+                    diagnostics_enabled = weapon_pres:is_diagnostics_enabled(),
+                    output_path = weapon_pres.probe_output_path,
+                    label = (label ~= '') and label or nil,
+                })
+                if ok and type(res) == 'table' then
+                    local total = 0
+                    for _, f in ipairs(res.findings or {}) do total = total + (f.match_count or 0) end
+                    local snaps = #(res.comparative_snapshots or {})
+                    local diffs = #(res.comparative_diff or {})
+                    log(('Weapon render probe COMPLETE [%s]: anchors=%d/%d findings=%d snapshots=%d diffs=%d output=%s'):format(
+                        (label ~= '' and label or ('snap_' .. snaps)),
+                        res.anchor_matched or 0, res.anchor_total or 0, total, snaps, diffs, tostring(out_path)))
+                else
+                    log('Weapon render probe refused/failed: ' .. tostring(res))
+                end
             end
         else
             local st = weapon_pres:status()
-            log(('weapondiag loaded=%s enabled=%s bindings=%d profiles=%d peers=%d hash=%s (usage: /soulspire weapondiag on|off|save|export|reset|equip|probe)'):format(
+            log(('weapondiag loaded=%s enabled=%s bindings=%d profiles=%d peers=%d hash=%s (usage: /soulspire weapondiag on|off|save|export|reset|equip|probe [label|clear])'):format(
                 tostring(st.loaded),
                 tostring(st.diagnostics_enabled),
                 st.binding_count,
