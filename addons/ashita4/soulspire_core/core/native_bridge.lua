@@ -5,9 +5,10 @@ local NativeBridge = {}
 NativeBridge.EXPECTED_ABI_VERSION = 2
 NativeBridge.CAP_COMMANDS_MENU_ENTRY  = 0x10000
 NativeBridge.CAP_WEAPON_MODEL_RESOLVE = 0x20000
+NativeBridge.CAP_WEAPON_OFFHAND_BONE  = 0x40000
 
 local ok_ffi, ffi = pcall(require, 'ffi')
-local iface_info_t, status_t, weapon_status_t, hook_diag_t, ident_diag_t, weapon_model_diag_t, main_menu_status_t
+local iface_info_t, status_t, weapon_status_t, hook_diag_t, ident_diag_t, weapon_model_diag_t, weapon_offhand_diag_t, main_menu_status_t
 local get_info_fn_t, set_u32x4_fn_t, consume_open_fn_t
 local cache = {
     module = nil,
@@ -23,6 +24,7 @@ NativeBridge.ABI_SIZES = {
     hook_diag = 60,
     identity_diag = 216,
     weapon_model_diag = 92,
+    weapon_offhand_diag = 72,
     main_menu_status = 60,
 }
 
@@ -91,6 +93,17 @@ if ok_ffi and ffi then
     }[1]]=])
     if ok_wmd then weapon_model_diag_t = t_wmd end
 
+    local ok_wod, t_wod = pcall(ffi.typeof, [=[struct {
+        uint32_t size, version;
+        uint32_t hooks_installed_count, hooks_installed_mask, cap_active;
+        uint32_t attach_calls_slot7, authorized_sub_attaches, add_mesh_calls_total;
+        uint32_t registered_sub_meshes, registered_sub_total;
+        uint32_t draw_calls_total, matching_mesh_draws;
+        uint32_t bone_swaps_succeeded, bone_lookups_failed, bone_restores_count;
+        uint32_t last_idx_main, last_idx_sub, last_matrices_distinct;
+    }[1]]=])
+    if ok_wod then weapon_offhand_diag_t = t_wod end
+
     local ok_mm, t_mm = pcall(ffi.typeof, [=[struct {
         uint32_t size;
         uint32_t version;
@@ -147,6 +160,7 @@ function NativeBridge.verify_abi_sizes()
         { 'hook_diag', hook_diag_t, NativeBridge.ABI_SIZES.hook_diag },
         { 'identity_diag', ident_diag_t, NativeBridge.ABI_SIZES.identity_diag },
         { 'weapon_model_diag', weapon_model_diag_t, NativeBridge.ABI_SIZES.weapon_model_diag },
+        { 'weapon_offhand_diag', weapon_offhand_diag_t, NativeBridge.ABI_SIZES.weapon_offhand_diag },
         { 'main_menu_status', main_menu_status_t, NativeBridge.ABI_SIZES.main_menu_status },
     }
     for _, c in ipairs(checks) do
@@ -446,6 +460,38 @@ function NativeBridge.query_weapon_model_diag()
         pres_loaded          = (pp % 2) == 1,
         pres_bindings        = math.floor(pp / 256) % 256,
         pres_profiles        = math.floor(pp / 65536) % 256,
+    }, nil
+end
+
+function NativeBridge.query_weapon_offhand_diag()
+    if not (ok_ffi and ffi and weapon_offhand_diag_t) then
+        return nil, 'FFI unavailable'
+    end
+    local ok_h, handle = pcall(function()
+        return ffi.C.GetModuleHandleA('soulspire_native.dll')
+    end)
+    if not ok_h or handle == nil then
+        return nil, 'soulspire_native.dll not loaded'
+    end
+    local d, err = call_struct_export(handle, 'SoulspireNativeGetWeaponOffhandDiag', weapon_offhand_diag_t)
+    if not d then return nil, err end
+    return {
+        hooks_installed_count   = tonumber(d.hooks_installed_count) or 0,
+        hooks_installed_mask    = tonumber(d.hooks_installed_mask) or 0,
+        cap_active              = (tonumber(d.cap_active) or 0) == 1,
+        attach_calls_slot7      = tonumber(d.attach_calls_slot7) or 0,
+        authorized_sub_attaches = tonumber(d.authorized_sub_attaches) or 0,
+        add_mesh_calls_total    = tonumber(d.add_mesh_calls_total) or 0,
+        registered_sub_meshes   = tonumber(d.registered_sub_meshes) or 0,
+        registered_sub_total    = tonumber(d.registered_sub_total) or 0,
+        draw_calls_total        = tonumber(d.draw_calls_total) or 0,
+        matching_mesh_draws     = tonumber(d.matching_mesh_draws) or 0,
+        bone_swaps_succeeded    = tonumber(d.bone_swaps_succeeded) or 0,
+        bone_lookups_failed     = tonumber(d.bone_lookups_failed) or 0,
+        bone_restores_count     = tonumber(d.bone_restores_count) or 0,
+        last_idx_main           = tonumber(d.last_idx_main) or 0,
+        last_idx_sub            = tonumber(d.last_idx_sub) or 0,
+        last_matrices_distinct  = (tonumber(d.last_matrices_distinct) or 0) == 1,
     }, nil
 end
 

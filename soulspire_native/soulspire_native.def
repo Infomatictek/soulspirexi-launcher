@@ -26,6 +26,7 @@ EXPORTS
     SoulspireNativeGetMainMenuStatus=_SoulspireNativeGetMainMenuStatus@8
     SoulspireNativeConsumeCoreOpenRequest=_SoulspireNativeConsumeCoreOpenRequest@0
     SoulspireNativeGetWeaponModelDiag=_SoulspireNativeGetWeaponModelDiag@8
+    SoulspireNativeGetWeaponOffhandDiag=_SoulspireNativeGetWeaponOffhandDiag@8
     CrystalJobsInitialize=_CrystalJobsInitialize@0
     CrystalJobsShutdown=_CrystalJobsShutdown@0
     CrystalJobsGetStatus=_CrystalJobsGetStatus@8

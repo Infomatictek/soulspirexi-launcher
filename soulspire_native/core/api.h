@@ -306,6 +306,30 @@ typedef struct SoulspireNativeWeaponModelDiag {
 
 uint32_t SOULSPIRE_NATIVE_CALL SoulspireNativeGetWeaponModelDiag(SoulspireNativeWeaponModelDiag* diag, uint32_t size);
 
+/* Dedicated WS3-WEAP-002 offhand bone attachment diagnostics (separate from legacy 32-hook ABI). */
+typedef struct SoulspireNativeWeaponOffhandDiag {
+    uint32_t size;
+    uint32_t version;                  /* 1 */
+    uint32_t hooks_installed_count;    /* 0..3 */
+    uint32_t hooks_installed_mask;     /* bit0=0x0D0B50, bit1=0x0CFA89, bit2=0x02A6B5 */
+    uint32_t cap_active;               /* 1 if SOULSPIRE_NATIVE_CAP_WEAPON_OFFHAND_BONE is active */
+    uint32_t attach_calls_slot7;       /* total 0x0D0B50 calls with slot == 7 */
+    uint32_t authorized_sub_attaches;  /* total authorized slot == 7 Sub attaches */
+    uint32_t add_mesh_calls_total;     /* total 0x0CFA89 calls observed */
+    uint32_t registered_sub_meshes;    /* current active registered Sub mesh instances */
+    uint32_t registered_sub_total;     /* cumulative Sub mesh registrations */
+    uint32_t draw_calls_total;         /* total 0x02A6B5 draw calls observed */
+    uint32_t matching_mesh_draws;      /* draw calls matching a registered Sub mesh */
+    uint32_t bone_swaps_succeeded;     /* successful 0x7E <- 0x7F matrix substitutions */
+    uint32_t bone_lookups_failed;      /* failed 0x7E/0x7F lookups or null boneMatrices */
+    uint32_t bone_restores_count;      /* matrix restorations after mesh->Draw */
+    uint32_t last_idx_main;            /* last resolved 0x7E bone index */
+    uint32_t last_idx_sub;             /* last resolved 0x7F bone index */
+    uint32_t last_matrices_distinct;   /* 1 if boneMatrices[0x7E] != boneMatrices[0x7F] (64B) */
+} SoulspireNativeWeaponOffhandDiag;
+
+uint32_t SOULSPIRE_NATIVE_CALL SoulspireNativeGetWeaponOffhandDiag(SoulspireNativeWeaponOffhandDiag* diag, uint32_t size);
+
 #ifdef __cplusplus
 }
 #endif

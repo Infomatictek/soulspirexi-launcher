@@ -2054,6 +2054,11 @@ int main() {
         clear_sub_offhand_meshes_for_actor(&dummy_actor);
         assert(!is_registered_sub_offhand_mesh(&fake_part, &dummy_mesh_sub));
         assert(sub_offhand_mesh_count.load(std::memory_order_acquire) == 0u);
+        SoulspireNativeWeaponOffhandDiag off_diag{};
+        assert(SoulspireNativeGetWeaponOffhandDiag(&off_diag, sizeof(off_diag)) == 0);
+        assert(off_diag.size == 72u && off_diag.version == 1u);
+        assert(off_diag.matching_mesh_draws >= 1u && off_diag.bone_swaps_succeeded >= 1u && off_diag.bone_restores_count >= 1u);
+        assert(off_diag.last_idx_main == 90u && off_diag.last_idx_sub == 91u && off_diag.last_matrices_distinct == 1u);
         original_lookup_bone_index = nullptr;
         enabled.store(false, std::memory_order_release);
     }
@@ -2084,6 +2089,12 @@ int main() {
     assert(get_wmd != nullptr);
     SoulspireNativeWeaponModelDiag dll_wmd{};
     assert(get_wmd(&dll_wmd, sizeof(dll_wmd)) == 0 && dll_wmd.size == sizeof(dll_wmd) && dll_wmd.version == 1u);
+
+    const auto get_wod = reinterpret_cast<uint32_t(__stdcall*)(SoulspireNativeWeaponOffhandDiag*, uint32_t)>(
+        GetProcAddress(dll, "SoulspireNativeGetWeaponOffhandDiag"));
+    assert(get_wod != nullptr);
+    SoulspireNativeWeaponOffhandDiag dll_wod{};
+    assert(get_wod(&dll_wod, sizeof(dll_wod)) == 0 && dll_wod.size == sizeof(dll_wod) && dll_wod.version == 1u);
 
     const auto get_compat_diag = reinterpret_cast<uint32_t(__stdcall*)(CrystalJobsHookDiagnostics*, uint32_t)>(
         GetProcAddress(dll, "CrystalJobsGetHookDiagnostics"));

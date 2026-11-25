@@ -877,6 +877,18 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
             else
                 log('Hook32 diag unavailable: ' .. tostring(wmd_err))
             end
+            local wod, wod_err = NativeBridge.query_weapon_offhand_diag()
+            if wod then
+                log(('Offhand bone diag: hooks=%d/3(mask=0x%X) cap=%s authSub=%d(slot7=%d) regMesh=%d(tot=%d,add=%d) matchDraw=%d(tot=%d) swaps=%d failLookup=%d restores=%d bones(7E=%d,7F=%d,distinct=%s)'):format(
+                    wod.hooks_installed_count, wod.hooks_installed_mask, tostring(wod.cap_active),
+                    wod.authorized_sub_attaches, wod.attach_calls_slot7,
+                    wod.registered_sub_meshes, wod.registered_sub_total, wod.add_mesh_calls_total,
+                    wod.matching_mesh_draws, wod.draw_calls_total,
+                    wod.bone_swaps_succeeded, wod.bone_lookups_failed, wod.bone_restores_count,
+                    wod.last_idx_main, wod.last_idx_sub, tostring(wod.last_matrices_distinct)))
+            else
+                log('Offhand bone diag unavailable: ' .. tostring(wod_err))
+            end
             if AshitaCore and AshitaCore.GetChatManager then
                 local function send_status()
                     local chat = AshitaCore:GetChatManager()

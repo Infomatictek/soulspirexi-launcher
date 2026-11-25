@@ -1184,7 +1184,18 @@ static constexpr size_t kMaxSubOffhandMeshes = 64u;
 static SRWLOCK sub_offhand_mesh_lock = SRWLOCK_INIT;
 static SubOffhandMeshEntry sub_offhand_meshes[kMaxSubOffhandMeshes]{};
 static std::atomic<uint32_t> sub_offhand_mesh_count{0};
+static std::atomic<uint32_t> sub_offhand_attach_slot7_calls{0};
+static std::atomic<uint32_t> sub_offhand_authorized_attaches{0};
+static std::atomic<uint32_t> sub_offhand_add_mesh_calls{0};
+static std::atomic<uint32_t> sub_offhand_registered_total{0};
+static std::atomic<uint32_t> sub_offhand_draw_calls_total{0};
+static std::atomic<uint32_t> sub_offhand_matching_draws{0};
 static std::atomic<uint32_t> sub_offhand_bone_swaps{0};
+static std::atomic<uint32_t> sub_offhand_bone_lookup_fails{0};
+static std::atomic<uint32_t> sub_offhand_bone_restores{0};
+static std::atomic<uint32_t> sub_offhand_last_idx_main{0};
+static std::atomic<uint32_t> sub_offhand_last_idx_sub{0};
+static std::atomic<uint32_t> sub_offhand_last_matrices_distinct{0};
 
 static thread_local bool  tls_sub_offhand_attach_active = false;
 static thread_local void* tls_sub_offhand_attach_actor  = nullptr;
@@ -1312,8 +1323,10 @@ static void __fastcall soul_attach_equip_model_hook(
     const bool prev_active = tls_sub_offhand_attach_active;
     void* const prev_actor = tls_sub_offhand_attach_actor;
     if (slot == 7u && actor != nullptr) {
+        sub_offhand_attach_slot7_calls.fetch_add(1u, std::memory_order_relaxed);
         clear_sub_offhand_meshes_for_actor(actor);
         if (flag != 0u && res_handle != nullptr && soul_authorizes_sub_offhand_bone(actor, slot_and_model)) {
+            sub_offhand_authorized_attaches.fetch_add(1u, std::memory_order_relaxed);
             tls_sub_offhand_attach_actor = actor;
             tls_sub_offhand_attach_active = true;
         } else {
@@ -1329,12 +1342,14 @@ static void __fastcall soul_attach_equip_model_hook(
 }
 
 static void* __fastcall soul_model_part_add_mesh_hook(void* model_part, void* edx, void* os2_res) {
+    sub_offhand_add_mesh_calls.fetch_add(1u, std::memory_order_relaxed);
     void* mesh = (original_model_part_add_mesh != nullptr)
         ? original_model_part_add_mesh(model_part, edx, os2_res)
         : nullptr;
     if (tls_sub_offhand_attach_active && tls_sub_offhand_attach_actor != nullptr &&
         model_part != nullptr && mesh != nullptr) {
         register_sub_offhand_mesh(tls_sub_offhand_attach_actor, model_part, mesh);
+        sub_offhand_registered_total.fetch_add(1u, std::memory_order_relaxed);
     }
     return mesh;
 }
@@ -1342,26 +1357,35 @@ static void* __fastcall soul_model_part_add_mesh_hook(void* model_part, void* ed
 static void soul_pre_mesh_draw_swap_impl(void* model_part, void* mesh) noexcept {
     tls_saved_main_weapon_bone.active = false;
     tls_saved_main_weapon_bone.target = nullptr;
+    sub_offhand_draw_calls_total.fetch_add(1u, std::memory_order_relaxed);
     if (!enabled.load(std::memory_order_acquire) || !module_enabled(SOULSPIRE_NATIVE_MOD_RENDERING)) {
         return;
     }
     if (!is_registered_sub_offhand_mesh(model_part, mesh)) {
         return;
     }
+    sub_offhand_matching_draws.fetch_add(1u, std::memory_order_relaxed);
     if (original_lookup_bone_index == nullptr) {
+        sub_offhand_bone_lookup_fails.fetch_add(1u, std::memory_order_relaxed);
         return;
     }
     const uint32_t idx_main = original_lookup_bone_index(model_part, nullptr, 0x7E) & 0xFFu;
     const uint32_t idx_sub  = original_lookup_bone_index(model_part, nullptr, 0x7F) & 0xFFu;
+    sub_offhand_last_idx_main.store(idx_main, std::memory_order_relaxed);
+    sub_offhand_last_idx_sub.store(idx_sub, std::memory_order_relaxed);
     if (idx_main == 0u || idx_sub == 0u || idx_main == idx_sub || idx_main >= 256u || idx_sub >= 256u) {
+        sub_offhand_bone_lookup_fails.fetch_add(1u, std::memory_order_relaxed);
         return;
     }
     float* matrices = *reinterpret_cast<float* const*>(reinterpret_cast<uintptr_t>(model_part) + 0x14u);
     if (matrices == nullptr) {
+        sub_offhand_bone_lookup_fails.fetch_add(1u, std::memory_order_relaxed);
         return;
     }
     float* main_mat = matrices + (static_cast<size_t>(idx_main) * 16u);
     float* sub_mat  = matrices + (static_cast<size_t>(idx_sub) * 16u);
+    const bool distinct = (std::memcmp(main_mat, sub_mat, sizeof(tls_saved_main_weapon_bone.saved)) != 0);
+    sub_offhand_last_matrices_distinct.store(distinct ? 1u : 0u, std::memory_order_relaxed);
     std::memcpy(tls_saved_main_weapon_bone.saved, main_mat, sizeof(tls_saved_main_weapon_bone.saved));
     std::memcpy(main_mat, sub_mat, sizeof(tls_saved_main_weapon_bone.saved));
     tls_saved_main_weapon_bone.target = main_mat;
@@ -1386,6 +1410,7 @@ static void __stdcall soul_post_mesh_draw_restore() noexcept {
     if (tls_saved_main_weapon_bone.active && tls_saved_main_weapon_bone.target != nullptr) {
         std::memcpy(tls_saved_main_weapon_bone.target, tls_saved_main_weapon_bone.saved,
                     sizeof(tls_saved_main_weapon_bone.saved));
+        sub_offhand_bone_restores.fetch_add(1u, std::memory_order_relaxed);
     }
     tls_saved_main_weapon_bone.active = false;
     tls_saved_main_weapon_bone.target = nullptr;
@@ -3181,6 +3206,54 @@ extern "C" uint32_t __stdcall SoulspireNativeGetWeaponModelDiag(SoulspireNativeW
 }
 
 static_assert(sizeof(SoulspireNativeWeaponModelDiag) == 92);
+
+extern "C" uint32_t __stdcall SoulspireNativeGetWeaponOffhandDiag(SoulspireNativeWeaponOffhandDiag* output, uint32_t size) {
+    if (output == nullptr || size < sizeof(SoulspireNativeWeaponOffhandDiag)) return 1;
+    SoulspireNativeWeaponOffhandDiag d{};
+    d.size    = sizeof(SoulspireNativeWeaponOffhandDiag);
+    d.version = 1u;
+    AcquireSRWLockShared(&lifecycle_lock);
+    uint32_t mask = 0u;
+    uint32_t cnt = 0u;
+    if (soul_attach_equip_model_detour.site != nullptr &&
+        std::memcmp(soul_attach_equip_model_detour.site, soul_attach_equip_model_detour.installed, 5) == 0) {
+        mask |= 1u;
+        ++cnt;
+    }
+    if (soul_model_part_add_mesh_patch.site != nullptr &&
+        std::memcmp(soul_model_part_add_mesh_patch.site, soul_model_part_add_mesh_patch.installed, 5) == 0) {
+        mask |= 2u;
+        ++cnt;
+    }
+    if (soul_model_mesh_draw_detour.site != nullptr &&
+        std::memcmp(soul_model_mesh_draw_detour.site, soul_model_mesh_draw_detour.installed, 5) == 0) {
+        mask |= 4u;
+        ++cnt;
+    }
+    d.hooks_installed_count = cnt;
+    d.hooks_installed_mask  = mask;
+    d.cap_active = (enabled.load(std::memory_order_acquire) &&
+                    module_enabled(SOULSPIRE_NATIVE_MOD_RENDERING) &&
+                    cnt == 3u) ? 1u : 0u;
+    ReleaseSRWLockShared(&lifecycle_lock);
+    d.attach_calls_slot7      = sub_offhand_attach_slot7_calls.load(std::memory_order_relaxed);
+    d.authorized_sub_attaches = sub_offhand_authorized_attaches.load(std::memory_order_relaxed);
+    d.add_mesh_calls_total    = sub_offhand_add_mesh_calls.load(std::memory_order_relaxed);
+    d.registered_sub_meshes   = sub_offhand_mesh_count.load(std::memory_order_acquire);
+    d.registered_sub_total    = sub_offhand_registered_total.load(std::memory_order_relaxed);
+    d.draw_calls_total        = sub_offhand_draw_calls_total.load(std::memory_order_relaxed);
+    d.matching_mesh_draws     = sub_offhand_matching_draws.load(std::memory_order_relaxed);
+    d.bone_swaps_succeeded    = sub_offhand_bone_swaps.load(std::memory_order_relaxed);
+    d.bone_lookups_failed     = sub_offhand_bone_lookup_fails.load(std::memory_order_relaxed);
+    d.bone_restores_count     = sub_offhand_bone_restores.load(std::memory_order_relaxed);
+    d.last_idx_main           = sub_offhand_last_idx_main.load(std::memory_order_relaxed);
+    d.last_idx_sub            = sub_offhand_last_idx_sub.load(std::memory_order_relaxed);
+    d.last_matrices_distinct  = sub_offhand_last_matrices_distinct.load(std::memory_order_relaxed);
+    *output = d;
+    return 0;
+}
+
+static_assert(sizeof(SoulspireNativeWeaponOffhandDiag) == 72);
 
 static_assert(sizeof(SoulspireNativeStatus) == 68);
 static_assert(sizeof(SoulspireNativeActionEntry) == 288);
