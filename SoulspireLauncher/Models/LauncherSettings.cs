@@ -2,6 +2,12 @@ using System.IO;
 
 namespace SoulspireLauncher.Models;
 
+public enum ClientEngineMode
+{
+    Classic = 0,
+    Modern = 1
+}
+
 public enum WindowModeOption
 {
     Borderless = 3,
@@ -126,6 +132,10 @@ public sealed class LauncherSettings
     }
 
     public UpdateChannel UpdateChannel { get; set; } = UpdateChannel.Stable;
+    public ClientEngineMode ClientEngine { get; set; } = ClientEngineMode.Classic;
+    public string ModernClientPath { get; set; } = string.Empty;
+    public bool ModernClientSafeLoginMode { get; set; } = true;
+    public bool ModernClientUseD3D11Fallback { get; set; }
 
     public ServerTargetMode ServerTarget { get; set; } = ServerTargetMode.Production;
     public StagingLane StagingLane { get; set; } = StagingLane.Combat;
@@ -212,7 +222,8 @@ public sealed class LauncherSettings
     {
         return new LauncherSettings
         {
-            AshitaPath = Path.Combine(baseDir, "Ashita")
+            AshitaPath = Path.Combine(baseDir, "Ashita"),
+            ModernClientPath = Path.Combine(baseDir, "ModernClient")
         };
     }
 }

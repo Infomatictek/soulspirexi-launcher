@@ -440,16 +440,67 @@ function Input:on_xinput_axis(button_id, value, dispatch_fn, hub_open, now)
     return hub_open == true
 end
 
--- Filter raw Ashita v4 XINPUT_STATE table/cdata:
+local ok_ffi, ffi = pcall(require, 'ffi')
+if ok_ffi and ffi then
+    pcall(ffi.cdef, [[
+        typedef struct _SXI_XINPUT_GAMEPAD {
+            uint16_t wButtons;
+            uint8_t  bLeftTrigger;
+            uint8_t  bRightTrigger;
+            int16_t  sThumbLX;
+            int16_t  sThumbLY;
+            int16_t  sThumbRX;
+            int16_t  sThumbRY;
+        } SXI_XINPUT_GAMEPAD;
+        typedef struct _SXI_XINPUT_STATE {
+            uint32_t           dwPacketNumber;
+            SXI_XINPUT_GAMEPAD Gamepad;
+        } SXI_XINPUT_STATE;
+        typedef struct _SXI_DIJOYSTATE {
+            int32_t  lX;
+            int32_t  lY;
+            int32_t  lZ;
+            int32_t  lRx;
+            int32_t  lRy;
+            int32_t  lRz;
+            int32_t  rglSlider[2];
+            uint32_t rgdwPOV[4];
+            uint8_t  rgbButtons[32];
+        } SXI_DIJOYSTATE;
+    ]])
+end
+
+local function normalize_xinput_state(obj)
+    if obj == nil then return nil end
+    if type(obj) == 'userdata' and ok_ffi and ffi then
+        local ok, ptr = pcall(ffi.cast, 'SXI_XINPUT_STATE*', obj)
+        if ok and ptr ~= nil then return ptr end
+    end
+    return obj
+end
+
+local function normalize_dinput_state(obj)
+    if obj == nil then return nil end
+    if type(obj) == 'userdata' and ok_ffi and ffi then
+        local ok, ptr = pcall(ffi.cast, 'SXI_DIJOYSTATE*', obj)
+        if ok and ptr ~= nil then return ptr end
+    end
+    return obj
+end
+
+-- Filter raw Ashita v4 / VanaCore XINPUT_STATE table/cdata/lightuserdata:
 -- Reads Left Stick for Core navigation AND zeroes modified state when Core Hub owns focus
 -- so FFXI character movement / camera / macro triggers never fire behind Core.
--- All cdata field accesses are pcall-guarded so differing Ashita v4 FFI layouts never error.
+-- All cdata field accesses are pcall-guarded so differing Ashita v4 / VanaCore FFI layouts never error.
 function Input:filter_xinput_state(state_obj, modified_obj, dispatch_fn, hub_open, now)
     if not hub_open then
         self.stick_dir = nil
         self.repeat_state['pad:lstick'] = nil
         return false
     end
+
+    state_obj = normalize_xinput_state(state_obj)
+    modified_obj = normalize_xinput_state(modified_obj)
 
     if state_obj ~= nil then
         local ok, lx, ly = pcall(function()
@@ -498,6 +549,9 @@ function Input:filter_dinput_state(state_obj, modified_obj, dispatch_fn, hub_ope
     if not hub_open then
         return false
     end
+
+    state_obj = normalize_dinput_state(state_obj)
+    modified_obj = normalize_dinput_state(modified_obj)
 
     local is_unsigned = false
     if state_obj ~= nil then

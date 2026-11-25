@@ -439,6 +439,15 @@ public sealed class ManifestUpdateService
             return false;
         }
 
+        // Stable channel must never distribute an unverified Modern (VanaCore) client descriptor.
+        if (requestedChannel == UpdateChannel.Stable &&
+            manifest.ModernClient is not null &&
+            !manifest.ModernClient.ClientVerified)
+        {
+            error = "Refusing Stable manifest: modernClient is not marked client-verified (modernClient.clientVerified=false). Modern (VanaCore) remains opt-in on Testing until runtime certification completes.";
+            return false;
+        }
+
         // Verify clientDataCache manifest entry integrity when declared.
         var cacheMeta = manifest.ClientDataCache;
         if (cacheMeta is not null)

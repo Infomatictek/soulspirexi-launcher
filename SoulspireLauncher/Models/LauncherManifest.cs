@@ -28,6 +28,9 @@ public sealed class LauncherManifest
     [JsonPropertyName("clientDataCache")]
     public ManifestClientDataCache? ClientDataCache { get; set; }
 
+    [JsonPropertyName("modernClient")]
+    public ManifestModernClient? ModernClient { get; set; }
+
     [JsonPropertyName("serverName")]
     public string ServerName { get; set; } = "SoulspireXI";
 
@@ -348,4 +351,31 @@ public sealed class ManifestClientDataCache
 
     [JsonPropertyName("packageCount")]
     public int PackageCount { get; set; }
+}
+
+public sealed class ManifestModernClient
+{
+    [JsonPropertyName("engine")]
+    public string Engine { get; set; } = "vanacore";
+
+    [JsonPropertyName("version")]
+    public string Version { get; set; } = string.Empty;
+
+    [JsonPropertyName("upstreamCommit")]
+    public string UpstreamCommit { get; set; } = string.Empty;
+
+    [JsonPropertyName("packageUrl")]
+    public string PackageUrl { get; set; } = string.Empty;
+
+    [JsonPropertyName("packageSha256")]
+    public string PackageSha256 { get; set; } = string.Empty;
+
+    [JsonPropertyName("packageSize")]
+    public long PackageSize { get; set; }
+
+    [JsonPropertyName("clientVerified")]
+    public bool ClientVerified { get; set; }
+
+    [JsonPropertyName("minimumAshitaInterface")]
+    public string MinimumAshitaInterface { get; set; } = "4.30";
 }

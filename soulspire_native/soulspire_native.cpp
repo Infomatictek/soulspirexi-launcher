@@ -1510,6 +1510,7 @@ static bool inject_commands_menu_entry_impl(uint8_t* prim) noexcept {
     uint8_t* existing_btn16 = nullptr;
     uint8_t* shifted_buttons[16]{};
     size_t shifted_count = 0;
+    size_t total_button_count = 0;
     const uint8_t* src_sprites[kCommandsSourceSpriteCount]{};
 
     uint8_t* node = nullptr;
@@ -1526,6 +1527,7 @@ static bool inject_commands_menu_entry_impl(uint8_t* prim) noexcept {
                 if (elem_type == 0 && frame == nullptr) {
                     frame = elem;
                 } else if (elem_type == 1) {
+                    ++total_button_count;
                     int16_t btn_id = 0;
                     std::memcpy(&btn_id, elem + 0x3A, sizeof(btn_id));
                     if (btn_id == kCommandsSoulspireButtonId) {
@@ -1548,6 +1550,28 @@ static bool inject_commands_menu_entry_impl(uint8_t* prim) noexcept {
         uint8_t* next = nullptr;
         std::memcpy(&next, node + 0x00, sizeof(next));
         node = next;
+    }
+
+    // Fail-closed guard against VanaCore [client] singlemenu=1 (27-button combined menuwind where ID 16 = Missions).
+    if (total_button_count > static_cast<size_t>(kCommandsExpandedButtonCount)) {
+        log_message(LOG_LEVEL_WARN,
+            "Skipping native Commands menu injection: menuwind already contains >16 buttons (e.g. VanaCore singlemenu=1); refusing Button ID 16 collision.");
+        return false;
+    }
+    if (frame != nullptr) {
+        uint8_t* fdata = nullptr;
+        std::memcpy(&fdata, frame + 0x30, sizeof(fdata));
+        uint8_t* fres = nullptr;
+        if (fdata != nullptr) std::memcpy(&fres, fdata, sizeof(fres));
+        if (fres != nullptr) {
+            int16_t check_h = 0;
+            std::memcpy(&check_h, fres + 0x0C, sizeof(check_h));
+            if (check_h > kCommandsExpandedFrameH) {
+                log_message(LOG_LEVEL_WARN,
+                    "Skipping native Commands menu injection: menuwind frame height exceeds 218px (e.g. VanaCore singlemenu=1); refusing Button ID 16 collision.");
+                return false;
+            }
+        }
     }
 
     uint8_t* soulspire_sprite = acquire_soulspire_menu_sprite(src_sprites);
@@ -2041,8 +2065,8 @@ static bool supported_impl(uint8_t* base) noexcept {
         uint8_t expected[24];
         std::memcpy(expected, signature.bytes, sizeof(expected));
         relocate_signature(signature.rva, expected, delta);
-        if ((signature.rva == 0xDD6C0 || signature.rva == 0xDF7C0) && host_detour(base + signature.rva,
-            expected, sizeof(expected), signature.rva == 0xDD6C0 ? 10 : 5, GetModuleHandleW(L"Ashita.dll"))) {
+        if (host_packet_detour_matches(signature.rva, base + signature.rva, expected, sizeof(expected),
+            GetModuleHandleW(L"Ashita.dll"), detect_vanacore_host_module())) {
             ++sig_index;
             continue;
         }

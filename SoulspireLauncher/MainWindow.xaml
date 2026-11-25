@@ -495,6 +495,27 @@
                                                 </WrapPanel>
                                             </StackPanel>
                                         </Border>
+
+                                        <Border Background="{StaticResource AbyssBrush}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,12,0,0">
+                                            <StackPanel>
+                                                <TextBlock Text="CLIENT ENGINE (CLASSIC VS MODERN)" FontSize="12" FontWeight="Bold" Foreground="{StaticResource GoldAccent}" Margin="0,0,0,6" />
+                                                <ComboBox ItemsSource="{Binding ClientEngineOptions}"
+                                                          SelectedItem="{Binding SelectedClientEngine}"
+                                                          IsEnabled="{Binding CanSelectModernEngine}"
+                                                          Margin="0,0,0,6" />
+                                                <TextBlock Text="{Binding ClientEngineStatusText}" FontSize="11.5" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" Margin="0,0,0,6" />
+                                                <CheckBox Content="Phase 1 Safe Login Mode (disable Soulspire Native, Core &amp; rendering mods)"
+                                                          IsChecked="{Binding ModernClientSafeLoginMode}"
+                                                          Visibility="{Binding IsModernEngineSelected, Converter={StaticResource BoolToVis}}"
+                                                          Margin="0,2,0,4" />
+                                                <TextBlock Text="Isolated Modern Client Folder"
+                                                           FontSize="11" Foreground="{StaticResource TextSecondary}"
+                                                           Visibility="{Binding IsModernEngineSelected, Converter={StaticResource BoolToVis}}"
+                                                           Margin="0,4,0,2" />
+                                                <TextBox Text="{Binding ModernClientPath}"
+                                                         Visibility="{Binding IsModernEngineSelected, Converter={StaticResource BoolToVis}}" />
+                                            </StackPanel>
+                                        </Border>
                                     </StackPanel>
                                 </Border>
 

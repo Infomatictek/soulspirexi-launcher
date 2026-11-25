@@ -61,6 +61,12 @@ inline void safe_read_bytes(const void* src, uint8_t (&out)[8]) noexcept {
 #endif
 }
 
+enum class ClientHostKind : uint8_t {
+    Unknown  = 0,
+    Ashita   = 1,
+    VanaCore = 2,
+};
+
 inline bool host_detour(uint8_t* entry, const uint8_t* expected, size_t length, size_t stolen, HMODULE host) noexcept {
     if (host == nullptr || entry == nullptr || entry[0] != 0xe9u || stolen < 5 || stolen >= length) return false;
     for (size_t at = 5; at < stolen; ++at) {
@@ -75,6 +81,47 @@ inline bool host_detour(uint8_t* entry, const uint8_t* expected, size_t length, 
     const DWORD protection = region.Protect & 0xffu;
     return protection == PAGE_EXECUTE || protection == PAGE_EXECUTE_READ ||
            protection == PAGE_EXECUTE_READWRITE || protection == PAGE_EXECUTE_WRITECOPY;
+}
+
+inline HMODULE detect_vanacore_host_module() noexcept {
+    if (HMODULE m = GetModuleHandleW(L"VanaCore.Core.dll")) return m;
+    if (HMODULE m = GetModuleHandleW(L"SoulspireClient.Core.dll")) return m;
+    return nullptr;
+}
+
+inline ClientHostKind detect_client_host(HMODULE* out_module = nullptr) noexcept {
+    if (HMODULE m = GetModuleHandleW(L"Ashita.dll")) {
+        if (out_module != nullptr) *out_module = m;
+        return ClientHostKind::Ashita;
+    }
+    if (HMODULE m = detect_vanacore_host_module()) {
+        if (out_module != nullptr) *out_module = m;
+        return ClientHostKind::VanaCore;
+    }
+    if (out_module != nullptr) *out_module = nullptr;
+    return ClientHostKind::Unknown;
+}
+
+// Fail-closed dual-host packet detour validator for FFXiMain.dll decrypt (0xDD6C0) and encrypt/encode (0xDF7C0).
+// Accepts verified prologues owned by Ashita.dll (10B decrypt / 5B encrypt) OR VanaCore.Core.dll /
+// SoulspireClient.Core.dll (10B decrypt / 5B or 7B encrypt). Never skips signature validation for unknown modules.
+inline bool host_packet_detour_matches(
+    uintptr_t rva,
+    uint8_t* entry,
+    const uint8_t* expected,
+    size_t length,
+    HMODULE ashita_host,
+    HMODULE vanacore_host) noexcept {
+    if (rva == 0xDD6C0u) {
+        return host_detour(entry, expected, length, 10, ashita_host) ||
+               host_detour(entry, expected, length, 10, vanacore_host);
+    }
+    if (rva == 0xDF7C0u) {
+        return host_detour(entry, expected, length, 5, ashita_host) ||
+               host_detour(entry, expected, length, 5, vanacore_host) ||
+               host_detour(entry, expected, length, 7, vanacore_host);
+    }
+    return false;
 }
 
 // Atomic 5-byte CALL displacement patcher (opcode 0xE8 stays invariant; 4-byte displacement swapped via lock cmpxchg).
