@@ -427,6 +427,48 @@ function M.scan_text_buffer(text_bytes, text_rva, pe_info, actor_summary, extra_
         }
     end
 
+    -- 2e. Callers of SetWorldMatrix (RVA 0x6A480) — character/skeleton 3D matrix stack users.
+    do
+        local target_rva = 0x6A480
+        local matches = {}
+        for i = 1, text_len - 5 do
+            if #matches >= M.MAX_MATCHES_PER_RULE then break end
+            if text_bytes[i] == 0xE8 then
+                local rel = read_u32_le(text_bytes, i)
+                if rel then
+                    if rel >= 0x80000000 then rel = rel - 0x100000000 end
+                    local call_rva = text_rva + (i - 1)
+                    if (call_rva + 5 + rel) == target_rva then
+                        matches[#matches + 1] = capture_window(call_rva)
+                    end
+                end
+            end
+        end
+        findings[#findings + 1] = {
+            id          = 'matrix_stack_set_world_callers',
+            description = 'Direct callers of SetWorldMatrix (0x6A480)',
+            match_count = #matches,
+            matches     = matches,
+        }
+    end
+
+    -- 2f. Normalized CXiActor / model vtable method RVAs (code-only, zero heap/PII).
+    if type(extra_opts.vtable_method_rvas) == 'table' and #extra_opts.vtable_method_rvas > 0 then
+        local matches = {}
+        for _, mrva in ipairs(extra_opts.vtable_method_rvas) do
+            if #matches >= M.MAX_MATCHES_PER_RULE then break end
+            if mrva >= text_rva and mrva < text_end_rva then
+                matches[#matches + 1] = capture_window(mrva)
+            end
+        end
+        findings[#findings + 1] = {
+            id          = 'actor_vtable_methods',
+            description = 'Normalized .text code windows for local actor render vtable methods',
+            match_count = #matches,
+            matches     = matches,
+        }
+    end
+
     -- 3. Strictly non-PII numeric actor model summary (optional)
     local safe_actor = nil
     if type(actor_summary) == 'table' then
@@ -573,6 +615,7 @@ function M.run_live_probe(opts)
         end
     end
 
+    local vtable_method_rvas = {}
     local actor_summary = opts.actor_summary
     if not actor_summary and AshitaCore and AshitaCore.GetMemoryManager then
         local ok_ent, summary = pcall(function()
@@ -586,21 +629,39 @@ function M.run_live_probe(opts)
                 local ok_v, v = pcall(ent[fn_name], ent, idx)
                 return ok_v and tonumber(v) or nil
             end
+            local actor_ptr = safe_get('GetActorPointer') or safe_get('GetRenderPointer') or 0
+            if actor_ptr ~= 0 and type(mem.read_uint32) == 'function' then
+                local ok_vt, vtbl = pcall(mem.read_uint32, actor_ptr)
+                if ok_vt and type(vtbl) == 'number' and vtbl > base and vtbl < (base + pe_info.size_of_image) then
+                    local seen = {}
+                    for slot = 0, 23 do
+                        local ok_fn, fn_va = pcall(mem.read_uint32, vtbl + slot * 4)
+                        if ok_fn and type(fn_va) == 'number' and fn_va > base and fn_va < (base + pe_info.size_of_image) then
+                            local rva = fn_va - base
+                            if not seen[rva] then
+                                seen[rva] = true
+                                vtable_method_rvas[#vtable_method_rvas + 1] = rva
+                            end
+                        end
+                    end
+                end
+            end
             return {
                 race_id        = safe_get('GetRace') or 0,
                 look_main      = safe_get('GetLookMain') or safe_get('GetLookWeaponMain') or 0,
                 look_sub       = safe_get('GetLookSub') or safe_get('GetLookWeaponSub') or 0,
                 status_id      = safe_get('GetStatus') or 0,
-                has_render_ptr = (safe_get('GetRenderPointer') or 0) ~= 0,
+                has_render_ptr = actor_ptr ~= 0,
             }
         end)
         if ok_ent then actor_summary = summary end
     end
 
     local report, serr = M.scan_text_buffer(text_bytes, pe_info.text_rva, pe_info, actor_summary, {
-        rdata_bytes = rdata_bytes,
-        rdata_rva   = pe_info.rdata_rva,
-        module_base = base,
+        rdata_bytes        = rdata_bytes,
+        rdata_rva          = pe_info.rdata_rva,
+        module_base        = base,
+        vtable_method_rvas = vtable_method_rvas,
     })
     if not report then
         return false, serr
