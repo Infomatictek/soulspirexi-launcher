@@ -186,7 +186,9 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
         if action == 'on' then
             weapon_pres:set_diagnostics_enabled(true)
             weapon_pres:load_calibration_file()
-            log('Developer weapon alignment diagnostics ENABLED (disabled by default; live sync to soulspire_native active).')
+            local det_ok, det_rk = weapon_pres:detect_local_race()
+            log(('Developer weapon alignment diagnostics ENABLED (race=%s; disabled by default; live sync to soulspire_native active).'):format(
+                det_ok and tostring(det_rk) or 'manual'))
         elseif action == 'off' then
             weapon_pres:set_diagnostics_enabled(false)
             if weapon_pres.calibration_path then weapon_pres:save_calibration_and_sync_native() end

@@ -412,9 +412,38 @@ function M.new(config_path, calibration_path, native_reload_fn)
         return self.diagnostics_enabled == true
     end
 
+    function self:set_race_by_id(race_id)
+        local rid = tonumber(race_id)
+        if not rid or rid < 1 or rid > #M.RACE_KEYS then
+            return false, nil
+        end
+        self.selected_race_idx = math.floor(rid)
+        return true, M.RACE_KEYS[self.selected_race_idx]
+    end
+
+    function self:detect_local_race()
+        if not (AshitaCore and AshitaCore.GetMemoryManager) then
+            return false, nil
+        end
+        local ok, rid = pcall(function()
+            local mm = AshitaCore:GetMemoryManager()
+            local party = mm and mm:GetParty()
+            local ent = mm and mm:GetEntity()
+            local idx = party and party:GetMemberTargetIndex(0) or 0
+            if not ent or not idx or idx == 0 then return nil end
+            return ent:GetRace(idx)
+        end)
+        if ok and rid then
+            return self:set_race_by_id(rid)
+        end
+        return false, nil
+    end
+
     function self:set_diagnostics_enabled(flag)
         self.diagnostics_enabled = (flag == true)
-        if not self.diagnostics_enabled then
+        if self.diagnostics_enabled then
+            self:detect_local_race()
+        else
             -- Restoring baseline presentation immediately when diagnostics are turned off.
             for pid, prof in pairs(self.base_profiles) do
                 if self.profiles[pid] and prof.races then
@@ -943,6 +972,10 @@ function M.new(config_path, calibration_path, native_reload_fn)
                 end
             end
 
+            if imgui.Button('Detect My Race') then
+                self:detect_local_race()
+            end
+            imgui.SameLine()
             if imgui.Button('Prev Race') then
                 self.selected_race_idx = ((self.selected_race_idx - 2) % #M.RACE_KEYS) + 1
             end
