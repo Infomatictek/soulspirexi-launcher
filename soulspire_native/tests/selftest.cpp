@@ -2002,6 +2002,62 @@ int main() {
         selftest_alive = false;
     }
 
+    // Native 1H offhand (0x7F left-hand) bone attachment reuse unit test:
+    // Verifies per-instance Sub mesh registration, 0x7E <- 0x7F matrix swap/restore,
+    // Main mesh isolation (identical & different Great Axes), and clean actor clear.
+    {
+        struct FakeModelPart {
+            uint8_t pad[0x14];
+            float*  bone_matrices;
+        };
+        float matrices[128 * 16]{};
+        // Bone 0x7E -> index 90 (Right Hand), Bone 0x7F -> index 91 (Left Hand)
+        for (int i = 0; i < 16; ++i) {
+            matrices[90 * 16 + i] = 100.0f + static_cast<float>(i);
+            matrices[91 * 16 + i] = 200.0f + static_cast<float>(i);
+        }
+        FakeModelPart fake_part{};
+        fake_part.bone_matrices = matrices;
+        int dummy_actor = 1, dummy_mesh_main = 2, dummy_mesh_sub = 3;
+
+        struct FakeBoneLookup {
+            static uint32_t __fastcall call(void*, void*, int32_t bone_tag) noexcept {
+                if (bone_tag == 0x7E) return 90u;
+                if (bone_tag == 0x7F) return 91u;
+                return 0u;
+            }
+        };
+        original_lookup_bone_index = &FakeBoneLookup::call;
+        enabled.store(true, std::memory_order_release);
+        clear_all_sub_offhand_meshes();
+
+        // Register ONLY the Sub Great Axe mesh instance (Main remains untagged)
+        register_sub_offhand_mesh(&dummy_actor, &fake_part, &dummy_mesh_sub);
+        assert(is_registered_sub_offhand_mesh(&fake_part, &dummy_mesh_sub));
+        assert(!is_registered_sub_offhand_mesh(&fake_part, &dummy_mesh_main));
+
+        // Drawing Main Great Axe must NOT swap 0x7E
+        soul_pre_mesh_draw_swap(&fake_part, &dummy_mesh_main);
+        assert(!tls_saved_main_weapon_bone.active);
+        assert(matrices[90 * 16 + 0] == 100.0f);
+        soul_post_mesh_draw_restore();
+
+        // Drawing Sub Great Axe MUST swap 0x7E <- 0x7F (native Left Hand matrix) and restore cleanly
+        soul_pre_mesh_draw_swap(&fake_part, &dummy_mesh_sub);
+        assert(tls_saved_main_weapon_bone.active);
+        assert(matrices[90 * 16 + 0] == 200.0f && matrices[90 * 16 + 15] == 215.0f);
+        soul_post_mesh_draw_restore();
+        assert(!tls_saved_main_weapon_bone.active);
+        assert(matrices[90 * 16 + 0] == 100.0f && matrices[90 * 16 + 15] == 115.0f);
+
+        // Unequipping / clearing Sub slot removes registration
+        clear_sub_offhand_meshes_for_actor(&dummy_actor);
+        assert(!is_registered_sub_offhand_mesh(&fake_part, &dummy_mesh_sub));
+        assert(sub_offhand_mesh_count.load(std::memory_order_acquire) == 0u);
+        original_lookup_bone_index = nullptr;
+        enabled.store(false, std::memory_order_release);
+    }
+
     const auto get_iface_info = reinterpret_cast<uint32_t(__stdcall*)(SoulspireNativeInterfaceInfo*, uint32_t)>(
         GetProcAddress(dll, "SoulspireNativeGetInterfaceInfo"));
     SoulspireNativeInterfaceInfo info{};

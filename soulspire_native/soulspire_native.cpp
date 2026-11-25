@@ -1157,6 +1157,270 @@ static uint32_t __stdcall soul_resolve_pc_sub_model_table_slot(const uint8_t* ac
     return 7u;
 }
 
+// ============================================================================
+// WS3-WEAP-002 — Native 1H Offhand (0x7F Left-Hand) Bone Attachment Reuse
+// ============================================================================
+// Reuses FFXI's own native 1H offhand bone pipeline (bone 0x7F computed by
+// CXiModelPart::UpdateSkeleton @ 0x2A140) per CXiModelMesh* instance without
+// mutating shared Main weapon OS2 DAT buffers or duplicating DAT files.
+
+using AttachEquipModelFn = void (__fastcall*)(void* actor, void* edx, void* res_handle,
+                                              uint32_t slot_and_model, uint32_t actor_gen, uint8_t flag);
+using ModelPartAddMeshFn = void* (__fastcall*)(void* model_part, void* edx, void* os2_res);
+using LookupBoneIndexFn  = uint32_t (__fastcall*)(void* model_part, void* edx, int32_t bone_tag);
+
+static AttachEquipModelFn original_attach_equip_model = nullptr;
+static ModelPartAddMeshFn original_model_part_add_mesh = nullptr;
+static LookupBoneIndexFn  original_lookup_bone_index = nullptr;
+static uintptr_t          soul_model_mesh_draw_resume = 0;
+
+struct SubOffhandMeshEntry {
+    void* actor      = nullptr;
+    void* model_part = nullptr;
+    void* mesh       = nullptr;
+};
+
+static constexpr size_t kMaxSubOffhandMeshes = 64u;
+static SRWLOCK sub_offhand_mesh_lock = SRWLOCK_INIT;
+static SubOffhandMeshEntry sub_offhand_meshes[kMaxSubOffhandMeshes]{};
+static std::atomic<uint32_t> sub_offhand_mesh_count{0};
+static std::atomic<uint32_t> sub_offhand_bone_swaps{0};
+
+static thread_local bool  tls_sub_offhand_attach_active = false;
+static thread_local void* tls_sub_offhand_attach_actor  = nullptr;
+
+struct SavedBoneMatrixState {
+    bool   active = false;
+    float* target = nullptr;
+    float  saved[16]{};
+};
+static thread_local SavedBoneMatrixState tls_saved_main_weapon_bone{};
+
+static void clear_sub_offhand_meshes_for_actor(void* actor) noexcept {
+    if (actor == nullptr) return;
+    AcquireSRWLockExclusive(&sub_offhand_mesh_lock);
+    uint32_t count = 0;
+    for (auto& e : sub_offhand_meshes) {
+        if (e.actor == actor) {
+            e = {};
+        } else if (e.mesh != nullptr) {
+            ++count;
+        }
+    }
+    sub_offhand_mesh_count.store(count, std::memory_order_release);
+    ReleaseSRWLockExclusive(&sub_offhand_mesh_lock);
+}
+
+static void clear_all_sub_offhand_meshes() noexcept {
+    AcquireSRWLockExclusive(&sub_offhand_mesh_lock);
+    for (auto& e : sub_offhand_meshes) {
+        e = {};
+    }
+    sub_offhand_mesh_count.store(0u, std::memory_order_release);
+    ReleaseSRWLockExclusive(&sub_offhand_mesh_lock);
+}
+
+static void register_sub_offhand_mesh(void* actor, void* model_part, void* mesh) noexcept {
+    if (actor == nullptr || model_part == nullptr || mesh == nullptr) return;
+    AcquireSRWLockExclusive(&sub_offhand_mesh_lock);
+    // Avoid duplicate entry for the same (model_part, mesh)
+    SubOffhandMeshEntry* free_slot = nullptr;
+    uint32_t count = 0;
+    bool exists = false;
+    for (auto& e : sub_offhand_meshes) {
+        if (e.model_part == model_part && e.mesh == mesh) {
+            e.actor = actor;
+            exists = true;
+        }
+        if (e.mesh != nullptr) {
+            ++count;
+        } else if (free_slot == nullptr) {
+            free_slot = &e;
+        }
+    }
+    if (!exists && free_slot != nullptr) {
+        free_slot->actor = actor;
+        free_slot->model_part = model_part;
+        free_slot->mesh = mesh;
+        ++count;
+    }
+    sub_offhand_mesh_count.store(count, std::memory_order_release);
+    ReleaseSRWLockExclusive(&sub_offhand_mesh_lock);
+}
+
+static bool is_registered_sub_offhand_mesh(void* model_part, void* mesh) noexcept {
+    if (model_part == nullptr || mesh == nullptr) return false;
+    if (sub_offhand_mesh_count.load(std::memory_order_acquire) == 0u) return false;
+    bool found = false;
+    AcquireSRWLockShared(&sub_offhand_mesh_lock);
+    for (const auto& e : sub_offhand_meshes) {
+        if (e.model_part == model_part && e.mesh == mesh) {
+            found = true;
+            break;
+        }
+    }
+    ReleaseSRWLockShared(&sub_offhand_mesh_lock);
+    return found;
+}
+
+static bool soul_authorizes_sub_offhand_bone(void* actor, uint32_t sub_model_id_raw) noexcept {
+    if (!enabled.load(std::memory_order_acquire) || !module_enabled(SOULSPIRE_NATIVE_MOD_RENDERING)) {
+        return false;
+    }
+    const uint16_t sub_model_id = static_cast<uint16_t>(sub_model_id_raw & 0x0FFFu);
+    if (sub_model_id == 0u || is_vanilla_shield_model_id(sub_model_id)) {
+        return false;
+    }
+    uint32_t actor_id = 0;
+    if (!safe_read_actor_server_id(actor, actor_id)) {
+        return false;
+    }
+    AcquireSRWLockShared(&state_lock);
+    const uint32_t local_char_id = (transport.character != 0) ? transport.character : soul_override.character;
+    ReleaseSRWLockShared(&state_lock);
+
+    const bool is_local = (local_char_id != 0 && actor_id == local_char_id);
+    uint8_t job = 0, branch = 0;
+    bool soul_known = false;
+    uint8_t effective_level = 0;
+    bool has_equipped_skills = false;
+    uint16_t main_item_id = 0, main_skill = 0, sub_item_id = 0, sub_skill = 0;
+    if (is_local) {
+        soul_known = active_action_soul(job, branch);
+        effective_level = (main_lvl_slot != nullptr) ? *main_lvl_slot : 0u;
+        main_item_id = static_cast<uint16_t>(local_equip_main_item_id.load(std::memory_order_relaxed));
+        main_skill   = static_cast<uint16_t>(local_equip_main_skill.load(std::memory_order_relaxed));
+        sub_item_id  = static_cast<uint16_t>(local_equip_sub_item_id.load(std::memory_order_relaxed));
+        sub_skill    = static_cast<uint16_t>(local_equip_sub_skill.load(std::memory_order_relaxed));
+        if (main_skill == 0u || sub_skill == 0u) return false;
+        has_equipped_skills = true;
+    } else if (sub_model_id == 84u) {
+        return false;
+    }
+    const uint32_t now_ms = static_cast<uint32_t>(GetTickCount());
+    AcquireSRWLockShared(&weapon_lock);
+    const bool remap = weapon_presentation_mgr.authorizes_sub_main_namespace(
+        actor_id, is_local, soul_known, job, branch, effective_level, sub_model_id, now_ms,
+        has_equipped_skills, main_skill, main_item_id, sub_skill, sub_item_id);
+    ReleaseSRWLockShared(&weapon_lock);
+    return remap;
+}
+
+static void __fastcall soul_attach_equip_model_hook(
+    void* actor, void* edx, void* res_handle, uint32_t slot_and_model, uint32_t actor_gen, uint8_t flag) {
+    const uint32_t slot = (slot_and_model >> 12u) & 0x0Fu;
+    const bool prev_active = tls_sub_offhand_attach_active;
+    void* const prev_actor = tls_sub_offhand_attach_actor;
+    if (slot == 7u && actor != nullptr) {
+        clear_sub_offhand_meshes_for_actor(actor);
+        if (flag != 0u && res_handle != nullptr && soul_authorizes_sub_offhand_bone(actor, slot_and_model)) {
+            tls_sub_offhand_attach_actor = actor;
+            tls_sub_offhand_attach_active = true;
+        } else {
+            tls_sub_offhand_attach_actor = nullptr;
+            tls_sub_offhand_attach_active = false;
+        }
+    }
+    if (original_attach_equip_model != nullptr) {
+        original_attach_equip_model(actor, edx, res_handle, slot_and_model, actor_gen, flag);
+    }
+    tls_sub_offhand_attach_active = prev_active;
+    tls_sub_offhand_attach_actor = prev_actor;
+}
+
+static void* __fastcall soul_model_part_add_mesh_hook(void* model_part, void* edx, void* os2_res) {
+    void* mesh = (original_model_part_add_mesh != nullptr)
+        ? original_model_part_add_mesh(model_part, edx, os2_res)
+        : nullptr;
+    if (tls_sub_offhand_attach_active && tls_sub_offhand_attach_actor != nullptr &&
+        model_part != nullptr && mesh != nullptr) {
+        register_sub_offhand_mesh(tls_sub_offhand_attach_actor, model_part, mesh);
+    }
+    return mesh;
+}
+
+static void soul_pre_mesh_draw_swap_impl(void* model_part, void* mesh) noexcept {
+    tls_saved_main_weapon_bone.active = false;
+    tls_saved_main_weapon_bone.target = nullptr;
+    if (!enabled.load(std::memory_order_acquire) || !module_enabled(SOULSPIRE_NATIVE_MOD_RENDERING)) {
+        return;
+    }
+    if (!is_registered_sub_offhand_mesh(model_part, mesh)) {
+        return;
+    }
+    if (original_lookup_bone_index == nullptr) {
+        return;
+    }
+    const uint32_t idx_main = original_lookup_bone_index(model_part, nullptr, 0x7E) & 0xFFu;
+    const uint32_t idx_sub  = original_lookup_bone_index(model_part, nullptr, 0x7F) & 0xFFu;
+    if (idx_main == 0u || idx_sub == 0u || idx_main == idx_sub || idx_main >= 256u || idx_sub >= 256u) {
+        return;
+    }
+    float* matrices = *reinterpret_cast<float* const*>(reinterpret_cast<uintptr_t>(model_part) + 0x14u);
+    if (matrices == nullptr) {
+        return;
+    }
+    float* main_mat = matrices + (static_cast<size_t>(idx_main) * 16u);
+    float* sub_mat  = matrices + (static_cast<size_t>(idx_sub) * 16u);
+    std::memcpy(tls_saved_main_weapon_bone.saved, main_mat, sizeof(tls_saved_main_weapon_bone.saved));
+    std::memcpy(main_mat, sub_mat, sizeof(tls_saved_main_weapon_bone.saved));
+    tls_saved_main_weapon_bone.target = main_mat;
+    tls_saved_main_weapon_bone.active = true;
+    sub_offhand_bone_swaps.fetch_add(1u, std::memory_order_relaxed);
+}
+
+static void __stdcall soul_pre_mesh_draw_swap(void* model_part, void* mesh) noexcept {
+#ifdef _MSC_VER
+    __try {
+        soul_pre_mesh_draw_swap_impl(model_part, mesh);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        tls_saved_main_weapon_bone.active = false;
+        tls_saved_main_weapon_bone.target = nullptr;
+    }
+#else
+    soul_pre_mesh_draw_swap_impl(model_part, mesh);
+#endif
+}
+
+static void __stdcall soul_post_mesh_draw_restore() noexcept {
+    if (tls_saved_main_weapon_bone.active && tls_saved_main_weapon_bone.target != nullptr) {
+        std::memcpy(tls_saved_main_weapon_bone.target, tls_saved_main_weapon_bone.saved,
+                    sizeof(tls_saved_main_weapon_bone.saved));
+    }
+    tls_saved_main_weapon_bone.active = false;
+    tls_saved_main_weapon_bone.target = nullptr;
+}
+
+static __declspec(naked) void soul_model_mesh_draw_hook() {
+    __asm {
+        push eax
+        push ecx
+        push edx
+        mov edx, dword ptr [esp + 0x30]
+        push ecx
+        push edx
+        call soul_pre_mesh_draw_swap
+        pop edx
+        pop ecx
+        pop eax
+        mov edx, dword ptr [esp + 0x24]
+        push ebp
+        push edx
+        mov edx, dword ptr [esp + 0x34]
+        push ebx
+        push edx
+        call dword ptr [eax + 0x1c]
+        push eax
+        push ecx
+        push edx
+        call soul_post_mesh_draw_restore
+        pop edx
+        pop ecx
+        pop eax
+        jmp dword ptr [soul_model_mesh_draw_resume]
+    }
+}
+
 static __declspec(naked) void soul_pc_sub_model_resolve_hook() {
     __asm {
         cmp ebp, 7
@@ -1974,6 +2238,21 @@ static PrologueDetour soul_sub_2h_main_detour{0x133DD3, reinterpret_cast<void*>(
 static PrologueDetour menuwind_key_item_detour{0x141800, reinterpret_cast<void*>(&menuwind_key_item_hook), 0x0Fu};    // Bit 30 (#31 / CMenuWind::OnKeyItem)
 static PrologueDetour soul_pc_sub_model_detour{0x0D3C45, reinterpret_cast<void*>(&soul_pc_sub_model_resolve_hook), 0x8Du}; // Bit 31 (#32 / PC Sub->Main FTABLE namespace)
 
+// Additive Native 1H Offhand (0x7F left-hand) bone attachment hooks (WS3-WEAP-002).
+// Kept outside patches[0..24]/detours[0..6] so kExpectedHooks stays 32 and installed_mask bits 0..31 remain ABI-stable.
+static PrologueDetour soul_attach_equip_model_detour{0x0D0B50, reinterpret_cast<void*>(&soul_attach_equip_model_hook), 0x8Au};
+static Patch          soul_model_part_add_mesh_patch{0x0CFA89, reinterpret_cast<void*>(&soul_model_part_add_mesh_hook)};
+static PrologueDetour soul_model_mesh_draw_detour{0x02A6B5, reinterpret_cast<void*>(&soul_model_mesh_draw_hook), 0x8Bu};
+
+static bool offhand_bone_hooks_installed() noexcept {
+    return soul_attach_equip_model_detour.site != nullptr &&
+           std::memcmp(soul_attach_equip_model_detour.site, soul_attach_equip_model_detour.installed, 5) == 0 &&
+           soul_model_part_add_mesh_patch.site != nullptr &&
+           std::memcmp(soul_model_part_add_mesh_patch.site, soul_model_part_add_mesh_patch.installed, 5) == 0 &&
+           soul_model_mesh_draw_detour.site != nullptr &&
+           std::memcmp(soul_model_mesh_draw_detour.site, soul_model_mesh_draw_detour.installed, 5) == 0;
+}
+
 static constexpr uint32_t kPatchCount = static_cast<uint32_t>(sizeof(patches) / sizeof(*patches));
 static constexpr uint32_t kDetourCount = 7u;
 static constexpr uint32_t kExpectedHooks = kPatchCount + kDetourCount;
@@ -2057,6 +2336,14 @@ static bool supported_impl(uint8_t* base) noexcept {
             if (d->rva == signature.rva && d->site != nullptr && std::memcmp(d->site, d->installed, 5) == 0) {
                 skip = 5;
             }
+        }
+        if ((soul_attach_equip_model_detour.rva == signature.rva && soul_attach_equip_model_detour.site != nullptr &&
+             std::memcmp(soul_attach_equip_model_detour.site, soul_attach_equip_model_detour.installed, 5) == 0) ||
+            (soul_model_part_add_mesh_patch.rva == signature.rva && soul_model_part_add_mesh_patch.site != nullptr &&
+             std::memcmp(soul_model_part_add_mesh_patch.site, soul_model_part_add_mesh_patch.installed, 5) == 0) ||
+            (soul_model_mesh_draw_detour.rva == signature.rva && soul_model_mesh_draw_detour.site != nullptr &&
+             std::memcmp(soul_model_mesh_draw_detour.site, soul_model_mesh_draw_detour.installed, 5) == 0)) {
+            skip = 5;
         }
         if (std::memcmp(base + signature.rva + skip, expected + skip, sizeof(expected) - skip) != 0) {
             hook_diag.init_stage = SOULSPIRE_NATIVE_INIT_SIG_MISMATCH;
@@ -2182,6 +2469,9 @@ static void collect_hook_state(uint32_t& total, uint32_t& installed_mask, uint32
             ((installed_mask & (1u << (kPatchCount + 6u))) != 0)) {
             caps |= SOULSPIRE_NATIVE_CAP_WEAPON_MODEL_RESOLVE;
         }
+        if (module_enabled(SOULSPIRE_NATIVE_MOD_RENDERING) && offhand_bone_hooks_installed()) {
+            caps |= SOULSPIRE_NATIVE_CAP_WEAPON_OFFHAND_BONE;
+        }
     }
 }
 
@@ -2195,8 +2485,12 @@ extern "C" uint32_t __stdcall SoulspireNativeShutdown() {
     // passthrough path while all original_* and *_resume pointers remain valid.
     enabled.store(false, std::memory_order_release);
 
-    // Step 2: Restore all 6 detours and 25 CALL patches BEFORE clearing pointers.
+    // Step 2: Restore additive offhand-bone hooks, all 7 detours, and 25 CALL patches BEFORE clearing pointers.
     uint32_t failure = 0;
+    if (!soul_model_mesh_draw_detour.restore()) failure = 3;
+    if (!soul_model_part_add_mesh_patch.restore()) failure = 3;
+    if (!soul_attach_equip_model_detour.restore()) failure = 3;
+    clear_all_sub_offhand_meshes();
     for (uint32_t j = kDetourCount; j-- > 0;) {
         if (!detour_at(j)->restore()) failure = 3;
     }
@@ -2357,6 +2651,9 @@ extern "C" uint32_t __stdcall SoulspireNativeInitialize() {
     // 0x133DEB sits inside the push 0x99 error-return tail (`xor al, al; ret 0x10`).
     soul_sub_2h_main_allow_resume = reinterpret_cast<uintptr_t>(base + 0x133E05);
     soul_pc_sub_model_resume = reinterpret_cast<uintptr_t>(base + 0x0D3C4C);
+    original_model_part_add_mesh = reinterpret_cast<ModelPartAddMeshFn>(base + 0x029F70);
+    original_lookup_bone_index = reinterpret_cast<LookupBoneIndexFn>(base + 0x02A9B0);
+    soul_model_mesh_draw_resume = reinterpret_cast<uintptr_t>(base + 0x02A6C4);
 
     AcquireSRWLockExclusive(&weapon_lock);
     load_runtime_resources(pinned, action_row_max_chars, &weapon_rule_catalog, &weapon_presentation_mgr);
@@ -2390,6 +2687,41 @@ extern "C" uint32_t __stdcall SoulspireNativeInitialize() {
             last_error.store(failure, std::memory_order_release);
             return failure;
         }
+    }
+
+    // Install additive Native 1H Offhand (0x7F left-hand) bone attachment hooks (WS3-WEAP-002).
+    clear_all_sub_offhand_meshes();
+    CanShowSpell attach_tramp = nullptr;
+    if (!soul_attach_equip_model_detour.install(base, &attach_tramp)) {
+        hook_diag.init_stage = SOULSPIRE_NATIVE_INIT_DETOUR_FAIL;
+        hook_diag.failed_index = kExpectedHooks;
+        hook_diag.failed_rva = static_cast<uint32_t>(soul_attach_equip_model_detour.rva);
+        safe_read_bytes(base + soul_attach_equip_model_detour.rva, hook_diag.observed_bytes);
+        ReleaseSRWLockExclusive(&lifecycle_lock);
+        const uint32_t failure = SoulspireNativeShutdown() == 0 ? 2 : 3;
+        last_error.store(failure, std::memory_order_release);
+        return failure;
+    }
+    original_attach_equip_model = reinterpret_cast<AttachEquipModelFn>(attach_tramp);
+    if (!soul_model_part_add_mesh_patch.install(base)) {
+        hook_diag.init_stage = SOULSPIRE_NATIVE_INIT_PATCH_FAIL;
+        hook_diag.failed_index = kExpectedHooks + 1u;
+        hook_diag.failed_rva = static_cast<uint32_t>(soul_model_part_add_mesh_patch.rva);
+        safe_read_bytes(base + soul_model_part_add_mesh_patch.rva, hook_diag.observed_bytes);
+        ReleaseSRWLockExclusive(&lifecycle_lock);
+        const uint32_t failure = SoulspireNativeShutdown() == 0 ? 2 : 3;
+        last_error.store(failure, std::memory_order_release);
+        return failure;
+    }
+    if (!soul_model_mesh_draw_detour.install(base, nullptr)) {
+        hook_diag.init_stage = SOULSPIRE_NATIVE_INIT_DETOUR_FAIL;
+        hook_diag.failed_index = kExpectedHooks + 2u;
+        hook_diag.failed_rva = static_cast<uint32_t>(soul_model_mesh_draw_detour.rva);
+        safe_read_bytes(base + soul_model_mesh_draw_detour.rva, hook_diag.observed_bytes);
+        ReleaseSRWLockExclusive(&lifecycle_lock);
+        const uint32_t failure = SoulspireNativeShutdown() == 0 ? 2 : 3;
+        last_error.store(failure, std::memory_order_release);
+        return failure;
     }
 
     AcquireSRWLockExclusive(&state_lock);
