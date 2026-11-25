@@ -6065,15 +6065,15 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/weapon_render_probe.lua",
       "targetPath": "soulspire_core/core/weapon_render_probe.lua",
-      "sha256": "13c83c8330f548d53bbd8aeca29bc18fe9035361e7abaee59afb2d617d8d60a8",
-      "size": 49048
+      "sha256": "19201c0db38f5b434259b33ad01df8894da3289a40cb28c4b9e49d60017a33ed",
+      "size": 50451
     },
     {
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/soulspire_core.lua",
       "targetPath": "soulspire_core/soulspire_core.lua",
-      "sha256": "05dd4a53c16bbc311bd7647794f694c68727304a086f8090270c4ee126ef7a8a",
-      "size": 25640
+      "sha256": "137172256e5dc3e51e7ebd08802012c4b7fbdc82ed8d4507558a30812e5d8540",
+      "size": 26101
     },
     {
       "category": "addon",

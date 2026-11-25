@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.2.0-testing.14",
+  "manifestVersion": "2.2.0-testing.15",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
     "version": "main (989ca6e)",
@@ -9,7 +9,7 @@
     "commit": "989ca6e",
     "dockerImage": "soulspirexi/server:main-ws3-weap-002-989ca6e",
     "crystalJobsHooks": 32,
-    "notes": "WS3-WEAP-002: Verified 32-hook Soulspire Native with consolidated Hook #32 runtime stage counters and last-call trace (SoulspireNativeGetWeaponModelDiag)."
+    "notes": "WS3-WEAP-002: Capture downstream AttachEquipModel (0xD0B50..0xD0D50), CXiModelPart (0x2B5C0), and part attach (0x85030) + fix /say !soulhud status same-frame command error."
   },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
@@ -6066,15 +6066,15 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/weapon_render_probe.lua",
       "targetPath": "soulspire_core/core/weapon_render_probe.lua",
-      "sha256": "13c83c8330f548d53bbd8aeca29bc18fe9035361e7abaee59afb2d617d8d60a8",
-      "size": 49048
+      "sha256": "19201c0db38f5b434259b33ad01df8894da3289a40cb28c4b9e49d60017a33ed",
+      "size": 50451
     },
     {
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/soulspire_core.lua",
       "targetPath": "soulspire_core/soulspire_core.lua",
-      "sha256": "05dd4a53c16bbc311bd7647794f694c68727304a086f8090270c4ee126ef7a8a",
-      "size": 25640
+      "sha256": "137172256e5dc3e51e7ebd08802012c4b7fbdc82ed8d4507558a30812e5d8540",
+      "size": 26101
     },
     {
       "category": "addon",

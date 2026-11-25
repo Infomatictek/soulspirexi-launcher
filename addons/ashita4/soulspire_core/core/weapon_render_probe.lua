@@ -632,6 +632,37 @@ function M.scan_text_buffer(text_bytes, text_rva, pe_info, actor_summary, extra_
         }
     end
 
+    -- 2l. Full AttachEquipModel (0xD0B50..0xD0D40) + model part container (0x2B5C0) slices.
+    do
+        local attach_matches = {}
+        local targets = {
+            { rva = 0xD0B50, len = 0x200 },
+            { rva = 0x2B5C0, len = 0x180 },
+            { rva = 0x85030, len = 0x140 },
+        }
+        for _, t in ipairs(targets) do
+            local idx = (t.rva - text_rva) + 1
+            if idx >= 1 and idx + 16 <= text_len then
+                local cap_len = math.min(t.len, text_len - idx + 1)
+                local slice = {}
+                for k = 0, cap_len - 1 do slice[k + 1] = text_bytes[idx + k] end
+                attach_matches[#attach_matches + 1] = {
+                    rva              = string.format('0x%X', t.rva),
+                    va_normalized    = string.format('0x%08X', M.NORMALIZED_IMAGE_BASE + t.rva),
+                    window_start_rva = string.format('0x%X', t.rva),
+                    window_len       = cap_len,
+                    code_hex         = bytes_to_hex(slice),
+                }
+            end
+        end
+        findings[#findings + 1] = {
+            id          = 'attach_equip_model_downstream_slices',
+            description = 'Full AttachEquipModel (0xD0B50..0xD0D50), CXiModelPart (0x2B5C0), and part attach (0x85030) slices',
+            match_count = #attach_matches,
+            matches     = attach_matches,
+        }
+    end
+
     -- 3. Strictly non-PII numeric actor model summary (optional)
     local safe_actor = nil
     if type(actor_summary) == 'table' then

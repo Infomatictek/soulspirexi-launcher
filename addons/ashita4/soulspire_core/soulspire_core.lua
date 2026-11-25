@@ -300,9 +300,18 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
                 log('Hook32 diag unavailable: ' .. tostring(wmd_err))
             end
             if AshitaCore and AshitaCore.GetChatManager then
-                local chat = AshitaCore:GetChatManager()
-                if chat and type(chat.QueueCommand) == 'function' then
-                    chat:QueueCommand(1, '/say !soulhud status')
+                local function send_status()
+                    local chat = AshitaCore:GetChatManager()
+                    if chat and type(chat.QueueCommand) == 'function' then
+                        chat:QueueCommand(1, '/say !soulhud status')
+                    end
+                end
+                -- Avoid queueing two /say commands in the same frame (which causes FFXI's
+                -- "A command error occurred." message).
+                if cap_ok and ashita and ashita.tasks and type(ashita.tasks.once) == 'function' then
+                    ashita.tasks.once(0.4, send_status)
+                else
+                    send_status()
                 end
             end
         else
