@@ -125,7 +125,13 @@ remote_q.now_sec = 110
 assert(mgr:observe_oxsi_packet(build_oxsi(0, 2002, 2002, 1, 0, 'PeerWar', ''), 110) == true)
 assert(mgr:evaluate(remote_q).state == 'vanilla')
 
--- 7. Alignment Studio: disabled by default, persistent calibration save/load + native reload sync + reset + export.
+-- 7. Alignment Studio: disabled by default, auto race/gender selection, persistent calibration save/load + native reload sync + reset + export.
+for rid = 1, 8 do
+    local ok_r, rk_r = mgr:set_race_by_id(rid)
+    assert(ok_r == true and rk_r == WP.RACE_ID_TO_KEY[rid] and mgr.selected_race_idx == rid)
+end
+assert(mgr:set_race_by_id(0) == false and mgr:set_race_by_id(9) == false)
+
 local ef_sub = mgr:get_transform('elvaan_female', 'sheathed', 'sub')
 local modified = {
     translation = { x = ef_sub.translation.x, y = ef_sub.translation.y, z = 0.215 },

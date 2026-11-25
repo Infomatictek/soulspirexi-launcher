@@ -82,6 +82,16 @@ M.PROBE_PATTERNS = {
         desc = '16-bit comparison against 0x7000 (empty Sub GrapIDTbl[7] sentinel)',
         pattern = '663d0070',
     },
+    {
+        id = 'grap_sub_7000_reg16',
+        desc = '16-bit reg op with 0x7000 (Sub GrapIDTbl[7] mask/compare on non-AX reg)',
+        pattern = '6681??0070',
+    },
+    {
+        id = 'grap_sub_7000_or_eax',
+        desc = '32-bit OR EAX, 0x7000 (Sub weapon model slot tag builder)',
+        pattern = '0d00700000',
+    },
 }
 
 local function bytes_to_hex(bytes)
