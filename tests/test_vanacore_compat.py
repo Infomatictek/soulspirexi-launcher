@@ -100,13 +100,16 @@ class VanaCoreCompatibilityTests(unittest.TestCase):
         self.assertIn('"soulspire_soulhud"', mis)
         self.assertIn('"kazenoeye"', mis)
 
-        # 3. Phase C Compat boot script loads unified VanaCore-native soulspire_core (zero Ashita shims for Core)
+        # 3. Compat boot script restores full polished Soulspire UI/HUD/Soulforge/Soul Actions (zero placeholder regression)
         mcg = (REPO_ROOT / "SoulspireLauncher" / "Services" / "ModernClientConfigGenerator.cs").read_text(encoding="utf-8")
-        self.assertIn("/addon load soulspire_core", mcg)
-        self.assertNotIn("/addon load soulspire_core ashita", mcg)
+        self.assertIn("/addon load kazenoeye ashita", mcg)
+        self.assertIn("/addon load soulspire_soulhud ashita", mcg)
+        self.assertIn("/addon load soulspire_core ashita", mcg)
+        self.assertIn("/addon load soulspire_soul_actions ashita", mcg)
         self.assertNotIn("/addon load soulspire_talents", mcg)
+        self.assertLess(mcg.index("/addon load kazenoeye ashita"), mcg.index("/addon load soulspire_core ashita"))
 
-        # 4. Phase C unified VanaCore-native soulspire_core modules & Soulforge allocation fix
+        # 4. Phase C VanaCore-native soulspire_core entrypoint uses real 'present' event (never non-existent 'frame')
         vc_root = REPO_ROOT / "addons" / "vanacore" / "soulspire_core"
         for rel in [
             "soulspire_core.lua",
@@ -118,13 +121,17 @@ class VanaCoreCompatibilityTests(unittest.TestCase):
             "core/crystalsocket.lua",
             "core/flintlock.lua",
             "core/mob_status.lua",
+            "tests/test_vanacore_entrypoint_lifecycle.lua",
         ]:
             self.assertTrue((vc_root / rel).is_file(), f"Missing Phase C module: {rel}")
 
         vc_core = (vc_root / "soulspire_core.lua").read_text(encoding="utf-8")
-        self.assertIn("vana.gameui.add", vc_core)
+        self.assertIn("vana.events.on('present'", vc_core)
+        self.assertNotIn("vana.events.on('frame'", vc_core)
         self.assertIn("vana.gamepad.nav", vc_core)
         self.assertIn("vana.soulspire", vc_core)
+        self.assertIn("/soulactions capabilities", vc_core)
+        self.assertIn("startup_report", vc_core)
 
         vc_sf = (vc_root / "core" / "soulforge.lua").read_text(encoding="utf-8")
         self.assertIn("resolve_node_idx", vc_sf)

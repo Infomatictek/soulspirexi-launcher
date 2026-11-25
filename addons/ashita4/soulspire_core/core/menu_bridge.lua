@@ -48,7 +48,7 @@ function MenuBridge.probe_native_hook(custom_probe)
         return false, (ok and detail) or 'native hook probe failed'
     end
 
-    -- VanaCore-native Soulspire engine (DEC-028): report native subsystem status directly.
+    -- VanaCore-native Soulspire engine (DEC-028): require kCapCommandsMenuEntry (0x10000) for main Commands menu readiness.
     if type(vana) == 'table' and type(vana.soulspire) == 'table' and type(vana.soulspire.enabled) == 'function' then
         local ok_en, enabled = pcall(vana.soulspire.enabled)
         if ok_en and enabled == true then
@@ -56,10 +56,12 @@ function MenuBridge.probe_native_hook(custom_probe)
             if ok_d and type(diag) == 'table' then
                 local inst = tonumber(diag.hooks_installed) or 0
                 local tot  = tonumber(diag.hooks_total) or 0
-                if inst > 0 then
-                    return true, string.format('VanaCore-native Soulspire engine active (hooks=%d/%d)', inst, tot)
+                local caps = tonumber(diag.capabilities) or 0
+                local has_cmd_menu = (math.floor(caps / 65536) % 2) == 1
+                if has_cmd_menu then
+                    return true, string.format('VanaCore-native Commands menu active (btn=16 hooks=%d/%d)', inst, tot)
                 end
-                return false, string.format('VanaCore-native Soulspire engine initializing (hooks=%d/%d)', inst, tot)
+                return false, string.format('VanaCore-native engine active (hooks=%d/%d) but Commands menu hooks inactive', inst, tot)
             end
         end
     end

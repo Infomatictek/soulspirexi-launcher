@@ -200,10 +200,12 @@ public sealed class ModernClientIntegrationTests
 
         var boot = ModernClientConfigGenerator.BuildBootScriptContent(settings, ClientEngineMode.ModernCompat);
         Assert.DoesNotContain("/plugin load soulspire_native", boot);
-        Assert.Contains("/addon load soulspire_core", boot);
-        Assert.DoesNotContain("/addon load soulspire_core ashita", boot);
-        Assert.DoesNotContain("/addon load crystalsocket ashita", boot);
+        Assert.Contains("/addon load crystalsocket ashita", boot);
+        Assert.Contains("/addon load soulspire_soulhud ashita", boot);
+        Assert.Contains("/addon load soulspire_core ashita", boot);
+        Assert.Contains("/addon load soulspire_flintlock ashita", boot);
         Assert.Contains("/addon load soulspire_gear ashita", boot);
+        Assert.Contains("/addon load soulspire_soul_actions ashita", boot);
     }
 
     [Fact]
@@ -309,8 +311,8 @@ public sealed class ModernClientIntegrationTests
             Assert.True(File.Exists(Path.Combine(compatDir, "addons", "ashita", "kazenoeye", "kazenoeye.lua")));
             Assert.Equal("native-stub", File.ReadAllText(Path.Combine(ashitaDir, "plugins", "soulspire_native.dll")));
 
-            // Verify Compat boot script loads unified VanaCore-native soulspire_core (Phase C, DEC-028)
-            // without loading legacy external soulspire_native.dll or standalone soulspire_talents.
+            // Verify Compat boot script restores full polished Core UI, Soul HUD, Soulforge & Soul Actions
+            // while omitting legacy external soulspire_native.dll and standalone soulspire_talents.
             var bootSettings = new LauncherSettings
             {
                 AutoLoadCrystalSocketAddon = true,
@@ -320,10 +322,13 @@ public sealed class ModernClientIntegrationTests
                 AutoLoadGearAddon = true
             };
             var boot = ModernClientConfigGenerator.BuildBootScriptContent(bootSettings, ClientEngineMode.ModernCompat);
-            Assert.Contains("/addon load soulspire_core", boot);
-            Assert.DoesNotContain("/addon load soulspire_core ashita", boot);
+            Assert.Contains("/addon load kazenoeye ashita", boot);
+            Assert.Contains("/addon load soulspire_soulhud ashita", boot);
+            Assert.Contains("/addon load soulspire_core ashita", boot);
+            Assert.Contains("/addon load soulspire_soul_actions ashita", boot);
             Assert.DoesNotContain("/addon load soulspire_talents", boot);
-            Assert.Contains("/addon load soulspire_gear ashita", boot);
+            Assert.True(boot.IndexOf("/addon load kazenoeye ashita", StringComparison.Ordinal) <
+                        boot.IndexOf("/addon load soulspire_core ashita", StringComparison.Ordinal));
         }
         finally
         {

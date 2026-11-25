@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.2.3-testing.11",
+  "manifestVersion": "2.2.3-testing.12",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
     "version": "main (Soulspire Native 27-hook)",
@@ -6129,8 +6129,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/menu_bridge.lua",
       "targetPath": "soulspire_core/core/menu_bridge.lua",
-      "sha256": "d1812d40e4a5567cac1f1022fb8df4bf7a48fbb1814480da7a4b08b55de9e909",
-      "size": 10123
+      "sha256": "6abf91b8e6e7b33556db09a09a31cf744da14b73bee6802e8885ef32fd64f57d",
+      "size": 10316
     },
     {
       "category": "addon",
@@ -6206,7 +6206,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/weapon_render_probe.lua",
       "targetPath": "soulspire_core/core/weapon_render_probe.lua",
-      "sha256": "12e849cb429c4495333c4855173bab37d8f69788749427b7df55855c58ba9e84",
+      "sha256": "6a57515974dabb4ee0cf014c16962146b987c61b9810271867d409174915b810",
       "size": 61093
     },
     {
@@ -8327,8 +8327,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/soulspire_core.lua",
       "targetPath": "vanacore/soulspire_core/soulspire_core.lua",
-      "sha256": "d5064cb6f8b7a78d47725834fcecdb2eb1e43ca59b760e2ab28751d56070b3cc",
-      "size": 10578
+      "sha256": "7e522b6db6ce1346cb858c2cf4b8a3e520ac2702f96e9c53e26d06f3060245c6",
+      "size": 14948
     },
     {
       "category": "addon",
@@ -8336,6 +8336,13 @@
       "targetPath": "vanacore/soulspire_core/tests/test_soulforge_allocation.lua",
       "sha256": "97afdb3562bcc34a3843407c01c388f3abf7f82f1b18afdb8552ab59edf3b0d1",
       "size": 2682
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/tests/test_vanacore_entrypoint_lifecycle.lua",
+      "targetPath": "vanacore/soulspire_core/tests/test_vanacore_entrypoint_lifecycle.lua",
+      "sha256": "5f8c7e106515996f96840cee1681e7467ba7f0e6aa83e723466034da928d9d90",
+      "size": 6224
     }
   ],
   "news": [
@@ -10376,14 +10383,14 @@
     "compat": {
       "profile": "compat",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-native.2",
-      "commitSha": "aea8bb2ba3",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.2/soulspirexi-client-experimental-0.9.9-aea8bb2ba3-win32.zip",
-      "packageSha256": "b7f0359c5a72959fec0bbec494d6b68145665df9d57732d2d7473116926d0f7e",
-      "packageSize": 99008479,
+      "tag": "v0.9.9-soulspire-native.3",
+      "commitSha": "ce8fba76ca",
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.3/soulspirexi-client-experimental-0.9.9-ce8fba76ca-win32.zip",
+      "packageSha256": "30fa33729ca8ac0730ea161434da6a3fbb1db6e026d1e35dcce8f045a6d8d163",
+      "packageSize": 99013629,
       "experimentalEligible": true,
       "clientVerified": false,
-      "notes": "VanaCore-Native Soulspire Phase B.2 + Phase C build (DEC-028, TLS 1.3 + xiloader 3.0.0 + polcore 51220): adds Hook #20 ability_list_filter, Lv.10/30/50/75 visibility & action search/visibility Lua APIs, unified VanaCore-native addons/vanacore/soulspire_core/ (vana.soulspire + vana.gameui + vana.gamepad), and fixed Soulforge WS talent point allocation."
+      "notes": "VanaCore-Native Soulspire v0.9.9-soulspire-native.3 (DEC-028): adds native FFXI Commands menu (Status -> Soulspire -> Equipment, hooks #28-#31, kCapCommandsMenuEntry) + Hook #20 ability_list_filter, restores full polished Core UI / Soul HUD / Soulforge / Soul Actions with fixed WS talent allocation."
     }
   }
 }
