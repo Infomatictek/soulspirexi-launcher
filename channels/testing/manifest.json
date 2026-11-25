@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.2.3-testing.10",
+  "manifestVersion": "2.2.3-testing.11",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
     "version": "main (Soulspire Native 27-hook)",
@@ -6206,7 +6206,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/weapon_render_probe.lua",
       "targetPath": "soulspire_core/core/weapon_render_probe.lua",
-      "sha256": "447d1a8f6842fbd20101d49040ea5c38e4cd7f9f93aed6449ee8748cea85a6b4",
+      "sha256": "12e849cb429c4495333c4855173bab37d8f69788749427b7df55855c58ba9e84",
       "size": 61093
     },
     {
@@ -10337,10 +10337,10 @@
     "hash": "cf86aa59ff8d16c6",
     "idLockStatus": "locked",
     "nativeDllCompiledHash": "cf86aa59ff8d16c6",
-    "nativeDllSha256": "6307283b0dd715108213c4f25725e339872861de030504c184be46db2b4fbf7d",
+    "nativeDllSha256": "e85092d753aabb50554ad7633435d3987b4179024e93c8dc7225e8f75c866e08",
     "nativeDllClientVerified": false,
-    "nativeHooks": 32,
-    "crystalJobsHooks": 32
+    "nativeHooks": 27,
+    "crystalJobsHooks": 27
   },
   "clientDataCache": {
     "schemaVersion": 1,

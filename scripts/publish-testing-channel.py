@@ -335,11 +335,18 @@ def build_testing_manifest(
             "nativeHooks": crystaljobs_hooks,
             "crystalJobsHooks": crystaljobs_hooks,
         }
-    elif staged_dll_sha and isinstance(testing_manifest.get("registry"), dict):
-        testing_manifest["registry"]["nativeDllSha256"] = staged_dll_sha
-        testing_manifest["registry"]["nativeDllClientVerified"] = False
-        testing_manifest["registry"]["nativeHooks"] = crystaljobs_hooks
-        testing_manifest["registry"]["crystalJobsHooks"] = crystaljobs_hooks
+    elif isinstance(testing_manifest.get("registry"), dict):
+        effective_dll_sha = staged_dll_sha
+        if not effective_dll_sha:
+            for entry in testing_manifest.get("files", []):
+                if entry.get("category") == "plugin" and str(entry.get("targetPath", "")).lower().endswith("soulspire_native.dll"):
+                    effective_dll_sha = str(entry.get("sha256") or "")
+                    break
+        if effective_dll_sha:
+            testing_manifest["registry"]["nativeDllSha256"] = effective_dll_sha
+            testing_manifest["registry"]["nativeDllClientVerified"] = False
+            testing_manifest["registry"]["nativeHooks"] = crystaljobs_hooks
+            testing_manifest["registry"]["crystalJobsHooks"] = crystaljobs_hooks
 
     if repo_branch:
         repo_cfg = testing_manifest.setdefault("repo", {})
@@ -389,6 +396,14 @@ def build_testing_manifest(
             merged_files.append(entry)
 
     testing_manifest["files"] = merged_files
+
+    # Always synchronize registry.nativeDllSha256 with the final effective soulspire_native.dll entry
+    # (including pre-staged Testing overrides under channels/testing/payload/plugins/ashita4/).
+    if isinstance(testing_manifest.get("registry"), dict):
+        for entry in merged_files:
+            if entry.get("category") == "plugin" and str(entry.get("targetPath", "")).lower().endswith("soulspire_native.dll"):
+                testing_manifest["registry"]["nativeDllSha256"] = str(entry.get("sha256") or "")
+                break
 
     # Preserve or inject explicit experimental modernClient descriptor (never sets clientVerified=true from CI).
     if modern_client_json is not None and modern_client_json.is_file():
