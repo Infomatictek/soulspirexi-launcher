@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.2.0-testing.16",
+  "manifestVersion": "2.2.0-testing.17",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
     "version": "main (Soulspire Native 27-hook)",
@@ -9,7 +9,7 @@
     "commit": "989ca6e",
     "dockerImage": "soulspirexi/server:main-ws3-weap-002-989ca6e",
     "crystalJobsHooks": 32,
-    "notes": "WS3-WEAP-002: expand weapon_render_probe downstream slices (AttachEquipModel 0xD0B50, CXiModelBase 0x2B4B0, part attach 0x85030, Actor::Draw 0xC63D0) for right-to-left bone remap"
+    "notes": "WS3-WEAP-002: capture AttachResourceToModelPart (0xCFA50) and CXiModelPart (0x29D30..0x2A930) for per-slot bone remapping"
   },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
@@ -6066,8 +6066,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/weapon_render_probe.lua",
       "targetPath": "soulspire_core/core/weapon_render_probe.lua",
-      "sha256": "8f1e4d3e012f174a476b63572ab17158d68ba01e80f388fd30cd6a4a3268e1a5",
-      "size": 50528
+      "sha256": "32b157dec5f88784c3f1679db7bc01521fd606658cdbad29db9233a129589dd2",
+      "size": 50410
     },
     {
       "category": "addon",
