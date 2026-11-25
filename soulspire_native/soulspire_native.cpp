@@ -1272,7 +1272,7 @@ static bool soul_authorizes_sub_offhand_bone(void* actor, uint32_t sub_model_id_
         return false;
     }
     uint32_t actor_id = 0;
-    if (!safe_read_actor_server_id(actor, actor_id)) {
+    if (!safe_read_actor_server_id(static_cast<const uint8_t*>(actor), actor_id)) {
         return false;
     }
     AcquireSRWLockShared(&state_lock);
