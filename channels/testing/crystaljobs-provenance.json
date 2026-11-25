@@ -1,0 +1,19 @@
+{
+  "dllPath": "plugins/ashita4/soulspire_native.dll",
+  "dllSha256": "1b7c6e5ee5a91540be909b2408c82df9f5fd6048616533944adee2463eb172f1",
+  "dllSize": 231424,
+  "expectedHooks": 32,
+  "abiVersion": 2,
+  "compiledRegistryHash": "cf86aa59ff8d16c6",
+  "runtimeIdentityLoader": true,
+  "identitySchemaVersion": 1,
+  "searchRenderMode": "menu2fon-soa-corners (mode 1)",
+  "sourceCommit": "183bc5aac5c8df302171f18a35d3af809d742e50",
+  "branch": "feat/client-modern-001-vanacore-compat",
+  "ciRunId": "45561782885",
+  "ciRunUrl": "https://github.com/Infomatictek/soulspirexi-launcher/actions/runs/45561782885",
+  "buildTarget": "Win32-x86-MSVC",
+  "ciVerified": true,
+  "clientVerified": false,
+  "notes": "CI-built 32-hook soulspire_native.dll (runtime PC Sub->Main FTABLE model resolver + native Commands menu entry) provenance. Never set clientVerified=true until verified in the Windows FFXI client."
+}
