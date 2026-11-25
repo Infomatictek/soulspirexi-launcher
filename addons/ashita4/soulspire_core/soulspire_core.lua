@@ -356,6 +356,20 @@ local function sync_local_equipped_weapons_to_native()
     NativeBridge.set_local_equipped_weapons(main_id, main_sk, sub_id, sub_sk)
 end
 
+-- Advertise verified native capabilities (e.g. Hook #32 WMR = 0x20000) to the server
+-- so the server preserves compact_dual_axe for incompatible clients and sends real
+-- independent weapon models only to capable clients.
+local function sync_native_capabilities_to_server()
+    if not (AshitaCore and AshitaCore.GetChatManager) then return false end
+    local info = NativeBridge.query()
+    if not info or type(info.capabilities) ~= 'number' then return false end
+    if not NativeBridge.has_weapon_model_resolve_capability() then return false end
+    local chat = AshitaCore:GetChatManager()
+    if not chat or type(chat.QueueCommand) ~= 'function' then return false end
+    chat:QueueCommand(1, ('!soulhud cap %u'):format(info.capabilities))
+    return true
+end
+
 -- Cleanly blur/close on zone transitions and track authoritative OXSI peer Souls.
 ashita.events.register('packet_in', 'soulspire_core_packet_in', function(e)
     if type(e) ~= 'table' then return end
@@ -365,6 +379,7 @@ ashita.events.register('packet_in', 'soulspire_core_packet_in', function(e)
         safe_call('weapon_pres.reset_peers', function() weapon_pres:reset_peers() end)
         if e.id == 0x00A then
             safe_call('native.sync_equipped', sync_local_equipped_weapons_to_native)
+            safe_call('native.sync_caps', sync_native_capabilities_to_server)
         end
     elseif e.id == 0x1FC then
         local now_sec = now_seconds()
