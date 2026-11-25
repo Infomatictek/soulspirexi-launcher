@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.2.3-testing.3",
+  "manifestVersion": "2.2.3-testing.4",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
-    "version": "main (Stage 2A Perf + 32-Hook Dual-Host Native + Opt-In Modern VanaCore)",
+    "version": "main (Stage 2A Perf + 32-Hook Dual-Host Native + WS3-WEAP-002 Offhand Diag + Modern VanaCore TLS 1.3)",
     "branch": "main",
     "commit": "989ca6e",
     "dockerImage": "soulspirexi/server:main-ws3-weap-002-989ca6e",
     "crystalJobsHooks": 32,
-    "notes": "Unified canonical Testing payload (2.2.3-testing.3): Stage 2A Perf, Testing QoL, Core UI & Soulforge, ECDSA self-updater, dual-host 32-hook Soulspire Native (Ashita + VanaCore) with WS3-WEAP-002 offhand bone hooks and dedicated /soulspire weapondiag caps offhand telemetry (SoulspireNativeGetWeaponOffhandDiag), v19 weapon render probe, and opt-in experimental Modern VanaCore client engine."
+    "notes": "Unified canonical Testing payload (2.2.3-testing.4): Stage 2A Perf, Testing QoL, Core UI & Soulforge, ECDSA self-updater, dual-host 32-hook Soulspire Native + WS3-WEAP-002 offhand diag, v19 weapon render probe, and opt-in experimental Modern VanaCore Baseline (v0.9.9-soulspire-baseline.4) & Compatibility (v0.9.9-soulspire-compat.5) with Windows Schannel TLS 1.3 + xiloader 3.0.0 + TLS 1.3 lobby relay."
   },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
@@ -6206,7 +6206,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/weapon_render_probe.lua",
       "targetPath": "soulspire_core/core/weapon_render_probe.lua",
-      "sha256": "4b7eddc2e5035bdb0b5c6ab8b2b5c97b460e35420d8f5eb7a505dfc86cad68f3",
+      "sha256": "6a797357b2d1e09a46e9e4059f8492dd7d347bf2d6f5ca94728807d83762525f",
       "size": 61092
     },
     {
@@ -10293,28 +10293,28 @@
     "baseline": {
       "profile": "baseline",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-baseline.1",
-      "commitSha": "56ef560c02",
+      "tag": "v0.9.9-soulspire-baseline.4",
+      "commitSha": "d62a00eda3",
       "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-baseline.1/soulspirexi-client-experimental-0.9.9-56ef560c02-win32.zip",
-      "packageSha256": "218a6b1f56fb72f266b1f0e0d6eefccc90ada563b2ca4bbcf18d702973570f83",
-      "packageSize": 98950990,
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-baseline.4/soulspirexi-client-experimental-0.9.9-d62a00eda3-win32.zip",
+      "packageSha256": "522ca03e5da71c0cb247b14108bec0fc627116f0789ca347254b6002e5a803d9",
+      "packageSize": 98961092,
       "experimentalEligible": true,
       "clientVerified": false,
-      "notes": "Phase 1 minimal VanaCore Baseline: disables all Soulspire native hooks, addons, Pivot overlays, and experimental menu hooks for clean first-login certification against play.soulspirexi.com."
+      "notes": "Phase 1 minimal VanaCore Baseline (TLS 1.3 SCH_CREDENTIALS v5 + xiloader 3.0.0 + TLS 1.3 lobby data/view relay with key pinning): disables all Soulspire native hooks, addons, Pivot overlays, and experimental menu hooks for clean first-login certification against play.soulspirexi.com."
     },
     "compat": {
       "profile": "compat",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-compat.1",
-      "commitSha": "a506b8bd6f",
+      "tag": "v0.9.9-soulspire-compat.5",
+      "commitSha": "e15379c92e",
       "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-compat.1/soulspirexi-client-experimental-0.9.9-a506b8bd6f-win32.zip",
-      "packageSha256": "0b1cb39239eacc7e3911d0dd07c2c94ee5032796a72d996fc7074841f1064835",
-      "packageSize": 98948388,
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-compat.5/soulspirexi-client-experimental-0.9.9-e15379c92e-win32.zip",
+      "packageSha256": "c2a2e2416470e4347a3cbaaf8803de1e13edb589649217a1d938127fc5400c99",
+      "packageSize": 98959073,
       "experimentalEligible": true,
       "clientVerified": false,
-      "notes": "Phase 2 Soulspire Compatibility build: FFXiMain 0x6AE818B4 & input sig scans, Ashita v4.30 default, dinput_state/xinput_state adapters, singlemenu guard, and progressive dual-host soulspire_native.dll + Soulspire Core + Pivot support."
+      "notes": "Phase 2 Soulspire Compatibility build (TLS 1.3 SCH_CREDENTIALS v5 + xiloader 3.0.0 + TLS 1.3 lobby data/view relay with key pinning): FFXiMain 0x6AE818B4 & input sig scans, Ashita v4.30 default, dinput_state/xinput_state adapters, singlemenu guard, and progressive dual-host soulspire_native.dll + Soulspire Core + Pivot support."
     }
   }
 }
