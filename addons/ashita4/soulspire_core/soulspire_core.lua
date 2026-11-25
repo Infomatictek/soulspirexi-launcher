@@ -31,6 +31,9 @@ local focus    = Focus.new(registry)
 local input    = Input.new()
 local weapon_pres = WeaponPres.new()
 local menu, assets, ui
+local last_synced_equip = { main_id = -1, main_sk = -1, sub_id = -1, sub_sk = -1 }
+local sync_local_equipped_weapons_to_native
+local sync_native_capabilities_to_server
 
 local function log(msg)
     print('[soulspire_core] ' .. tostring(msg))
@@ -275,9 +278,22 @@ ashita.events.register('command', 'soulspire_core_command', function(e)
                     log('Weapon render probe refused/failed: ' .. tostring(res))
                 end
             end
+        elseif action == 'caps' then
+            local eq_ok = sync_local_equipped_weapons_to_native(true)
+            local cap_ok = sync_native_capabilities_to_server()
+            log(('Weapon capability sync: equip_pushed=%s cap_sent=%s (main=%d/sk=%d sub=%d/sk=%d)'):format(
+                tostring(eq_ok), tostring(cap_ok),
+                last_synced_equip.main_id, last_synced_equip.main_sk,
+                last_synced_equip.sub_id, last_synced_equip.sub_sk))
+            if AshitaCore and AshitaCore.GetChatManager then
+                local chat = AshitaCore:GetChatManager()
+                if chat and type(chat.QueueCommand) == 'function' then
+                    chat:QueueCommand(1, '/say !soulhud status')
+                end
+            end
         else
             local st = weapon_pres:status()
-            log(('weapondiag loaded=%s enabled=%s bindings=%d profiles=%d peers=%d hash=%s (usage: /soulspire weapondiag on|off|save|export|reset|equip|probe [label|clear])'):format(
+            log(('weapondiag loaded=%s enabled=%s bindings=%d profiles=%d peers=%d hash=%s (usage: /soulspire weapondiag on|off|save|export|reset|equip|probe|caps)'):format(
                 tostring(st.loaded),
                 tostring(st.diagnostics_enabled),
                 st.binding_count,
@@ -333,40 +349,99 @@ ashita.events.register('dinput_button', 'soulspire_core_dinput_button', function
     end
 end)
 
+local caps_pending_zone = false
+local caps_sent_this_zone = false
+
 -- Sync local Main/Sub equipped item IDs & skills to soulspire_native.dll (Hook #32).
-local function sync_local_equipped_weapons_to_native()
-    if not (AshitaCore and AshitaCore.GetMemoryManager and AshitaCore.GetResourceManager) then return end
+local function push_local_equipped_weapons(main_id, main_sk, sub_id, sub_sk, force)
+    main_id = tonumber(main_id) or 0
+    main_sk = tonumber(main_sk) or 0
+    sub_id  = tonumber(sub_id)  or 0
+    sub_sk  = tonumber(sub_sk)  or 0
+    if not force and
+        last_synced_equip.main_id == main_id and
+        last_synced_equip.main_sk == main_sk and
+        last_synced_equip.sub_id  == sub_id and
+        last_synced_equip.sub_sk  == sub_sk then
+        return false
+    end
+    last_synced_equip.main_id = main_id
+    last_synced_equip.main_sk = main_sk
+    last_synced_equip.sub_id  = sub_id
+    last_synced_equip.sub_sk  = sub_sk
+    return NativeBridge.set_local_equipped_weapons(main_id, main_sk, sub_id, sub_sk)
+end
+
+local function read_equipped_weapon_slot(inv, res, slot_idx)
+    local ok_eq, eq = pcall(inv.GetEquippedItem, inv, slot_idx)
+    if not ok_eq or not eq or not eq.Index or eq.Index == 0 then return 0, 0 end
+    local cont = math.floor(eq.Index / 256)
+    local iidx = eq.Index % 256
+    if iidx == 0 then return 0, 0 end
+    local ok_ci, ci = pcall(inv.GetContainerItem, inv, cont, iidx)
+    if not ok_ci or not ci or not ci.Id or ci.Id == 0 then return 0, 0 end
+    local ok_ri, ri = pcall(res.GetItemById, res, ci.Id)
+    return tonumber(ci.Id) or 0, (ok_ri and ri and tonumber(ri.Skill)) or 0
+end
+
+sync_local_equipped_weapons_to_native = function(force)
+    if not (AshitaCore and AshitaCore.GetMemoryManager and AshitaCore.GetResourceManager) then return false end
     local mm = AshitaCore:GetMemoryManager()
     local inv = mm and mm:GetInventory()
     local res = AshitaCore:GetResourceManager()
-    if not inv or not res then return end
-    local function read_slot(slot_idx)
-        local ok_eq, eq = pcall(inv.GetEquippedItem, inv, slot_idx)
-        if not ok_eq or not eq or not eq.Index or eq.Index == 0 then return 0, 0 end
-        local cont = math.floor(eq.Index / 256)
-        local iidx = eq.Index % 256
-        if iidx == 0 then return 0, 0 end
-        local ok_ci, ci = pcall(inv.GetContainerItem, inv, cont, iidx)
-        if not ok_ci or not ci or not ci.Id or ci.Id == 0 then return 0, 0 end
-        local ok_ri, ri = pcall(res.GetItemById, res, ci.Id)
-        return tonumber(ci.Id) or 0, (ok_ri and ri and tonumber(ri.Skill)) or 0
+    if not inv or not res then return false end
+    local main_id, main_sk = read_equipped_weapon_slot(inv, res, 0)
+    local sub_id, sub_sk = read_equipped_weapon_slot(inv, res, 1)
+    return push_local_equipped_weapons(main_id, main_sk, sub_id, sub_sk, force)
+end
+
+-- Parse incoming S2C 0x050 BEFORE FFXiMain.dll processes it so soulspire_native.dll
+-- already has the new Main/Sub item ID & skill when LoadPcEquipmentModels runs.
+local function sync_local_equipped_from_packet_0x050(raw)
+    if type(raw) ~= 'string' or #raw < 7 then return false end
+    local inv_idx = raw:byte(5) or 0
+    local equip_slot = raw:byte(6) or 255
+    local container = raw:byte(7) or 0
+    if equip_slot ~= 0 and equip_slot ~= 1 then return false end
+    if not (AshitaCore and AshitaCore.GetMemoryManager and AshitaCore.GetResourceManager) then return false end
+    local mm = AshitaCore:GetMemoryManager()
+    local inv = mm and mm:GetInventory()
+    local res = AshitaCore:GetResourceManager()
+    if not inv or not res then return false end
+    local main_id, main_sk = read_equipped_weapon_slot(inv, res, 0)
+    local sub_id, sub_sk = read_equipped_weapon_slot(inv, res, 1)
+    local new_id, new_sk = 0, 0
+    if inv_idx ~= 0 then
+        local ok_ci, ci = pcall(inv.GetContainerItem, inv, container, inv_idx)
+        if ok_ci and ci and ci.Id and ci.Id ~= 0 then
+            local ok_ri, ri = pcall(res.GetItemById, res, ci.Id)
+            new_id = tonumber(ci.Id) or 0
+            new_sk = (ok_ri and ri and tonumber(ri.Skill)) or 0
+        end
     end
-    local main_id, main_sk = read_slot(0)
-    local sub_id, sub_sk = read_slot(1)
-    NativeBridge.set_local_equipped_weapons(main_id, main_sk, sub_id, sub_sk)
+    if equip_slot == 0 then
+        main_id, main_sk = new_id, new_sk
+    else
+        sub_id, sub_sk = new_id, new_sk
+    end
+    return push_local_equipped_weapons(main_id, main_sk, sub_id, sub_sk, true)
 end
 
 -- Advertise verified native capabilities (e.g. Hook #32 WMR = 0x20000) to the server
--- so the server preserves compact_dual_axe for incompatible clients and sends real
+-- via /say !soulhud cap <caps> (matching Ashita v4 server command dispatch) so the
+-- server preserves compact_dual_axe for incompatible clients and sends real
 -- independent weapon models only to capable clients.
-local function sync_native_capabilities_to_server()
+sync_native_capabilities_to_server = function()
     if not (AshitaCore and AshitaCore.GetChatManager) then return false end
     local info = NativeBridge.query()
     if not info or type(info.capabilities) ~= 'number' then return false end
     if not NativeBridge.has_weapon_model_resolve_capability() then return false end
     local chat = AshitaCore:GetChatManager()
     if not chat or type(chat.QueueCommand) ~= 'function' then return false end
-    chat:QueueCommand(1, ('!soulhud cap %u'):format(info.capabilities))
+    sync_local_equipped_weapons_to_native(true)
+    chat:QueueCommand(1, ('/say !soulhud cap %u'):format(info.capabilities))
+    caps_pending_zone = false
+    caps_sent_this_zone = true
     return true
 end
 
@@ -377,8 +452,14 @@ ashita.events.register('packet_in', 'soulspire_core_packet_in', function(e)
         safe_call('focus.blur_all', function() focus:blur_all('zone_change') end)
         safe_call('input.reset', function() input:reset() end)
         safe_call('weapon_pres.reset_peers', function() weapon_pres:reset_peers() end)
+        caps_sent_this_zone = false
         if e.id == 0x00A then
-            safe_call('native.sync_equipped', sync_local_equipped_weapons_to_native)
+            caps_pending_zone = true
+            safe_call('native.sync_equipped', function() sync_local_equipped_weapons_to_native(true) end)
+        end
+    elseif e.id == 0x01D or e.id == 0x00D then
+        safe_call('native.sync_equipped', function() sync_local_equipped_weapons_to_native(false) end)
+        if caps_pending_zone and not caps_sent_this_zone then
             safe_call('native.sync_caps', sync_native_capabilities_to_server)
         end
     elseif e.id == 0x1FC then
@@ -390,7 +471,11 @@ ashita.events.register('packet_in', 'soulspire_core_packet_in', function(e)
             end
         end)
     elseif e.id == 0x050 then
-        safe_call('native.sync_equipped', sync_local_equipped_weapons_to_native)
+        safe_call('native.sync_equipped_0x050', function()
+            if not sync_local_equipped_from_packet_0x050(e.data_modified or e.data) then
+                sync_local_equipped_weapons_to_native(false)
+            end
+        end)
         if weapon_pres:is_diagnostics_enabled() then
             local now_sec = now_seconds()
             safe_call('weapon_equip_diag.packet_in', function()
@@ -418,8 +503,23 @@ ashita.events.register('packet_out', 'soulspire_core_packet_out', function(e)
     end
 end)
 
+local function is_local_player_in_game()
+    if not (AshitaCore and AshitaCore.GetMemoryManager) then return false end
+    local ok, sid = pcall(function()
+        local party = AshitaCore:GetMemoryManager():GetParty()
+        return party and party:GetMemberServerId(0) or 0
+    end)
+    return ok and tonumber(sid) ~= nil and tonumber(sid) > 0
+end
+
 ashita.events.register('d3d_present', 'soulspire_core_present', function()
     if not ui then return end
+    safe_call('native.sync_equipped_tick', function()
+        sync_local_equipped_weapons_to_native(false)
+        if not caps_sent_this_zone and is_local_player_in_game() then
+            sync_native_capabilities_to_server()
+        end
+    end)
     safe_call('ui.draw', function()
         local native = current_native_menu()
         ui:draw(native, menu ~= nil and menu:is_available())

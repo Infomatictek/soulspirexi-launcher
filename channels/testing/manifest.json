@@ -1,15 +1,15 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.2.0-testing.12",
+  "manifestVersion": "2.2.0-testing.13",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
-    "version": "main (bc56df3)",
+    "version": "main (989ca6e)",
     "branch": "main",
-    "commit": "bc56df3",
-    "dockerImage": "soulspirexi/server:main-ws3-weap-002-bc56df3",
+    "commit": "989ca6e",
+    "dockerImage": "soulspirexi/server:main-ws3-weap-002-989ca6e",
     "crystalJobsHooks": 32,
-    "notes": "WS3-WEAP-002: Verified 32-hook Soulspire Native (Hook #32 runtime PC Sub->Main FTABLE model namespace resolver + capability-aware compact_dual_axe server fallback)."
+    "notes": "WS3-WEAP-002: Fix /say !soulhud cap capability handshake, immediate 0x050 pre-model equipment sync, and mainlook restore on compact_dual_axe clear."
   },
   "serverName": "SoulspireXI",
   "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
@@ -6073,8 +6073,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/soulspire_core.lua",
       "targetPath": "soulspire_core/soulspire_core.lua",
-      "sha256": "cb2888ef7353fa3bf020b79688c6dcaf8c6b55a5ee086d5dbacc5737879c28a5",
-      "size": 19979
+      "sha256": "69a5dd4bd322adeea6194d537a6a835c6558221a81550a7ff2638985f95bbd7e",
+      "size": 24490
     },
     {
       "category": "addon",

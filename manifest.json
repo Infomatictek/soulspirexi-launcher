@@ -6072,8 +6072,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/soulspire_core.lua",
       "targetPath": "soulspire_core/soulspire_core.lua",
-      "sha256": "cb2888ef7353fa3bf020b79688c6dcaf8c6b55a5ee086d5dbacc5737879c28a5",
-      "size": 19979
+      "sha256": "69a5dd4bd322adeea6194d537a6a835c6558221a81550a7ff2638985f95bbd7e",
+      "size": 24490
     },
     {
       "category": "addon",
