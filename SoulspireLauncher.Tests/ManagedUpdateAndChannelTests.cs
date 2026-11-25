@@ -816,6 +816,7 @@ public sealed class ManagedUpdateAndChannelTests
             var legacyJson = """
             {
               "UpdateChannel": 5,
+              "UseCustomAshitaPath": true,
               "AshitaPath": "D:\\Soulspire\\Ashita",
               "WindowWidth": 2560,
               "WindowHeight": 1440,
@@ -824,10 +825,11 @@ public sealed class ManagedUpdateAndChannelTests
             """;
             File.WriteAllText(settingsPath, legacyJson);
 
-            var svc = new SettingsService(settingsPath);
+            var svc = new SettingsService(launcherBaseDir: tempDir, appDataOverride: tempDir);
             var loaded = svc.Load();
 
             Assert.Equal(UpdateChannel.Testing, loaded.UpdateChannel);
+            Assert.True(loaded.UseCustomAshitaPath);
             Assert.Equal(@"D:\Soulspire\Ashita", loaded.AshitaPath);
             Assert.Equal(2560, loaded.WindowWidth);
             Assert.Equal(1440, loaded.WindowHeight);
