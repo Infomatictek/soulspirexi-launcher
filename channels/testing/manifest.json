@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.2.3-testing.12",
+  "manifestVersion": "2.2.3-testing.13",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
     "version": "main (Soulspire Native 27-hook)",
@@ -6206,7 +6206,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/weapon_render_probe.lua",
       "targetPath": "soulspire_core/core/weapon_render_probe.lua",
-      "sha256": "6a57515974dabb4ee0cf014c16962146b987c61b9810271867d409174915b810",
+      "sha256": "612b99d134812d218ba468ddee1cc12d05893033b5d7e9dab3784b8a1302aab7",
       "size": 61093
     },
     {
@@ -10761,14 +10761,28 @@
     "compat": {
       "profile": "compat",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-native.3",
-      "commitSha": "ce8fba76ca",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.3/soulspirexi-client-experimental-0.9.9-ce8fba76ca-win32.zip",
-      "packageSha256": "30fa33729ca8ac0730ea161434da6a3fbb1db6e026d1e35dcce8f045a6d8d163",
-      "packageSize": 99013629,
+      "tag": "v0.9.9-soulspire-native.4",
+      "commitSha": "5b9880fc87",
+      "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.4/soulspirexi-client-experimental-0.9.9-5b9880fc87-win32.zip",
+      "packageSha256": "84472479cbfde23803d46fc14c45a5fd8bc9442171093e03c8a1587d9886a8ea",
+      "packageSize": 99027561,
       "experimentalEligible": true,
       "clientVerified": false,
-      "notes": "VanaCore-Native Soulspire v0.9.9-soulspire-native.3 (DEC-028): adds native FFXI Commands menu (Status -> Soulspire -> Equipment, hooks #28-#31, kCapCommandsMenuEntry) + Hook #20 ability_list_filter, restores full polished Core UI / Soul HUD / Soulforge / Soul Actions with fixed WS talent allocation."
+      "notes": "VanaCore-Native Soulspire v0.9.9-soulspire-native.4 (DEC-028, Compatibility Recovery profile): preserves polished Ashita compatibility overlay alongside VanaCore native hooks #28-#31 and API v2."
+    },
+    "native": {
+      "profile": "native",
+      "version": "0.9.9",
+      "tag": "v0.9.9-soulspire-native.4",
+      "commitSha": "5b9880fc87",
+      "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.4/soulspirexi-client-experimental-0.9.9-5b9880fc87-win32.zip",
+      "packageSha256": "84472479cbfde23803d46fc14c45a5fd8bc9442171093e03c8a1587d9886a8ea",
+      "packageSize": 99027561,
+      "experimentalEligible": true,
+      "clientVerified": false,
+      "notes": "Full VanaCore-Native Soulspire v0.9.9-soulspire-native.4 (DEC-028, API v2): native WIC texture manager, authoritative UI input/cursor ownership, [addons] ashita.enabled=0, and single unified zero-Ashita Soulspire Core 4.0.0-vanacore."
     }
   }
 }
