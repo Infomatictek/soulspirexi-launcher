@@ -427,9 +427,14 @@ public sealed class ModernClientIntegrationTests
         Assert.Contains("singlemenu=0", ini);
 
         var boot = ModernClientConfigGenerator.BuildBootScriptContent(settings, ClientEngineMode.ModernNative);
-        Assert.Contains("/addon load soulspire_core vanacore", boot);
-        Assert.DoesNotContain("ashita", boot, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("soulspire_native", boot, StringComparison.OrdinalIgnoreCase);
+        var activeLines = boot.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Select(l => l.Trim())
+            .Where(l => !string.IsNullOrEmpty(l) && !l.StartsWith("#", StringComparison.Ordinal))
+            .ToList();
+        Assert.Contains("/addon load soulspire_core vanacore", activeLines);
+        Assert.Single(activeLines, l => l.StartsWith("/addon load", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(activeLines, l => l.Contains("ashita", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(activeLines, l => l.Contains("soulspire_native", StringComparison.OrdinalIgnoreCase));
 
         // Verify SyncNativeOverlayFromAshita copies ONLY VanaCore-native addon + data + artwork (zero Ashita addons or DLLs)
         var root = Path.Combine(Path.GetTempPath(), $"sxi-native-overlay-{Guid.NewGuid():N}");
