@@ -153,6 +153,7 @@ class VanaCoreCompatibilityTests(unittest.TestCase):
         required_files = [
             "soulspire_core.lua",
             "core/ui.lua",
+            "core/imgui_constants.lua",
             "core/foundations.lua",
             "core/theme.lua",
             "core/focus.lua",
@@ -160,6 +161,11 @@ class VanaCoreCompatibilityTests(unittest.TestCase):
             "core/registry.lua",
             "core/assets.lua",
             "core/soulhud_bridge.lua",
+            "data/soul-identities.json",
+            "data/soul-weapon-config.json",
+            "data/soul_actions.tsv",
+            "data/visibility.tsv",
+            "data/presentation.cfg",
             "modules/character.lua",
             "modules/weapon_mastery.lua",
             "modules/soul_talents.lua",
@@ -208,6 +214,27 @@ class VanaCoreCompatibilityTests(unittest.TestCase):
         self.assertIn("ClientEngineMode.ModernNative", mcg)
         self.assertIn("ashita.enabled={(isNative ? 0 : 1)}", mcg)
         self.assertIn("/addon load soulspire_core vanacore", mcg)
+
+        # Zero Ashita-style ImGui global enum lookups (which are nil when ashita.enabled=0)
+        import re
+        bad_imgui_global = re.compile(r"\bImGui(?:WindowFlags|StyleVar|Col|Cond|ChildFlags)_[A-Za-z0-9_]+")
+        for lua_file in vc_root.rglob("*.lua"):
+            if "tests" in lua_file.parts:
+                continue
+            for idx, line in enumerate(lua_file.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+                code = line.split("--", 1)[0]
+                m = bad_imgui_global.search(code)
+                self.assertIsNone(
+                    m,
+                    f"Ashita ImGui global '{m.group(0) if m else ''}' found in {lua_file.relative_to(REPO_ROOT)}:{idx}; use core/imgui_constants.lua",
+                )
+
+        # Native packet sync & HUD wiring in soulspire_core.lua
+        vc_core = (vc_root / "soulspire_core.lua").read_text(encoding="utf-8")
+        self.assertIn("character_mod:handle_packet_in(", vc_core)
+        self.assertIn("character_mod:tick(", vc_core)
+        self.assertIn("soulhud:handle_packet_in(", vc_core)
+        self.assertNotIn("character_mod:handle_packet(", vc_core)
 
 
 if __name__ == "__main__":

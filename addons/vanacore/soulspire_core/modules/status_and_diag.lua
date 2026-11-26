@@ -7,11 +7,13 @@ local F = require('core.foundations')
 local StatusDiagMod = {}
 StatusDiagMod.__index = StatusDiagMod
 
-function StatusDiagMod.new(flintlock_svc, mob_status_svc, startup_report)
+function StatusDiagMod.new(flintlock_svc, mob_status_svc, startup_report, identity_svc, actions_svc)
     return setmetatable({
         flintlock      = flintlock_svc,
         mob_status     = mob_status_svc,
         startup_report = startup_report,
+        identity       = identity_svc,
+        actions        = actions_svc,
         subtab         = 'diag', -- 'diag' | 'mobs' | 'flintlock'
     }, StatusDiagMod)
 end
@@ -34,17 +36,18 @@ function StatusDiagMod:handle_action(action)
     return false
 end
 
-function StatusDiagMod:draw(imgui, dl, L, x, y, w, h)
+function StatusDiagMod:draw(imgui, dl, F_arg, L, x, y, w, h, _ctx)
     if not imgui then return end
+    local Fn = F_arg or F
     local s = (L and L.uiScale) or 1.0
     local pad = math.floor(18 * s)
 
-    if dl then
-        F.drawOrnatePanel(dl, x, y, w, h, {
-            fillTop  = F.abgr(F.hex('#101628', 0.94)),
-            fillBot  = F.abgr(F.hex('#070B14', 0.96)),
-            border   = F.u32.soul_gold_dim,
-            accent   = F.u32.aether_cyan,
+    if dl and Fn and Fn.drawOrnatePanel then
+        Fn.drawOrnatePanel(dl, x, y, w, h, {
+            fillTop  = Fn.abgr(Fn.hex('#101628', 0.94)),
+            fillBot  = Fn.abgr(Fn.hex('#070B14', 0.96)),
+            border   = Fn.u32.soul_gold_dim,
+            accent   = Fn.u32.aether_cyan,
             corners  = true,
             shadow   = false,
         })
@@ -83,8 +86,33 @@ function StatusDiagMod:draw(imgui, dl, L, x, y, w, h)
                 tonumber(d.hooks_installed) or 0, tonumber(d.hooks_total) or 0,
                 tostring(d.ashita_compat_enabled)))
             imgui.Text(string.format('Registry: %d Souls (hash=%s) | Weapon Rules: %d (hash=%s)',
-                tonumber(d.registry_soul_count) or 0, tostring(d.registry_hash or ''),
+                tonumber(d.registry_soul_count) or (self.identity and #(self.identity.souls or {}) or 0),
+                tostring((d.registry_hash and d.registry_hash ~= '') and d.registry_hash or (self.identity and self.identity.registry_hash or '')),
                 tonumber(d.weapon_rule_count) or 0, tostring(d.weapon_config_hash or '')))
+            local sr = self.startup_report or {}
+            imgui.Text(string.format('Core Catalogs: startup_ok=%s | Souls=%d | Actions=%d | Visibility=%d',
+                tostring(sr.ok),
+                self.identity and #(self.identity.souls or {}) or 0,
+                self.actions and (self.actions.parsed_actions or #(self.actions.actions or {})) or 0,
+                self.actions and (self.actions.parsed_visibility or #(self.actions.visibility or {})) or 0))
+            if self.identity and self.identity.registry_source then
+                imgui.Text('  souls.json: ' .. tostring(self.identity.registry_source))
+            end
+            if self.actions and self.actions.actions_source then
+                imgui.Text('  actions.tsv: ' .. tostring(self.actions.actions_source))
+            end
+            if self.actions and self.actions.visibility_source then
+                imgui.Text('  visibility.tsv: ' .. tostring(self.actions.visibility_source))
+            end
+            if type(sr.errors) == 'table' and #sr.errors > 0 then
+                for _, err in ipairs(sr.errors) do
+                    if imgui.TextColored then
+                        imgui.TextColored({ 0.94, 0.33, 0.31, 1.0 }, '  [STARTUP ERROR] ' .. tostring(err))
+                    else
+                        imgui.Text('  [STARTUP ERROR] ' .. tostring(err))
+                    end
+                end
+            end
             imgui.Text(string.format('UI Input Ownership: active=%s owners=%d block_mouse=%s gamepad=%s cursor=%s acq=%d rel=%d last=%s',
                 tostring(ui_in.active), tonumber(ui_in.owner_count) or 0,
                 tostring(ui_in.block_mouse), tostring(ui_in.capture_gamepad), tostring(ui_in.show_cursor),

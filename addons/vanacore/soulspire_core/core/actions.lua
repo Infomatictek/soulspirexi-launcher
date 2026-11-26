@@ -1,17 +1,19 @@
--- SoulspireXI Phase C — Native VanaCore Soul Actions Module
--- Loads authoritative `soul_actions.tsv` & `visibility.tsv` and pushes them directly to
--- `vana.soulspire` (zero Ashita compatibility shims required).
+-- SoulspireXI Core (VanaCore-Native): Authoritative Soul Actions & Visibility Loader
+-- Loads `soul_actions.tsv`, `visibility.tsv`, and `presentation.cfg`, validates counts,
+-- and pushes them directly to `vana.soulspire` (zero Ashita compatibility shims).
 
 local M = {}
+M.MIN_EXPECTED_ACTIONS    = 100
+M.MIN_EXPECTED_VISIBILITY = 100
 
 local KIND_MAP = {
-    spell = 1,
-    magic = 1,
-    ability = 2,
+    spell       = 1,
+    magic       = 1,
+    ability     = 2,
     job_ability = 2,
-    ja = 2,
+    ja          = 2,
     weaponskill = 3,
-    ws = 3,
+    ws          = 3,
 }
 
 local function trim(s)
@@ -34,36 +36,48 @@ local function split_tabs(line)
 end
 
 local function read_first(paths)
+    local tried = {}
     for _, p in ipairs(paths) do
+        tried[#tried + 1] = p
         local f = io.open(p, 'rb')
         if f then
             local data = f:read('*a')
             f:close()
             if data and #data > 0 then
-                return data, p
+                return data, p, tried
             end
         end
     end
-    return nil, nil
+    return nil, nil, tried
 end
 
-function M.new(install_dir, identity_mod)
+function M.new(install_dir, identity_mod, addon_dir)
     local self = {
-        install_dir = tostring(install_dir or ''):gsub('[/\\]+$', ''),
-        identity = identity_mod,
-        action_count = 0,
-        visibility_count = 0,
-        row_limit = 16,
-        actions_source = 'none',
-        visibility_source = 'none',
-        search_query = '',
+        install_dir        = tostring(install_dir or ''):gsub('[/\\]+$', ''),
+        addon_dir          = tostring(addon_dir or ''):gsub('[/\\]+$', ''),
+        identity           = identity_mod,
+        action_count       = 0,
+        visibility_count   = 0,
+        parsed_actions     = 0,
+        parsed_visibility  = 0,
+        skipped_actions    = 0,
+        skipped_visibility = 0,
+        row_limit          = 16,
+        actions_source     = 'none',
+        visibility_source  = 'none',
+        errors             = {},
+        search_query       = '',
     }
 
     local function resolve_soul_pair(token)
         local t = string.lower(trim(token))
-        if self.identity and self.identity.by_key and self.identity.by_key[t] then
-            local rec = self.identity.by_key[t]
-            return rec.job_id, rec.branch_id
+        if t == '' then return nil, nil end
+        if self.identity then
+            local rec = (type(self.identity.resolve_key) == 'function' and self.identity:resolve_key(t))
+                or (self.identity.by_key and self.identity.by_key[t])
+            if rec then
+                return rec.job_id, rec.branch_id
+            end
         end
         local j, b = t:match('^(%d+):(%d+)$')
         if j and b then
@@ -72,22 +86,30 @@ function M.new(install_dir, identity_mod)
         return nil, nil
     end
 
-    function self:sync_to_native()
+    local function candidate_paths(filename)
         local base = self.install_dir
-        local action_raw, action_path = read_first({
-            base .. '/addons/vanacore/soulspire_core/data/soul_actions.tsv',
-            base .. '/addons/ashita/soulspire_soul_actions/data/soul_actions.tsv',
-            base .. '/plugins/data/soul_actions.tsv',
-        })
-        local vis_raw, vis_path = read_first({
-            base .. '/addons/vanacore/soulspire_core/data/visibility.tsv',
-            base .. '/addons/ashita/soulspire_soul_actions/data/visibility.tsv',
-            base .. '/plugins/data/visibility.tsv',
-        })
-        local pres_raw = read_first({
-            base .. '/addons/vanacore/soulspire_core/data/presentation.cfg',
-            base .. '/addons/ashita/soulspire_soul_actions/data/presentation.cfg',
-        })
+        local out = {}
+        if self.addon_dir ~= '' then
+            out[#out + 1] = self.addon_dir .. '/data/' .. filename
+        end
+        out[#out + 1] = base .. '/addons/vanacore/soulspire_core/data/' .. filename
+        out[#out + 1] = base .. '/data/' .. filename
+        out[#out + 1] = base .. '/addons/ashita4/soulspire_soul_actions/data/' .. filename
+        out[#out + 1] = base .. '/addons/ashita/soulspire_soul_actions/data/' .. filename
+        out[#out + 1] = base .. '/plugins/data/' .. filename
+        return out
+    end
+
+    function self:sync_to_native()
+        self.errors = {}
+        self.parsed_actions = 0
+        self.parsed_visibility = 0
+        self.skipped_actions = 0
+        self.skipped_visibility = 0
+
+        local action_raw, action_path, action_tried = read_first(candidate_paths('soul_actions.tsv'))
+        local vis_raw, vis_path, vis_tried = read_first(candidate_paths('visibility.tsv'))
+        local pres_raw = read_first(candidate_paths('presentation.cfg'))
 
         if pres_raw then
             local lim = tonumber(pres_raw:match('row_max_chars%s*=%s*(%d+)'))
@@ -112,20 +134,28 @@ function M.new(install_dir, identity_mod)
                     local icon_v2 = tonumber(cols[7])
                     if job and branch and kind and id and (name ~= '' or desc ~= '') then
                         actions[#actions + 1] = {
-                            job = job,
-                            branch = branch,
-                            kind = kind,
-                            id = id,
-                            name = name,
+                            job         = job,
+                            branch      = branch,
+                            kind        = kind,
+                            id          = id,
+                            name        = name,
                             description = desc,
-                            icon_id = icon,
-                            icon_id_v2 = icon_v2,
+                            icon_id     = icon,
+                            icon_id_v2  = icon_v2,
                         }
+                    else
+                        self.skipped_actions = self.skipped_actions + 1
                     end
                 end
             end
+        else
+            self.actions_source = 'missing'
+            self.errors[#self.errors + 1] = 'soul_actions.tsv not found (searched: ' .. table.concat(action_tried, ', ') .. ')'
         end
+        self.parsed_actions = #actions
 
+        -- Authoritative visibility.tsv format:
+        --   soul<TAB>kind<TAB>id<TAB>min_effective_level<TAB>rule   (rule: unlock | hidden)
         local vis = {}
         if vis_raw then
             self.visibility_source = vis_path or 'tsv'
@@ -136,21 +166,46 @@ function M.new(install_dir, identity_mod)
                     local job, branch = resolve_soul_pair(cols[1])
                     local kind = KIND_MAP[string.lower(trim(cols[2]))] or tonumber(cols[2])
                     local id = tonumber(cols[3])
-                    local rule_str = string.lower(trim(cols[4]))
-                    local min_lvl = tonumber(cols[5]) or 1
+                    -- Support canonical order (col4=min_level, col5=rule) and gracefully detect swapped legacy rows
+                    local c4_num = tonumber(trim(cols[4]))
+                    local min_lvl, rule_str
+                    if c4_num ~= nil then
+                        min_lvl = c4_num
+                        rule_str = string.lower(trim(cols[5]))
+                    else
+                        rule_str = string.lower(trim(cols[4]))
+                        min_lvl = tonumber(trim(cols[5])) or 1
+                    end
                     local rule = (rule_str == 'hide' or rule_str == 'hidden' or rule_str == '0') and 0 or 1
                     if job and branch and kind and id then
                         vis[#vis + 1] = {
-                            job = job,
-                            branch = branch,
-                            kind = kind,
-                            id = id,
+                            job       = job,
+                            branch    = branch,
+                            kind      = kind,
+                            id        = id,
                             min_level = min_lvl,
-                            rule = rule,
+                            rule      = rule,
                         }
+                    else
+                        self.skipped_visibility = self.skipped_visibility + 1
                     end
                 end
             end
+        else
+            self.visibility_source = 'missing'
+            self.errors[#self.errors + 1] = 'visibility.tsv not found (searched: ' .. table.concat(vis_tried, ', ') .. ')'
+        end
+        self.parsed_visibility = #vis
+
+        if #actions < M.MIN_EXPECTED_ACTIONS then
+            self.errors[#self.errors + 1] = string.format(
+                'soul_actions.tsv (%s) parsed %d actions (skipped=%d), expected >= %d',
+                self.actions_source, #actions, self.skipped_actions, M.MIN_EXPECTED_ACTIONS)
+        end
+        if #vis < M.MIN_EXPECTED_VISIBILITY then
+            self.errors[#self.errors + 1] = string.format(
+                'visibility.tsv (%s) parsed %d rules (skipped=%d), expected >= %d',
+                self.visibility_source, #vis, self.skipped_visibility, M.MIN_EXPECTED_VISIBILITY)
         end
 
         if type(vana) == 'table' and vana.soulspire then

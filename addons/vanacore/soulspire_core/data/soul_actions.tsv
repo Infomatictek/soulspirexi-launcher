@@ -1,0 +1,164 @@
+# SoulspireXI External Soul Action Definitions (AUTO-GENERATED from registry/entities.json)
+# Registry version: 2026.11.22-phase4-complete
+# Format (TSV): soul<TAB>kind<TAB>id<TAB>name<TAB>description[<TAB>icon_id<TAB>icon_id_v2]
+# Do not edit directly; edit registry/entities.json and run tools/registry_compiler.py --generate
+zealot	spell	28	Dawnfire	Strike one enemy with light. Costs 8% max MP. 6s recast.
+zealot	spell	29	Sunbrand	Burn one enemy with concentrated light. Costs 12% max MP. 8s recast.
+zealot	spell	30	Pillar of Day	Smite one enemy with a pillar of light. Costs 16% max MP. 12s recast.
+zealot	spell	21	Last Light	Commit to a heavy light strike against one enemy. Costs 20% max MP, 22% at Lv.70 with increased power. 14s recast.
+zealot	ability	586	Consecration	Empower your next damaging Zealot spell by 20%. Lasts up to 20s. 90s recast.
+valkyrie	spell	28	Vigil Lance	Strike one enemy with a lance of light. Costs 15 MP. 15s recast.
+valkyrie	ability	785	Wingmate	Designate yourself or one nearby party member for escort. 5s recast.
+valkyrie	ability	787	Valkyrie's Escort	After enemy damage interrupts your Wingmate, protect one retry of the same spell within 6s. MP refund scales with level. 25s recast.
+astromancer	spell	144	Cinder	Fire probe. Damage aligns Ancient Invocation to this element. 6 MP. 3s recast.
+astromancer	spell	149	Rime	Ice probe. Damage aligns Ancient Invocation to this element. 8 MP. 3s recast.
+astromancer	spell	154	Gale	Wind probe. Damage aligns Ancient Invocation to this element. 6 MP. 3s recast.
+astromancer	spell	159	Bedrock	Earth probe. Damage aligns Ancient Invocation to this element. 4 MP. 3s recast.
+astromancer	spell	164	Static Spark	Thunder probe. Damage aligns Ancient Invocation to this element. 9 MP. 3s recast.
+astromancer	spell	169	Tsunami	Water probe. Damage aligns Ancient Invocation to this element. 5 MP. 3s recast.
+astromancer	spell	160	Ancient Invocation	Invoke Ancient Magic in your last damaging probe element, or earth by default. Costs 16% max MP. 18s shared recovery.
+astromancer	spell	235	Elemental Survey	Read the weakest elemental resistances of one enemy. Costs 2% max MP. 30s recast.
+astromancer	spell	261	Starway	Return to your home point. Costs 100 MP. 10s recast.
+astromancer	spell	204	Solar Collapse	Fire Ancient Magic against one enemy. Costs 22% max MP. 18s shared recovery. Can trigger Astral Saturation.
+astromancer	spell	206	Rimefall	Ice Ancient Magic against one enemy. Costs 22% max MP. 18s shared recovery. Can trigger Astral Saturation.
+astromancer	spell	208	Skybreak	Wind Ancient Magic against one enemy. Costs 22% max MP. 18s shared recovery. Can trigger Astral Saturation.
+astromancer	spell	210	Worldsplitter	Earth Ancient Magic against one enemy. Costs 22% max MP. 18s shared recovery. Can trigger Astral Saturation.
+astromancer	spell	212	Thunderstar	Thunder Ancient Magic against one enemy. Costs 22% max MP. 18s shared recovery. Can trigger Astral Saturation.
+astromancer	spell	214	Tidal Cataclysm	Water Ancient Magic against one enemy. Costs 22% max MP. 18s shared recovery. Can trigger Astral Saturation.
+astromancer	ability	587	Gather Aether	Recover 10% of your maximum MP. 90s recast.
+channeler	spell	164	Conduit Bolt	Discharge a low-cost single-target arc. Costs 9 MP. 4s recast.
+channeler	spell	247	Aether Tap	Siphon MP from one enemy that has MP. Costs 10 MP. 60s recast.
+channeler	ability	785	Conduit Link	Channel for up to 8s to speed and discount one eligible party spell. Self-link discounts MP only. 24s recast.
+scarletweaver	spell	144	Searing Needle	Single-target flame stitch. Yin increases its damage. 3s recast.
+scarletweaver	spell	149	Rime Stitch	Single-target frost stitch. Yin increases its damage. 3s recast.
+scarletweaver	spell	154	Gale Needle	Single-target wind stitch. Yin increases its damage. 3s recast.
+scarletweaver	spell	159	Copper Stitch	Single-target earth stitch. Yin increases its damage. 3s recast.
+scarletweaver	spell	164	Storm Needle	Single-target lightning stitch. Yin increases its damage. 3s recast.
+scarletweaver	spell	169	Tide Stitch	Single-target tidal stitch. Yin increases its damage. 3s recast.
+scarletweaver	spell	145	Scarlet Spindle	Stronger single-target flame weave. Yin increases its damage. 6s recast.
+scarletweaver	spell	165	Violet Shuttle	Stronger single-target lightning weave. Yin increases its damage. 7s recast.
+scarletweaver	spell	156	Tempest Loom	Commit to a strong single-target wind weave. Yin increases its damage. 12s recast.
+scarletweaver	ability	759	Spellweave	Enter Yin to strengthen your Scarlet Weaver spells. In combat, both forms share a 12s recast and a 2s recovery.
+scarletweaver	ability	786	Bladeweave	Enter Yang to strengthen regular main-hand sword hits. In combat, both forms share a 12s recast and a 2s recovery.
+royaltactician	spell	56	Break Stride	Hinder one enemy attack speed. Landing this opens Advance. 20s recast.
+royaltactician	spell	58	Seize Initiative	Interfere with one enemy action. Landing this opens Advance. 10s recast.
+royaltactician	spell	254	Obscure Aim	Reduce one enemy accuracy. Landing this opens Recompose. 10s recast.
+royaltactician	spell	59	Quiet Front	Stop one enemy from casting magic. Landing this opens Recompose. 10s recast.
+royaltactician	spell	260	Unravel Defense	Remove one enemy enhancement and reopen the last order you issued. 10s recast.
+royaltactician	ability	787	Issue Order	Issue the order opened by your latest successful enfeeble. Costs no MP. Targets one party member or yourself. 18s recast.
+bandit	ability	556	Back Alley Strike	Prepare a critical strike from behind. Lasts up to 20s. 45s recast.
+bandit	ability	557	Find the Gap	Read one enemy for a personal opening that qualifies your next landed weapon skill for Opportunism. Lasts 15s. 24s recast.
+trickster	ability	588	Pass the Blame	Route your next qualifying hit or weapon skill threat to the party member between you and your enemy. Lasts up to 20s. 35s recast.
+phantom	ability	553	Phantom's Dare	Challenge one enemy for threat and guard one magical or breath hit within 6s. 15y range. 18s recast.
+oathbreaker	spell	28	Ashen Judgment	Strike one enemy with light from range. Costs 15 MP. 15s recast.
+oathbreaker	ability	560	Vow of Condemnation	Commit before combat to stronger Great Sword swings and 10% more damage taken from enemies. Vows share a 5s recast.
+oathbreaker	ability	767	Vow of Absolution	Commit before combat to retaliation. Losing at least 8% max HP to one enemy hit opens an empowered Reckoning. Vows share a 5s recast.
+oathbreaker	ability	558	Reckoning	Strike with your Great Sword. An armed retaliation doubles damage against the enemy that hit you. 18s recast.
+shinobi	spell	338	Shadow Squadron: Ichi	Summon 2 offensive shadow clones against your engaged enemy (max 5 active, 25-30s, zero defensive shadows). 20s recast.
+shinobi	spell	339	Shadow Squadron: Ni	Summon 3 offensive shadow clones against your engaged enemy (max 5 active, 25-30s, zero defensive shadows). 30s recast.
+shinobi	spell	320	False Assault	Squad feint strike that creates a 12s Opening (+25% potency or +2s duration on your next different squad command). Advances tactical phase. 12s recast.
+shinobi	spell	323	Mirror Step	Shifts living shadows into an alternating fast/heavy attack rhythm for 10s, scaling with squad size (2-5 clones). Advances tactical phase. 16s recast.
+shinobi	spell	326	Crosscut	Orders surviving shadows to execute rapid staggered single-target physical strikes against your engaged enemy. Advances or triggers Cascade. 14s recast.
+shinobi	spell	329	Shadow Pin	Locks living shadows onto your engaged enemy for 12s (+ACC/+melee, refreshes focus, extends active phase +4s). No enemy debuff. 18s recast.
+shinobi	spell	332	Thunder Relay	High-tempo escalating sequential strikes across living shadows (requires 2+ clones for full relay chain). Advances or triggers Cascade. 22s recast.
+shinobi	spell	335	Final Mirage	High-commitment single-target finisher scaling with living clones (1-5) and consuming your active tactical phase for peak burst. 45s recast.
+shinobi	ability	999	Shadow Legion	Every living shadow launches one staggered single-target physical strike at your engaged enemy. Integrates with Opening and tactical phases. 90s recast.
+shinobi	ability	1000	Phantom Assault	Reduces living shadows' native autoattack interval by 25% for 8s while preserving staggered attack timing. Integrates with tactical phases. 30s recast.
+reaper	ability	589	Finality	Strike with your Scythe. Land during enemy recovery for greater damage, with a finishing bonus from Lv.50. 16s recast.
+reaper	spell	245	Grave Toll	Strike one enemy with darkness from range. Enemy recovery increases the damage. Costs 12 MP. 12s recast.
+scourge	spell	266	Withering	Curse one enemy to dampen its physical TP moves for 24 seconds. Shares a 12s recast with other curses.
+scourge	spell	230	Ash	Curse one enemy to dampen its damaging spells for 24 seconds. Shares a 12s recast with other curses.
+scourge	spell	271	Famine	Curse one enemy to reduce its own combat healing for 24 seconds. Shares a 12s recast with other curses.
+scourge	ability	562	Rite of Malice	Recover MP while your current enemy bears one of your curses or immunity wards. 24s recast.
+sniper	ability	569	Sightline Shot	Aim for 3 seconds, then fire one powerful gun or crossbow shot within 20 yalms. Movement can cancel aim. 12s recast.
+sniper	ability	571	Deep Sight	Toggle a 4-second aim for greater Sightline Shot damage. 5s recast.
+arcanearcher	ability	569	Attunement Arrow	Fire one attuned arrow to mark an enemy within 20 yalms. The next matching party spell or skillchain deals more damage. 16s recast.
+arcanearcher	ability	571	Next Attunement	Select the next element for Attunement Arrow. 1s recast.
+arcanearcher	ability	570	Previous Attunement	Select the previous element for Attunement Arrow. 1s recast.
+nightblade	spell	341	Severing Seal	Seal a hostile spell within 15 yalms. An interruptible spell can be stopped. If it completes, its direct damage is reduced. Shared cooldown: 20 seconds, 18 from Lv.50.
+nightblade	spell	344	Blunting Seal	Seal a readied enemy technique within 15 yalms. Physical damage from that move is reduced. Shared cooldown: 20 seconds, 18 from Lv.50.
+nightblade	spell	320	Signal Flare	Strike one enemy with fire. Uses no ninja tools. 10s recast.
+nightblade	ability	761	Quick Read	Prepare for 8 seconds. Your next valid seal cast takes 0.25 seconds. 45s recast.
+lancer	ability	578	Piercing Jump	Leap and strike with your polearm. From Lv.50, a landed long vault can strengthen this hit against the same enemy. 60s recast.
+lancer	ability	579	Spineshatter Vault	Vault to an enemy 4 to 12 yalms away and strike with your polearm. A longer lane hits harder. Blocked terrain gives a three-second retry. 18s recast.
+skyborn	ability	578	Grounding Cry	Challenge one enemy from up to 15 yalms and build immediate enmity. 16s recast.
+skyborn	ability	577	Skyward Guard	Brace for 1.5 seconds to soften one direct hit. Stay targetable and hold enmity. From Lv.30, intercepting a hit creates a short ward. 20s recast.
+warmage	ability	606	Assess Prey	Assess your engaged enemy. For eight seconds, matching Blue Magic gains damage against its least-resistant available categories. 12s recast.
+warmage	spell	597	Briar Hammer	Crush one enemy with a blunt Blue Magic strike. Costs 6 MP. 7s recast.
+warmage	spell	551	Needle Lunge	Pierce one enemy with a quick Blue Magic thrust. Costs 5 MP. 7s recast.
+warmage	spell	577	Razor Heel	Slash one enemy with a cutting kick. Costs 5 MP. 7s recast.
+warmage	spell	529	Skullbreaker Volley	Strike one enemy three times with blunt force. Costs 16 MP. 12s recast.
+warmage	spell	527	Iron Cleave	Cut one enemy with a heavy slashing strike. Costs 24 MP. 13s recast.
+warmage	spell	569	Gale Knuckle	Land three blunt strikes on one enemy from up to eight yalms. Costs 28 MP. 16s recast.
+warmage	spell	543	Serrated Bite	Deliver a deep slashing bite to one enemy. Costs 25 MP. 17s recast.
+warmage	spell	626	Ember Charge	Hurl a concentrated fire charge at one enemy. Costs 26 MP. 16s recast.
+warmage	spell	554	Guillotine Shears	Shear one enemy with a heavy slashing finisher. Costs 32 MP. 20s recast.
+warmage	spell	591	Furnace Breath	Focus fire on one enemy within ten yalms. Costs 36 MP. 20s recast.
+warmage	spell	644	Storm Gaze	Strike one enemy with lightning. Costs 30 MP. 18s recast.
+archivist	ability	726	Record	Watch one enemy for 12 seconds and record its next completed hostile spell or technique. 6s recast.
+archivist	ability	745	Index Pages	Cycle between your live records to select a different countermeasure. 1s recast.
+archivist	spell	99	File Countermeasure	Give one party member a page against your selected recorded action. One exact matching action deals less damage. 15s recast.
+archivist	spell	159	Margin Note	Strike one enemy with earth magic between observations. Costs 4 MP. 6s recast.
+untamed	ability	564	Pack Rend	Strike your beast's target with an axe. A landed hit feeds TP to your beast when the link is ready. 8s recast.
+untamed	ability	581	Set Quarry	Order your beast to attack one enemy. 5s recast.
+untamed	ability	582	Fall Back	Call your beast back to your side. 5s recast.
+untamed	ability	583	Dismiss Beast	Dismiss your active companion. 5s recast.
+untamed	ability	590	Feed Beast	Spend pet food from the ammo slot to heal your companion. 90s recast.
+untamed	ability	597	Call Packmate	Summon a hare companion without spending a jug. 300s recast.
+untamed	ability	763	Pack Commands	Open your companion's technique list.
+untamed	ability	899	Rally Packmate	Summon a replacement hare companion on a separate cooldown. 1200s recast.
+untamed	ability	1184	Raking Kick	Your beast strikes your shared enemy. A landed hit returns TP to you when the link is ready. Costs one charge.
+beastspeaker	ability	565	Read Quarry	Identify the enemy family and its weakest physical damage type within 15 yalms. 10s recast.
+beastspeaker	ability	566	Expose Quarry	Order your tracker to expose the chosen weakness on its next landed melee hit within six seconds. 25s recast.
+beastspeaker	ability	581	Track Quarry	Send your tracker after the selected enemy. 5s recast.
+beastspeaker	ability	582	Recall Tracker	Call your tracker back to your side. 5s recast.
+beastspeaker	ability	583	Release Tracker	Dismiss your active tracker. 5s recast.
+beastspeaker	ability	585	Choose Weakness	Cycle the recorded weakness through blunt, slashing, and piercing for your next exposure. 1s recast.
+beastspeaker	ability	597	Call Tracker	Summon your mandragora tracker without spending a jug. 300s recast.
+primalist	ability	600	Challenge Aspect	Send your avatar after an enemy and commit its element to the next matching pact. 20s recast.
+primalist	ability	601	Recall Avatar	Call your avatar back and close any open Challenge. 5s recast.
+primalist	ability	602	End Manifestation	Dismiss your avatar and close any open Challenge. 5s recast.
+primalist	ability	603	Elemental Pacts	Open the active avatar's elemental pact menu.
+primalist	ability	744	Attune First Prime	Cycle the first avatar loan slot from Lv. 30 through 49. 1s recast.
+primalist	ability	808	Attune Second Prime	Cycle the second avatar loan slot from Lv. 30 through 49. 1s recast.
+primalist	ability	1028	Astral Comet	Command Carbuncle to strike one enemy with light. The matching Challenge can empower this strike. 18s base recast.
+primalist	ability	1057	Inferno Brand	Command Ifrit to strike one enemy with fire. The matching Challenge can empower this strike. 18s base recast.
+primalist	ability	1073	Fault Strike	Command Titan to strike one enemy with earth. The matching Challenge can empower this strike. 18s base recast.
+primalist	ability	1089	Undertow	Command Leviathan to strike one enemy with water. The matching Challenge can empower this strike. 18s base recast.
+primalist	ability	1105	Gale Rend	Command Garuda to strike one enemy with wind. The matching Challenge can empower this strike. 18s base recast.
+primalist	ability	1121	Glacial Edge	Command Shiva to strike one enemy with ice. The matching Challenge can empower this strike. 18s base recast.
+primalist	ability	1137	Storm Lance	Command Ramuh to strike one enemy with thunder. The matching Challenge can empower this strike. 18s base recast.
+primalist	spell	296	Call Carbuncle	Summon Carbuncle for its light pact. Costs 5 MP. 5s recast.
+primalist	spell	298	Call Ifrit	Summon Ifrit for its fire pact. Costs 5 MP. 5s recast.
+primalist	spell	299	Call Titan	Summon Titan for its earth pact. Select a loan from Lv. 30 or use the full roster from Lv. 50. Costs 5 MP. 5s recast.
+primalist	spell	300	Call Leviathan	Summon Leviathan for its water pact. Select a loan from Lv. 30 or use the full roster from Lv. 50. Costs 5 MP. 5s recast.
+primalist	spell	301	Call Garuda	Summon Garuda for its wind pact. Select a loan from Lv. 30 or use the full roster from Lv. 50. Costs 5 MP. 5s recast.
+primalist	spell	302	Call Shiva	Summon Shiva for its ice pact. Select a loan from Lv. 30 or use the full roster from Lv. 50. Costs 5 MP. 5s recast.
+primalist	spell	303	Call Ramuh	Summon Ramuh for its thunder pact. Select a loan from Lv. 30 or use the full roster from Lv. 50. Costs 5 MP. 5s recast.
+herald	ability	600	Send Envoy	Send your avatar after the selected enemy. 5s recast.
+herald	ability	601	Recall Envoy	Call your avatar back to your side. 5s recast.
+herald	ability	602	Dismiss Envoy	Dismiss your avatar and end its Astral Accord. 5s recast.
+herald	ability	603	Envoy Responses	Open the active avatar's elemental response menu.
+herald	ability	762	Astral Accord	Snapshot nearby party members for one matching elemental hit. Costs 8% max MP. 30s recast.
+herald	ability	1028	Light Response	Command an elemental strike that can claim your Astral Accord. 20s base recast.
+herald	ability	1057	Flame Response	Command an elemental strike that can claim your Astral Accord. 20s base recast.
+herald	ability	1073	Stone Response	Command an elemental strike that can claim your Astral Accord. 20s base recast.
+herald	ability	1089	Tidal Response	Command an elemental strike that can claim your Astral Accord. 20s base recast.
+herald	ability	1105	Wind Response	Command an elemental strike that can claim your Astral Accord. 20s base recast.
+herald	ability	1121	Frost Response	Command an elemental strike that can claim your Astral Accord. 20s base recast.
+herald	ability	1137	Storm Response	Command an elemental strike that can claim your Astral Accord. 20s base recast.
+herald	spell	296	Invite Carbuncle	Invite Carbuncle for its elemental Accord. Costs 5 MP. 5s recast.
+herald	spell	298	Invite Ifrit	Invite Ifrit for its elemental Accord. Costs 5 MP. 5s recast.
+herald	spell	299	Invite Titan	Invite Titan for its elemental Accord. Costs 5 MP. 5s recast.
+herald	spell	300	Invite Leviathan	Invite Leviathan for its elemental Accord. Costs 5 MP. 5s recast.
+herald	spell	301	Invite Garuda	Invite Garuda for its elemental Accord. Costs 5 MP. 5s recast.
+herald	spell	302	Invite Shiva	Invite Shiva for its elemental Accord. Costs 5 MP. 5s recast.
+herald	spell	303	Invite Ramuh	Invite Ramuh for its elemental Accord. Costs 5 MP. 5s recast.
+terramancer	ability	857	Cancel Fault	Collapse your pending fault without a refund. 10s recast.
+terramancer	spell	159	Stone Chip	Strike one enemy with earth magic and establish your claim. Costs 3 MP. 4s recast.
+terramancer	spell	160	Shallow Fault	Mark your claimed enemy's position for a two-second delayed eruption. Costs 7% max MP. Shared 8s recast.
+terramancer	spell	161	Deep Fault	Mark your claimed enemy's position for a stronger four-second delayed eruption. Costs 12% max MP. Shared 8s recast.
+diviner	ability	857	Recall Meridian	Remove your corridor and end its bonuses immediately.
+diviner	ability	859	Meridian Shift	Move the anchor to your current position and keep the original expiry. 20s recast.
+diviner	spell	159	Ley Spark	Strike one enemy with earth magic. Costs 4 MP. 5s recast.
+diviner	spell	783	Lay Meridian	Anchor a point beneath you. Move 3-15 yalms away to form an accuracy corridor for your party. Costs 0 MP. 18s recast.

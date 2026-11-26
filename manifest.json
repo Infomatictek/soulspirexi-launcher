@@ -6205,7 +6205,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/weapon_render_probe.lua",
       "targetPath": "soulspire_core/core/weapon_render_probe.lua",
-      "sha256": "612b99d134812d218ba468ddee1cc12d05893033b5d7e9dab3784b8a1302aab7",
+      "sha256": "89b524d96ced1ad9e56dd4dd2ba31cd9670fdccf7b03972ee9f3a5f436dbc45b",
       "size": 61093
     },
     {
@@ -8275,6 +8275,279 @@
     },
     {
       "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/aegistemplar.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/aegistemplar.png",
+      "sha256": "cd4b56498075d725f9bc33b00de7293006a41d300007d0e8bd9f48500f84b1a5",
+      "size": 17959
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/alphawarden.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/alphawarden.png",
+      "sha256": "51b0e0f653791a17d757f9d1ff76dc8192de5cf760dc44fd33bf50d64484ccb7",
+      "size": 28300
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/animist.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/animist.png",
+      "sha256": "42eb28f1274fc2386a41b2e07bbe2fd2b47dcd59fc839e03c4413e98328dfb7d",
+      "size": 21975
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/azurebastion.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/azurebastion.png",
+      "sha256": "784844b0456016533851e9d575331cd346431833c89ebd38cd1fa58ad9837563",
+      "size": 22182
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/berserker.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/berserker.png",
+      "sha256": "539dce2f8d744d1af9a9ad77dee5589b2bff6fab450f2b3df2fb6bb346dd0f72",
+      "size": 17345
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/bishop.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/bishop.png",
+      "sha256": "908dfe156f19c307aa52b9ff997dd42b93a0f03e12553f048ab331fc96884ac7",
+      "size": 19164
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/blackbelt.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/blackbelt.png",
+      "sha256": "0aa6550a825a47a6d2367e33f9e0891b3a7878a3e14fc1fa5151f930cef7766a",
+      "size": 23081
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/bladewheel.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/bladewheel.png",
+      "sha256": "6bfa0964991fb85fe0996ed7b4386d1524d44d8d45e1875b9129df02c291902f",
+      "size": 23710
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/buccaneer.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/buccaneer.png",
+      "sha256": "616a4b34987c43465fdb88baf930de575925b937da9a11a824c9c8c1ecba3ccd",
+      "size": 18185
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/celestial.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/celestial.png",
+      "sha256": "f91633ac1501ba3ca099e95450121023865ad237b1dfa2e1190f7afc7fcb9227",
+      "size": 25248
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/chiweaver.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/chiweaver.png",
+      "sha256": "29c5b962ea1e7ac3f49901e50560f80169098a25df54cd82238d58ffdb035538",
+      "size": 19669
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/commander.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/commander.png",
+      "sha256": "2801ee6923186fb6234813e5b7e2e7ddd707cb114239f9853e8fdc7747a3a091",
+      "size": 17905
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/crimsonduelist.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/crimsonduelist.png",
+      "sha256": "eb205d75ed63d9d2398819bb27b22ea8812815755cdb423181a484ec32492871",
+      "size": 14978
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/dreadnought.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/dreadnought.png",
+      "sha256": "a1ebbdb2d952052ad5f141b3762fe9788ec850a5614a0b20842ad10fdb3cd492",
+      "size": 19729
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/flintlock.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/flintlock.png",
+      "sha256": "3a65c8bb77154869362cca4f5dc7fb45a869e7b1447c20eee9f730ff27ab0c07",
+      "size": 18448
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/gambler.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/gambler.png",
+      "sha256": "24e47fc2625d9eee5bfad8dab809eb01549fec1bf8a5036e32c12c4b3d103791",
+      "size": 18116
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/gladiator.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/gladiator.png",
+      "sha256": "d34ee2f4693e2da843774fecab95179093eb359b66261af2ac4d48eab1f9afab",
+      "size": 25068
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/huntsman.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/huntsman.png",
+      "sha256": "e766e5bd691040a25bd78ba0fae45e4198a2b7cfbfa612de4c22d446bc034bb2",
+      "size": 20769
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/imperialarcher.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/imperialarcher.png",
+      "sha256": "f17928441c840fde3508947045ae281c7c39a1fcca95b4279fbcda3599aa826d",
+      "size": 16981
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/inquisitor.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/inquisitor.png",
+      "sha256": "f2d18ba9843384e72a8d04d306bda29273cb677924323e2ccc5f7ecb0743c45d",
+      "size": 17256
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/kagemusha.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/kagemusha.png",
+      "sha256": "af693165c705ff5d6e7c2179b9b67bb2ff20cb3336480f92530c9519a687b873",
+      "size": 15282
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/kurogane.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/kurogane.png",
+      "sha256": "e9e4c118e2fce28ff7ff307b8440f27931bd9d1ecb8c9bbdbbde2d6b0e99a475",
+      "size": 2737
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/lifebinder.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/lifebinder.png",
+      "sha256": "4043059d5b50f73d86772d0c2b12937a4e142e2463ff00cfeb77e794888fad93",
+      "size": 18090
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/magus.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/magus.png",
+      "sha256": "97628663b781176dbc3694d8b1ac59d807a9797ccf9d2867fea90eb99257dc49",
+      "size": 26087
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/medic.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/medic.png",
+      "sha256": "1eaf008e397b3696a28923e9422c962bafc74675dd8698ce2ed97b0d4c623218",
+      "size": 14895
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/miragesentinel.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/miragesentinel.png",
+      "sha256": "66d6feb05a81581a0e637d8d96f36b2b3f7b0903164efdfbba208ce74dbde354",
+      "size": 24585
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/necromancer.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/necromancer.png",
+      "sha256": "e7322d8792f8938a5ae29df3825e715b379cc31df40d8693b2a6eac62d63d698",
+      "size": 13658
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/pugilist.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/pugilist.png",
+      "sha256": "c1d77e45048b9813542b677c0ba9ea4c1ab5a45210dbb1a246daf71dbf31f003",
+      "size": 18433
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/ronin.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/ronin.png",
+      "sha256": "5349992fe70637920c277028a81d29a336db19f07036752f4fc10b5454cc2c10",
+      "size": 16737
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/sage.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/sage.png",
+      "sha256": "0bfa8460f77ebe8750c2ed177bd36868e8ab4f02d9d4262778ae5bbca66f5f2a",
+      "size": 12521
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/sensei.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/sensei.png",
+      "sha256": "a0244acdf6debc5c64ec9b3bb77acab6e94ee33ad7cfaff8e53438d88494c433",
+      "size": 14292
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/spartan.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/spartan.png",
+      "sha256": "79f160854cf4fdb8a62d104a5ecff2e110e96a76c93fcd4aa1f6cd33c7908ed3",
+      "size": 19083
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/spellblade.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/spellblade.png",
+      "sha256": "049bf08998e9a06a67b116e25b0fd047a00cd2d128df6d97a96100d57963cc13",
+      "size": 20081
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/templar.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/templar.png",
+      "sha256": "c66987f764b78cbb6f51c1930c9aba960c21f26d5dff0d7bf50481615ea01abb",
+      "size": 25227
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/vampire.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/vampire.png",
+      "sha256": "f05a3bddfb6abdb842382ecc3d1597ff51fe45615e8b2e3c44baa482c4a6f62e",
+      "size": 20458
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/vanguard.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/vanguard.png",
+      "sha256": "9b6ddfc1c7f2d1ba88e11394d0551bcb1cc6c642bd5de42244f41df827ea3056",
+      "size": 18314
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/verdant.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/verdant.png",
+      "sha256": "1326e69024063a09f9e7fcfdea848bf04591dfc0c21b5e5070437bdfd0768a96",
+      "size": 17417
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/warlord.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/warlord.png",
+      "sha256": "a5b21e0b11b130a933d0252afb264bb8bccaff736708ddd2e8a185233f20056a",
+      "size": 15849
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/crystals/wyvernheart.png",
+      "targetPath": "vanacore/soulspire_core/assets/crystals/wyvernheart.png",
+      "sha256": "96dacbfadb3ee9f1eb3856b0aaed5c90e1cc7a4d6cdbb9d5c10fb02d0511bdb0",
+      "size": 16531
+    },
+    {
+      "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/assets/soulforge_backdrop.png",
       "targetPath": "vanacore/soulspire_core/assets/soulforge_backdrop.png",
       "sha256": "45a966d5a3f3d71e9368e6c6268aa45cfd74ccc7233021aeb8be6e2346119d8d",
@@ -8300,6 +8573,860 @@
       "targetPath": "vanacore/soulspire_core/assets/soulspire_crest.png",
       "sha256": "97a0fd8090a5f88def1cb225415e5429642d421280f034bd5199be0d7a799191",
       "size": 97591
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/224.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/224.png",
+      "sha256": "5f2e7266c19f7992e92bb0d5dac9d04ec01c58023027efdac608fdfec28d94d6",
+      "size": 2104
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/225.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/225.png",
+      "sha256": "b064c26b59b6c06707ebf11ce5dc67194b3b885ebedd717dd4012f938a9ce920",
+      "size": 2075
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/226.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/226.png",
+      "sha256": "3d59fd4cce15fb67fdda0a890603bede66a2e504e883548d173ecf8b1bc89d82",
+      "size": 2049
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/232.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/232.png",
+      "sha256": "ea20f60e64c5acc64c5fb3a83d0034fa1bb49a06fc22c4bb5e1e34a9c59f0e52",
+      "size": 2116
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/233.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/233.png",
+      "sha256": "46771ac2c3a1d13375df450af9155eeaa2c78c9427c9dd1abfe94527ed9faef9",
+      "size": 2043
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/24.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/24.png",
+      "sha256": "7807e8c5620d0af6fad67dea84a4d76b6b28c6b7f0f69440d2a55f5494c6eb3b",
+      "size": 1707
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/244.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/244.png",
+      "sha256": "2c9e50abe78fa8dad238a13771d93a7a470d2b7079fbf3ddd55075a2f78714cc",
+      "size": 1896
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/245.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/245.png",
+      "sha256": "7703d71412e06d992f91de1454980823c5515ddecb54a46699570757410f5395",
+      "size": 2080
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/246.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/246.png",
+      "sha256": "5df7f56b26cc2718a1239d5e0ed3b73342d2ea08e4566420144ff7451ee553c3",
+      "size": 2092
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/247.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/247.png",
+      "sha256": "48739b60571001a7b73a8da9578c82e7488f50c8920457376cd1757c42a42c5d",
+      "size": 2094
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/248.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/248.png",
+      "sha256": "1c3ee2acade41d84a56111935110370bc718a3606d88380f259086fb23818f8b",
+      "size": 1873
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/25.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/25.png",
+      "sha256": "06cf5741b4bd0a5d45e9673f2a935a17656236f6f8fa3983f55a9b178176d3ab",
+      "size": 1977
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/250.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/250.png",
+      "sha256": "7fa5d7e59dd967028b2d0d9599f406e68f1e60e8c6db90787fa33190fc7c209e",
+      "size": 2157
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/26.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/26.png",
+      "sha256": "9ffdc6018bb0f6e576bce2dd454831d83209890c6c5548396a509136f72cf118",
+      "size": 1894
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/264.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/264.png",
+      "sha256": "368d41dbf9b0233fcc587cb22b52c7ad40c3bbfdf757bb64a6c85ea1dea2c6d9",
+      "size": 2223
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/267.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/267.png",
+      "sha256": "963a22dabda3e535bec5918fcd5127dcc3b7590e66e92b7f4892b5718639de24",
+      "size": 2109
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/27.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/27.png",
+      "sha256": "f7afc1705231a622f00f1f01ed879b5bb3ce683db55232265cb97fa1a2d9e29e",
+      "size": 2036
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/284.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/284.png",
+      "sha256": "60b292dc2d11bc61f433099371f832290b9a2d55a69c2f9be523bbe0cfbd71f1",
+      "size": 1893
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/292.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/292.png",
+      "sha256": "973e2891a5967917291c52d40dd419a08e21210c02145323e73e3b2c3daf3678",
+      "size": 2350
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/372.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/372.png",
+      "sha256": "03f8746a2ac92e8f57ae5ee62a8e541ac5d6dc4b328701712e09bde641b10704",
+      "size": 2284
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/373.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/373.png",
+      "sha256": "fa1c25ad52820c579a41832ed9882d982ec41c216120d52e78809be07894671f",
+      "size": 1979
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/374.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/374.png",
+      "sha256": "1f3370f6e4a0cc6fdbc468b209a02cc02c1341c1e8eab845963e69e1532352f2",
+      "size": 2227
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/473.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/473.png",
+      "sha256": "9c024cf9939bd910dfc5598eab790a93f3983cb9f5bacc168fe672d9e82ce2d0",
+      "size": 2090
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/474.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/474.png",
+      "sha256": "1a8496b8c5424d0373726de2c126dd41c0227113ea2c0507efcb8da3872fa090",
+      "size": 1984
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/475.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/475.png",
+      "sha256": "b6a86ef1a8fc6fc103089cb22da58f154396a69fb82fa9f45f6f294fc5818e34",
+      "size": 2081
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/476.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/476.png",
+      "sha256": "c31cde35ec0f043c136a1f9e75d2d26a9d3a2b21cb2d0fa7f9e0e5a6dbc97388",
+      "size": 2312
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/481.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/481.png",
+      "sha256": "7965d1355681aba4e370753e5c81ff7a606f3c708ac0c87427870f952a3991b6",
+      "size": 1686
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/486.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/486.png",
+      "sha256": "cd260c4e241c0cf3c9724a419fe292a8b5a73239d6047053105139359b47cdc1",
+      "size": 1864
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/487.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/487.png",
+      "sha256": "5519378faa6faa5e2a48f54ffcf504a4ed3eaf6d4bab6b4f5b79f1e65b637f47",
+      "size": 2030
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/488.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/488.png",
+      "sha256": "4a164b68060cb8554dd1c6094e2cff58ac7d5139b8c46217cfd0667f26e9724d",
+      "size": 1971
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/489.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/489.png",
+      "sha256": "8549cc89d0ab15c5fbf47f9b177269a073f6f0f1548e744274937121ad9fc76c",
+      "size": 2295
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/495.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/495.png",
+      "sha256": "ec72472ff7726ef70d808d8d1ec774b7507e299f38088b30c5936ffbdd3ae06b",
+      "size": 1487
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/506.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/506.png",
+      "sha256": "00ad0e04e6ab92b5b15b3f339c9a0e34c7ff5c7fca8a1b232f6d253d87c0b41d",
+      "size": 2097
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/509.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/509.png",
+      "sha256": "a9d8de4abccc6b9d1e8755018109a9b671e8f0acde4638b9419c8277ddcf5847",
+      "size": 2038
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/510.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/510.png",
+      "sha256": "6926994ff138be24637ef2e69d4bbb737cc31af7bf017d3ec59b030f5ac801d6",
+      "size": 2013
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/514.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/514.png",
+      "sha256": "5ac85bdc3fcd460bc00e026c1fe8b0a90c82a209c0d48f2c6941b19ed1d4d143",
+      "size": 2276
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/520.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/520.png",
+      "sha256": "fd93805aca8bcf2ef487df582f3a1898554c4c59fba9e5edf801f9d7a2ccec39",
+      "size": 2025
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/521.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/521.png",
+      "sha256": "e6b42d19e90e27e911b8aaf3f7cccca8cdf08cfa2e3ecdd68f0090990b968300",
+      "size": 2256
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/572.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/572.png",
+      "sha256": "654209b6c5c77dfbee2ad1b5d950ef3c6ffb5a32ed7dbd16c38aad4b47ef940a",
+      "size": 2103
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/573.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/573.png",
+      "sha256": "c6a60386194fca6f302910822e05eab8fb3b83a46857a48aa7ffd9d847c10ca6",
+      "size": 2064
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/575.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/575.png",
+      "sha256": "20435fd9e6b7a00fc40d15ba8f0922b088221e693618f6c06696753bbaa66cb2",
+      "size": 2080
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/576.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/576.png",
+      "sha256": "f96c0982bebc7169954abb948b1a7433a3e6e30a7b9b29bbd6fd4ebdae400bf0",
+      "size": 1520
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/578.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/578.png",
+      "sha256": "87daf3cad0deb286f5b3d06592aaa5c88a94d8383d5395ff0b9597f403c3a0e1",
+      "size": 2211
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/585.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/585.png",
+      "sha256": "0a6d1574b3b2327ac560a17be06bfbc73098d5f0280b53e5fe31133395e063dc",
+      "size": 1642
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/587.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/587.png",
+      "sha256": "1b39d1bacd56719025ef95367f059b0fb7096b757c78603583d00af946a0c48c",
+      "size": 2208
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/602.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/602.png",
+      "sha256": "37152eaf23490e4a162234cc806141912a3eabd117c3a756d1b256e7aa705501",
+      "size": 2040
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/603.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/603.png",
+      "sha256": "5ed3fe6ab0d02cd5c8847fce6911128d15bbae396aa2e128e78637aa29b1039a",
+      "size": 2048
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/605.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/605.png",
+      "sha256": "e9a1ef954b1092cf25f9830e03c150ca8f4dead21f586525d2523c4283009c05",
+      "size": 1867
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/606.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/606.png",
+      "sha256": "0ef6b22501b7fe9100b50ba185cd48848ff1fb60bae0e1929c02cbc185687b94",
+      "size": 1906
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/607.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/607.png",
+      "sha256": "1615cc97896cd4fd9c4fc50adbd184a55b51484297488af71805f11defcfed1b",
+      "size": 1899
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/608.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/608.png",
+      "sha256": "bdac3c9a7c56bd1156647279df90b175f0599c45e6d868d0e29be64ca3898cd2",
+      "size": 2191
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/609.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/609.png",
+      "sha256": "de31defa74100e7b042c15738802c694cf0f70c87cbe2c97ef574fc76c915b26",
+      "size": 2203
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/610.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/610.png",
+      "sha256": "b0f0c5b0ea8094a92b0467a9db7fbe1ce3b8b77af79b1e97df4991d8914febbb",
+      "size": 1958
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/613.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/613.png",
+      "sha256": "d0513aeda42b84aeccb34bba08e16bc596a19f10b9e264cd556eb80df095fa60",
+      "size": 2263
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/614.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/614.png",
+      "sha256": "2f798a504fd0ce39fe30af6fde97c2041dbc71c99f1496c40ef644966ea03992",
+      "size": 2076
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/616.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/616.png",
+      "sha256": "5cc3b06b2b3d56ff10663718633607f34998e5e12c5a8664f2caa94ace6f6136",
+      "size": 2282
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/618.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/618.png",
+      "sha256": "02252327e08e1f1c4dc07050e77cbf4b7f974ff345c9fade77053f0098e7f0de",
+      "size": 2305
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/620.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/620.png",
+      "sha256": "68a1574de764019e7b509b8afce5983bcc2208dd95235231b027c640428d798f",
+      "size": 2278
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/624.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/624.png",
+      "sha256": "00ad0e04e6ab92b5b15b3f339c9a0e34c7ff5c7fca8a1b232f6d253d87c0b41d",
+      "size": 2097
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/626.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/626.png",
+      "sha256": "1a095fe79e038b00b8ba97a70ef4a961724902fa0e3c8f8d51947bdfc711045b",
+      "size": 2159
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/627.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/627.png",
+      "sha256": "406c4d30f47ba6ee7b4d844cdd183712cf3d5fe2ad4b389e87b1ac90c5cef866",
+      "size": 2233
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/629.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/629.png",
+      "sha256": "c3e3dbccb7789e2fa4e013bc6c0c2e567108a0b3dd3d0f7e43a92a32280e064b",
+      "size": 2237
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/630.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/630.png",
+      "sha256": "9103f8dc060cb8eb118e82492d7f039462a8ff17a104a54186222e3067bede1b",
+      "size": 2128
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/631.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/631.png",
+      "sha256": "61ac7e147029810ffeb200647a1a7906980156a1b32ec7cb3b3ea0b14a9e4d3d",
+      "size": 2072
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/632.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/632.png",
+      "sha256": "6372846fa3b244d52e3809f6f5ac8c13d7de818fbbfed10880c2f3e0723130a8",
+      "size": 2303
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/633.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/633.png",
+      "sha256": "cb300c28710bff94a42bceffed44844ff917392a06140ec165c27ef15040dd35",
+      "size": 2331
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/634.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/634.png",
+      "sha256": "a8bf80b2e6bc82a3603c37ad5a308350cf3fb4fb031699eabae60b6856a451f8",
+      "size": 2103
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/635.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/635.png",
+      "sha256": "696278fe9d71d92dafee710142b207f5f12f26c9d26f247108354e43b20fe815",
+      "size": 2167
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/636.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/636.png",
+      "sha256": "406c4d30f47ba6ee7b4d844cdd183712cf3d5fe2ad4b389e87b1ac90c5cef866",
+      "size": 2233
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/637.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/637.png",
+      "sha256": "2c63de44e5fed9cc730c200b304302b0127b06e3d5238f3995bd454d5330415e",
+      "size": 2274
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/638.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/638.png",
+      "sha256": "b0f0c5b0ea8094a92b0467a9db7fbe1ce3b8b77af79b1e97df4991d8914febbb",
+      "size": 1958
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_adventurer.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_adventurer.png",
+      "sha256": "2c9e50abe78fa8dad238a13771d93a7a470d2b7079fbf3ddd55075a2f78714cc",
+      "size": 1896
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_aegistemplar.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_aegistemplar.png",
+      "sha256": "4a164b68060cb8554dd1c6094e2cff58ac7d5139b8c46217cfd0667f26e9724d",
+      "size": 1971
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_alphawarden.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_alphawarden.png",
+      "sha256": "654209b6c5c77dfbee2ad1b5d950ef3c6ffb5a32ed7dbd16c38aad4b47ef940a",
+      "size": 2103
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_azurebastion.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_azurebastion.png",
+      "sha256": "de31defa74100e7b042c15738802c694cf0f70c87cbe2c97ef574fc76c915b26",
+      "size": 2203
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_berserker.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_berserker.png",
+      "sha256": "5f2e7266c19f7992e92bb0d5dac9d04ec01c58023027efdac608fdfec28d94d6",
+      "size": 2104
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_bloodmaiden.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_bloodmaiden.png",
+      "sha256": "61ac7e147029810ffeb200647a1a7906980156a1b32ec7cb3b3ea0b14a9e4d3d",
+      "size": 2072
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_celestial.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_celestial.png",
+      "sha256": "6372846fa3b244d52e3809f6f5ac8c13d7de818fbbfed10880c2f3e0723130a8",
+      "size": 2303
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_charge.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_charge.png",
+      "sha256": "7c256ea2df9bd71a9f7f41171d2559bf6bb004692672e122283b3f6337ce5d31",
+      "size": 2044
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_chiweaver.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_chiweaver.png",
+      "sha256": "406c4d30f47ba6ee7b4d844cdd183712cf3d5fe2ad4b389e87b1ac90c5cef866",
+      "size": 2233
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_clockwork.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_clockwork.png",
+      "sha256": "a8bf80b2e6bc82a3603c37ad5a308350cf3fb4fb031699eabae60b6856a451f8",
+      "size": 2103
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_commander.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_commander.png",
+      "sha256": "7807e8c5620d0af6fad67dea84a4d76b6b28c6b7f0f69440d2a55f5494c6eb3b",
+      "size": 1707
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_cooldown.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_cooldown.png",
+      "sha256": "78c978eab2035206061affa7c90b975f457d626d3f3c5a5538b8b0fdb16d75c1",
+      "size": 2192
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_counter.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_counter.png",
+      "sha256": "5ed7134a8cc9fcc92b6e642387ac01facf1720fb3ac11a624358e3f3b5214e4b",
+      "size": 2150
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_crimsonduelist.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_crimsonduelist.png",
+      "sha256": "e9a1ef954b1092cf25f9830e03c150ca8f4dead21f586525d2523c4283009c05",
+      "size": 1867
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_dreadnought.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_dreadnought.png",
+      "sha256": "1615cc97896cd4fd9c4fc50adbd184a55b51484297488af71805f11defcfed1b",
+      "size": 1899
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_faerie.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_faerie.png",
+      "sha256": "46771ac2c3a1d13375df450af9155eeaa2c78c9427c9dd1abfe94527ed9faef9",
+      "size": 2043
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_gambler.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_gambler.png",
+      "sha256": "f96c0982bebc7169954abb948b1a7433a3e6e30a7b9b29bbd6fd4ebdae400bf0",
+      "size": 1520
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_gauge.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_gauge.png",
+      "sha256": "1f3370f6e4a0cc6fdbc468b209a02cc02c1341c1e8eab845963e69e1532352f2",
+      "size": 2227
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_geomancer.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_geomancer.png",
+      "sha256": "696278fe9d71d92dafee710142b207f5f12f26c9d26f247108354e43b20fe815",
+      "size": 2167
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_imperial.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_imperial.png",
+      "sha256": "b6a86ef1a8fc6fc103089cb22da58f154396a69fb82fa9f45f6f294fc5818e34",
+      "size": 2081
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_inquisitor.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_inquisitor.png",
+      "sha256": "3d59fd4cce15fb67fdda0a890603bede66a2e504e883548d173ecf8b1bc89d82",
+      "size": 2049
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_kagemusha.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_kagemusha.png",
+      "sha256": "a9d8de4abccc6b9d1e8755018109a9b671e8f0acde4638b9419c8277ddcf5847",
+      "size": 2038
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_lifebinder.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_lifebinder.png",
+      "sha256": "1f3370f6e4a0cc6fdbc468b209a02cc02c1341c1e8eab845963e69e1532352f2",
+      "size": 2227
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_lightbringer.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_lightbringer.png",
+      "sha256": "68a1574de764019e7b509b8afce5983bcc2208dd95235231b027c640428d798f",
+      "size": 2278
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_magus.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_magus.png",
+      "sha256": "406c4d30f47ba6ee7b4d844cdd183712cf3d5fe2ad4b389e87b1ac90c5cef866",
+      "size": 2233
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_medic.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_medic.png",
+      "sha256": "2f798a504fd0ce39fe30af6fde97c2041dbc71c99f1496c40ef644966ea03992",
+      "size": 2076
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_minstrel.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_minstrel.png",
+      "sha256": "1c3ee2acade41d84a56111935110370bc718a3606d88380f259086fb23818f8b",
+      "size": 1873
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_musician.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_musician.png",
+      "sha256": "5df7f56b26cc2718a1239d5e0ed3b73342d2ea08e4566420144ff7451ee553c3",
+      "size": 2092
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_ronin.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_ronin.png",
+      "sha256": "9c024cf9939bd910dfc5598eab790a93f3983cb9f5bacc168fe672d9e82ce2d0",
+      "size": 2090
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_shield.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_shield.png",
+      "sha256": "1a8496b8c5424d0373726de2c126dd41c0227113ea2c0507efcb8da3872fa090",
+      "size": 1984
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_spartan.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_spartan.png",
+      "sha256": "b064c26b59b6c06707ebf11ce5dc67194b3b885ebedd717dd4012f938a9ce920",
+      "size": 2075
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_spellblade.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_spellblade.png",
+      "sha256": "fa1c25ad52820c579a41832ed9882d982ec41c216120d52e78809be07894671f",
+      "size": 1979
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_stack.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_stack.png",
+      "sha256": "fb52e084bba14d73c5465f2a50b2ee7ed06a5c447c2be5d33f58d2df56e3df50",
+      "size": 2071
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_status.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_status.png",
+      "sha256": "266bcb7c71f2e99590986c9958aa83bd62b608e30593d9f47b0d5ef7439803a9",
+      "size": 2195
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_timer.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_timer.png",
+      "sha256": "f6bf970e40046becab5e7cc519bfc762f75760430d105b3029104c03a1bcc07d",
+      "size": 2275
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_toggle.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_toggle.png",
+      "sha256": "4a164b68060cb8554dd1c6094e2cff58ac7d5139b8c46217cfd0667f26e9724d",
+      "size": 1971
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_warlord.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_warlord.png",
+      "sha256": "cd260c4e241c0cf3c9724a419fe292a8b5a73239d6047053105139359b47cdc1",
+      "size": 1864
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/status_icons/hud_wyvernheart.png",
+      "targetPath": "vanacore/soulspire_core/assets/status_icons/hud_wyvernheart.png",
+      "sha256": "368d41dbf9b0233fcc587cb22b52c7ad40c3bbfdf757bb64a6c85ea1dea2c6d9",
+      "size": 2223
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/ui/bar_frame.png",
+      "targetPath": "vanacore/soulspire_core/assets/ui/bar_frame.png",
+      "sha256": "fdfa1d276745b358aa3fdbfdd042f7e1803c88462e596b743d5054fdcd6c0e66",
+      "size": 2036
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/ui/bar_gloss_overlay.png",
+      "targetPath": "vanacore/soulspire_core/assets/ui/bar_gloss_overlay.png",
+      "sha256": "519e8fe0755512b5cfe06cff7922f00e9cc989a449109e88ebca1126404077f9",
+      "size": 818
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/ui/buff_ring_gold.png",
+      "targetPath": "vanacore/soulspire_core/assets/ui/buff_ring_gold.png",
+      "sha256": "111e687841694354463ca8f1068602a56be5c3d5f32143b5bf3707ca5481b989",
+      "size": 929
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/ui/gem_azure.png",
+      "targetPath": "vanacore/soulspire_core/assets/ui/gem_azure.png",
+      "sha256": "beb3a63918f5b3dcf6d3cb53b6d0a4ca1aa6bdec9a482a01468c64b846dc9ea0",
+      "size": 1631
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/ui/gem_crimson.png",
+      "targetPath": "vanacore/soulspire_core/assets/ui/gem_crimson.png",
+      "sha256": "690eb9672075456e2e62c92d5842ebc62588e94f276fd62d415f6993294e79aa",
+      "size": 1601
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/ui/gem_emerald.png",
+      "targetPath": "vanacore/soulspire_core/assets/ui/gem_emerald.png",
+      "sha256": "8c3bfd9ed1ee1c802c1bf1d55c1442ada79d8dfdf221543ea3608c61c1a05d30",
+      "size": 1600
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/ui/gem_empty.png",
+      "targetPath": "vanacore/soulspire_core/assets/ui/gem_empty.png",
+      "sha256": "a1a0db123ab0bea480be8a314d7b689f2696bf672f2bf059757c9cf6becf9748",
+      "size": 1221
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/ui/gem_gold.png",
+      "targetPath": "vanacore/soulspire_core/assets/ui/gem_gold.png",
+      "sha256": "1e6ec19b7dec7d0ea2141a2f8eba7e568d5b0400a07ce5c7c7c9ff0d5a4d44a2",
+      "size": 1613
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/ui/gem_violet.png",
+      "targetPath": "vanacore/soulspire_core/assets/ui/gem_violet.png",
+      "sha256": "608b0b84a7da4c7a6ef32c50a4849f50c5ef92fe5fd1375753d62c1e3d73f8d0",
+      "size": 1638
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/ui/socket_damage.png",
+      "targetPath": "vanacore/soulspire_core/assets/ui/socket_damage.png",
+      "sha256": "c6cb2bd5251032d926301a40321d6622aa5b1ecfcbfde7c8aa4425dd15d5164d",
+      "size": 9805
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/ui/socket_healer.png",
+      "targetPath": "vanacore/soulspire_core/assets/ui/socket_healer.png",
+      "sha256": "cf118c4d6ce1c3426efbd72983e6314b762451153617f92fd36e88333a8fa0cd",
+      "size": 10244
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/ui/socket_support.png",
+      "targetPath": "vanacore/soulspire_core/assets/ui/socket_support.png",
+      "sha256": "a2dbc500cb7774419889310b4e7bef6f2391c6f7dc816c2315c29012c624d5c3",
+      "size": 10174
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/assets/ui/socket_tank.png",
+      "targetPath": "vanacore/soulspire_core/assets/ui/socket_tank.png",
+      "sha256": "2ee60e744462dc3802384c86048dff0916749eb4de78b751a8fc287f2d980f42",
+      "size": 10084
     },
     {
       "category": "addon",
@@ -8354,8 +9481,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/core/actions.lua",
       "targetPath": "vanacore/soulspire_core/core/actions.lua",
-      "sha256": "c41f12095919f8053673171ad4133136f577c402cfe8f4a002905a14ae2b1dd1",
-      "size": 7007
+      "sha256": "7b16c9be73d141d855f625300d901b84a15a22bed9338e58b3e63693b2cff4ea",
+      "size": 9808
     },
     {
       "category": "addon",
@@ -8396,8 +9523,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/core/foundations.lua",
       "targetPath": "vanacore/soulspire_core/core/foundations.lua",
-      "sha256": "b707441e55b1d5a7ec2954594489a53bea2390e0a0dd3b6e68b89f5c63d9ef50",
-      "size": 61000
+      "sha256": "5787fc9c0d991027fe25e583c926b471f49aba11218380a6ab6eb4433e4d47ad",
+      "size": 61100
     },
     {
       "category": "addon",
@@ -8410,8 +9537,15 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/core/identity.lua",
       "targetPath": "vanacore/soulspire_core/core/identity.lua",
-      "sha256": "0d7a05e507a65d9f9d17e67a7cd853877a4cd884038bd7613d3fb2ed293b7256",
-      "size": 4191
+      "sha256": "c6d0ea701e7d37ca13996c536380059d370cc00b45aa048c42446120c962c5df",
+      "size": 9813
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/core/imgui_constants.lua",
+      "targetPath": "vanacore/soulspire_core/core/imgui_constants.lua",
+      "sha256": "ed61e50d0406fb952dcdfa956bc542da16f31760c4c9813bfaaee6ab4345b5fa",
+      "size": 2894
     },
     {
       "category": "addon",
@@ -8466,8 +9600,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/core/soulhud_bridge.lua",
       "targetPath": "vanacore/soulspire_core/core/soulhud_bridge.lua",
-      "sha256": "2a6f2cc60e6631e9bf6c0ae25be24bfaa1f46b3cdf2a22ae69629432ede00c93",
-      "size": 8656
+      "sha256": "aebaae57b89ea3d1a82aa7387e65947993b9ce8ff9680e887cba730a6cc27128",
+      "size": 20320
     },
     {
       "category": "addon",
@@ -8480,8 +9614,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/core/ui.lua",
       "targetPath": "vanacore/soulspire_core/core/ui.lua",
-      "sha256": "922777bc5b403abf62c7efaf41c538675f3bf627244bbfd3dae72b369f5c62b8",
-      "size": 29784
+      "sha256": "c56a0d3d35fa35f8b7f0169c84faa4ef9c7759ac93531059a2ea3c1403c09822",
+      "size": 29944
     },
     {
       "category": "addon",
@@ -8520,31 +9654,66 @@
     },
     {
       "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/data/presentation.cfg",
+      "targetPath": "vanacore/soulspire_core/data/presentation.cfg",
+      "sha256": "b5db200ff0b2c49dafbb0acd89fb0eb9464a68b82c9dbe5d64cf99e7cd3fcbef",
+      "size": 243
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/data/soul-identities.json",
+      "targetPath": "vanacore/soulspire_core/data/soul-identities.json",
+      "sha256": "f9cf9895360c269624ca5116dc8700e35089406406b348740eb6f919cee75628",
+      "size": 6600
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/data/soul-weapon-config.json",
+      "targetPath": "vanacore/soulspire_core/data/soul-weapon-config.json",
+      "sha256": "cb898cc95e18ad75beb163bfa82f41eef0608ff4776dbc5b50d49a12d6fb39c5",
+      "size": 11631
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/data/soul_actions.tsv",
+      "targetPath": "vanacore/soulspire_core/data/soul_actions.tsv",
+      "sha256": "2122dbd6c2226f0d5a38179fab8209366e5c0c6c680e154d033281f3f9e93ede",
+      "size": 20017
+    },
+    {
+      "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/data/visibility.tsv",
+      "targetPath": "vanacore/soulspire_core/data/visibility.tsv",
+      "sha256": "cfabc20c2ba519ffb0f7a7dd437cae341396d06f44b1489b96b5f27e16c1bf1f",
+      "size": 6320
+    },
+    {
+      "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/modules/abilities.lua",
       "targetPath": "vanacore/soulspire_core/modules/abilities.lua",
-      "sha256": "ccbf188202dd398a531770ce18d5797616bb59b217327915b35c738ca837f1f1",
-      "size": 4103
+      "sha256": "ad94d81e934c798d7a424b5ed105b512737dce3065788da6cfc779ff04307d51",
+      "size": 4179
     },
     {
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/modules/character.lua",
       "targetPath": "vanacore/soulspire_core/modules/character.lua",
-      "sha256": "a5f9723cc01e3101ad7f4d18ceef008a6edc1f167096065487a6ea56de03361f",
-      "size": 47403
+      "sha256": "6c5bbea7585a5651f13d14c01f53212e12d7ba859fb47ecefa9ffc457ff47a28",
+      "size": 47825
     },
     {
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/modules/soul_talents.lua",
       "targetPath": "vanacore/soulspire_core/modules/soul_talents.lua",
-      "sha256": "c8cac65645cab5d05c47670851b2988a3cd546ef1c62229fe82ac76b67bc0993",
-      "size": 26287
+      "sha256": "7b207c36d579e2a0e775bb0f496459377af43e15026fc0c5203f0ee16a4c3151",
+      "size": 26263
     },
     {
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/modules/status_and_diag.lua",
       "targetPath": "vanacore/soulspire_core/modules/status_and_diag.lua",
-      "sha256": "3b757ac31d08427dadbe39ccc0613e1f9bb4b1a01c7fb00e3f85a290f2c54935",
-      "size": 5782
+      "sha256": "37fa1b7650678d8589a3d72527a4b794ee6519e0df9cb41c7261aa04ca64459c",
+      "size": 7547
     },
     {
       "category": "addon",
@@ -8564,8 +9733,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/soulforge/premium_ui.lua",
       "targetPath": "vanacore/soulspire_core/soulforge/premium_ui.lua",
-      "sha256": "0836ab53c163b1eedfe46d7da844fbf5cf83c3d47e0b33a8b1bf2366a53e9fb1",
-      "size": 24250
+      "sha256": "5d03de7005a60ee23f82c236b45e321fa5f0e5731854bd8432fa4d06b66b6245",
+      "size": 24261
     },
     {
       "category": "addon",
@@ -8578,8 +9747,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/soulforge/soulforge_ui.lua",
       "targetPath": "vanacore/soulspire_core/soulforge/soulforge_ui.lua",
-      "sha256": "a3434f65024cf55f485da8031ddc44542a61f272baa7ecfabff4cccce5b689ac",
-      "size": 99489
+      "sha256": "5959fb7bb066976eae65be4600bc45e9c54c1e61821e9098afa72b3a7df0d1e9",
+      "size": 99670
     },
     {
       "category": "addon",
@@ -8592,8 +9761,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/soulhud/ox_icons.lua",
       "targetPath": "vanacore/soulspire_core/soulhud/ox_icons.lua",
-      "sha256": "c66c583c5d429f4191344c0d01ea674229a5503a946571a25e9c983308dc1bf4",
-      "size": 2121
+      "sha256": "0a1976c9aea5e56b7f6ae0cb248744d0b85475f60bdb7414c692c1c5e254b4ab",
+      "size": 3458
     },
     {
       "category": "addon",
@@ -8606,8 +9775,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/soulhud/soulhud_gauge.lua",
       "targetPath": "vanacore/soulspire_core/soulhud/soulhud_gauge.lua",
-      "sha256": "6a51e8db0a4d24e081601f1c17a6dae8eb5478eb8d78833fc6f5211ca9601113",
-      "size": 34837
+      "sha256": "945314722f3d6c816c90a6f946c54ed38f1f2cae4f0dc64865c1c4d5392dbb4a",
+      "size": 34750
     },
     {
       "category": "addon",
@@ -8627,8 +9796,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/soulhud/soulhud_renderer.lua",
       "targetPath": "vanacore/soulspire_core/soulhud/soulhud_renderer.lua",
-      "sha256": "bb4afa5aa75d477afdac3d66cc6085f1dd202cae23f45108ce0bb9a29786a938",
-      "size": 4532
+      "sha256": "610ba4dbf33024b6fa321b723e15b3a20e4a78c3d06750b8303d86bfa30d78f0",
+      "size": 4570
     },
     {
       "category": "addon",
@@ -8704,8 +9873,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/soulspire_core.lua",
       "targetPath": "vanacore/soulspire_core/soulspire_core.lua",
-      "sha256": "6da5d2f755519c9153e1a918d6d257c472e30d45d58d6f605c7930725927636e",
-      "size": 24965
+      "sha256": "8edbd6279ffd29a13d4f0ef231f48c3783fe63e9cd2a4347d4038c70c2d89789",
+      "size": 29003
     },
     {
       "category": "addon",
@@ -8718,8 +9887,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/tests/test_vanacore_entrypoint_lifecycle.lua",
       "targetPath": "vanacore/soulspire_core/tests/test_vanacore_entrypoint_lifecycle.lua",
-      "sha256": "fa45e2d934972780d11c023e9b7f77856ffdf0eb96e3c58fdf62c55806fc453f",
-      "size": 14423
+      "sha256": "f2c4b1a13b5198d6b04887420a81ba057729da116e8f0a329a0bd7c736661b7d",
+      "size": 25110
     }
   ],
   "news": [

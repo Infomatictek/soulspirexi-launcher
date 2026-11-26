@@ -272,8 +272,8 @@ local function init_all()
         auto_load  = true,
     }) or nil
 
-    identity   = IdentityMod and IdentityMod.new(install_dir) or nil
-    actions    = ActionsMod and ActionsMod.new(install_dir, identity) or nil
+    identity   = IdentityMod and IdentityMod.new(install_dir, addon_dir) or nil
+    actions    = ActionsMod and ActionsMod.new(install_dir, identity, addon_dir) or nil
     flintlock  = FlintlockMod and FlintlockMod.new(identity) or nil
     mob_status = MobStatusMod and MobStatusMod.new() or nil
     soulhud    = SoulHudBridge and SoulHudBridge.new(addon_dir, install_dir, identity) or nil
@@ -290,15 +290,24 @@ local function init_all()
             dll_status_fn = function()
                 local d = (type(vana) == 'table' and vana.soulspire and vana.soulspire.diagnostics)
                     and vana.soulspire.diagnostics() or {}
+                local hooks_installed = tonumber(d.hooks_installed) or 0
+                local hooks_total     = tonumber(d.hooks_total) or 0
                 return {
-                    loaded          = d.enabled == true,
-                    hooks_installed = tonumber(d.hooks_installed) or 0,
-                    hooks_total     = tonumber(d.hooks_total) or 0,
-                    mode            = 'VanaCore Native',
+                    loaded                = d.enabled == true,
+                    hooks                 = hooks_installed,
+                    hooks_installed       = hooks_installed,
+                    hooks_total           = hooks_total,
+                    api_version           = tonumber(d.api_version) or 0,
+                    capabilities          = tonumber(d.capabilities) or 0,
+                    ashita_compat_enabled = d.ashita_compat_enabled == true,
+                    mode                  = 'VanaCore Native',
                 }
             end,
         })
         registry:attach_controller('character', character_mod, true)
+        if soulhud and type(soulhud.set_character_mod) == 'function' then
+            soulhud:set_character_mod(character_mod)
+        end
     end
 
     -- 2. Weapon Mastery (Soulforge Constellation) & 3. Soul Talents
@@ -335,7 +344,7 @@ local function init_all()
 
     -- 5. Diagnostics, Mob Status & Flintlock
     if StatusDiagMod and registry then
-        status_diag = StatusDiagMod.new(flintlock, mob_status, startup_report)
+        status_diag = StatusDiagMod.new(flintlock, mob_status, startup_report, identity, actions)
         registry:attach_controller('journal', status_diag, true)
     end
 
@@ -355,6 +364,46 @@ local function init_all()
         a_cnt, v_cnt = actions:sync_to_native()
     end
 
+    -- Fail-loud startup validation (never report startup_ok=true when required data is missing)
+    local soul_cnt = identity and #(identity.souls or {}) or 0
+    local expected_souls = (IdentityMod and IdentityMod.EXPECTED_SOUL_COUNT) or 66
+    local min_actions    = (ActionsMod and ActionsMod.MIN_EXPECTED_ACTIONS) or 100
+    local min_visibility = (ActionsMod and ActionsMod.MIN_EXPECTED_VISIBILITY) or 100
+
+    if soul_cnt ~= expected_souls then
+        startup_report.ok = false
+        startup_report.errors[#startup_report.errors + 1] = string.format(
+            'Soul registry invalid: expected %d Souls, loaded %d (source=%s, error=%s, tried=%s)',
+            expected_souls, soul_cnt,
+            tostring(identity and identity.registry_source or 'none'),
+            tostring(identity and identity.last_error or 'unknown'),
+            table.concat((identity and identity.tried_paths) or {}, ', '))
+    elseif not identity or type(identity.registry_hash) ~= 'string' or identity.registry_hash == '' then
+        startup_report.ok = false
+        startup_report.errors[#startup_report.errors + 1] = string.format(
+            'Soul registry hash missing (source=%s)',
+            tostring(identity and identity.registry_source or 'none'))
+    end
+
+    if a_cnt < min_actions then
+        startup_report.ok = false
+        startup_report.errors[#startup_report.errors + 1] = string.format(
+            'Soul actions catalog incomplete: expected >=%d, loaded %d (source=%s)',
+            min_actions, a_cnt, tostring(actions and actions.actions_source or 'none'))
+    end
+    if v_cnt < min_visibility then
+        startup_report.ok = false
+        startup_report.errors[#startup_report.errors + 1] = string.format(
+            'Soul visibility catalog incomplete: expected >=%d, loaded %d (source=%s)',
+            min_visibility, v_cnt, tostring(actions and actions.visibility_source or 'none'))
+    end
+    if actions and type(actions.errors) == 'table' then
+        for _, aerr in ipairs(actions.errors) do
+            startup_report.ok = false
+            startup_report.errors[#startup_report.errors + 1] = 'actions: ' .. tostring(aerr)
+        end
+    end
+
     if not (type(vana) == 'table' and vana.soulspire and type(vana.soulspire.enabled) == 'function' and vana.soulspire.enabled()) then
         startup_report.ok = false
         startup_report.errors[#startup_report.errors + 1] = 'vana.soulspire native subsystem disabled or unavailable'
@@ -364,9 +413,19 @@ local function init_all()
         startup_report.errors[#startup_report.errors + 1] = 'vana.imgui unavailable'
     end
 
+    -- Trigger initial authoritative Soul sync if already logged in (VanaCore delay.login=1 loads addon after login)
+    if character_mod and type(character_mod.sync) == 'function'
+        and type(vana) == 'table' and vana.game and type(vana.game.self) == 'function' then
+        local sid = vana.game.self()
+        if tonumber(sid) and tonumber(sid) > 0 then
+            character_mod:sync(false)
+        end
+    end
+
     log_msg(string.format(
-        'Initialized VanaCore-Native Core v%s (startup_ok=%s, souls=%d, actions=%d, visibility=%d). Commands: /soulspire, /talents, /soulhud, /soulactions.',
-        addon.version, tostring(startup_report.ok), identity and #(identity.souls or {}) or 0, a_cnt, v_cnt))
+        'Initialized VanaCore-Native Core v%s (startup_ok=%s, souls=%d, actions=%d, visibility=%d, reg_src=%s). Commands: /soulspire, /talents, /soulhud, /soulactions.',
+        addon.version, tostring(startup_report.ok), soul_cnt, a_cnt, v_cnt,
+        tostring(identity and identity.registry_source or 'none')))
     if not startup_report.ok then
         print_status()
     end
@@ -388,9 +447,19 @@ if type(vana) == 'table' and vana.events then
             end
         end
 
-        -- Tick Soulforge pending-op timeout / sync recovery
+        -- Tick Soulforge & CrystalSocket pending-op timeout / sync recovery
         if sf_actions and type(sf_actions.tick) == 'function' then
             sf_actions.tick(now)
+        end
+        if character_mod and type(character_mod.tick) == 'function' then
+            character_mod:tick(now)
+        end
+        if character_mod and type(character_mod.observe_hud_identity) == 'function'
+            and type(vana) == 'table' and vana.soulspire and type(vana.soulspire.identity) == 'function' then
+            local nid = vana.soulspire.identity()
+            if type(nid) == 'table' and nid.known and tonumber(nid.job) and tonumber(nid.job) > 0 then
+                character_mod:observe_hud_identity(tonumber(nid.branch) or 0, tonumber(nid.job))
+            end
         end
 
         -- Tick directional hold-to-repeat when hub is open
@@ -425,17 +494,24 @@ if type(vana) == 'table' and vana.events then
 
     vana.events.on('packet_in', function(e)
         if type(e) ~= 'table' then return end
-        local id, data = e.id, e.data
+        local id, data, size = e.id, e.data, e.size
+        local now = (vana.time and vana.time.clock and vana.time.clock()) or os.clock()
         if sf_actions and type(sf_actions.handlePacket) == 'function' then
             sf_actions.handlePacket(id, data)
         end
-        if character_mod and type(character_mod.handle_packet) == 'function' then
-            character_mod:handle_packet(id, data)
+        if character_mod and type(character_mod.handle_packet_in) == 'function' then
+            character_mod:handle_packet_in(id, data, now, size)
+        end
+        if soulhud and type(soulhud.handle_packet_in) == 'function' then
+            soulhud:handle_packet_in(id, data, now, size)
         end
         if id == 0x00A or id == 0x00B then
             close_hub(id == 0x00A and 'zone_in' or 'zone_out')
             if sf_actions and type(sf_actions.onZone) == 'function' then
                 sf_actions.onZone()
+            end
+            if id == 0x00A and character_mod and type(character_mod.sync) == 'function' then
+                character_mod:sync(false)
             end
         end
     end)
@@ -542,19 +618,11 @@ if type(vana) == 'table' and vana.events then
             toggle_hub('journal')
             return true
         end
-        if low == '/soulhud' or low == '/soulspire hud' then
-            if soulhud then
-                local vis = soulhud:toggle()
-                log_msg('Soul HUD ' .. (vis and 'shown' or 'hidden'))
+        if low == '/soulhud' or low == '/soulspire hud' or low:sub(1, 9) == '/soulhud ' then
+            if soulhud and type(soulhud.handle_command) == 'function' then
+                local args = (low:sub(1, 9) == '/soulhud ') and cmd:sub(10) or ''
+                log_msg(soulhud:handle_command(args))
             end
-            return true
-        end
-        if low == '/soulhud lock' then
-            if soulhud then soulhud:set_locked(true) log_msg('Soul HUD locked.') end
-            return true
-        end
-        if low == '/soulhud unlock' then
-            if soulhud then soulhud:set_locked(false) log_msg('Soul HUD unlocked.') end
             return true
         end
         if low == '/soulactions status' or low == '/soulactions' then

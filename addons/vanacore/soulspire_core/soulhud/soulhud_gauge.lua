@@ -22,6 +22,7 @@ local settingsMod = require('soulhud_settings')
 local okTips, tips = pcall(require, 'soulhud_tips')
 if not okTips then tips = nil end
 local okBit, bit = pcall(require, 'bit')
+local IG = require('core.imgui_constants')
 
 -- Load shared SoulspireXI Core UI Foundations from sibling soulspire_core addon.
 local function loadFoundations()
@@ -244,13 +245,13 @@ local POPUP_ID = '##ox_soulhud_opts'
 local function drawOptions(imgui, cfg, callbacks, pal)
     local pushed = 0
     local function pc(idx, v)
-        if idx ~= nil then imgui.PushStyleColor(idx, v); pushed = pushed + 1 end
+        if idx ~= nil and imgui.PushStyleColor then imgui.PushStyleColor(idx, v); pushed = pushed + 1 end
     end
-    pc(ImGuiCol_PopupBg,       C.abyss)
-    pc(ImGuiCol_Border,        C.gold)
-    pc(ImGuiCol_Text,          C.text)
-    pc(ImGuiCol_HeaderHovered, { 0.224, 0.812, 0.898, 0.30 })
-    pc(ImGuiCol_HeaderActive,  { 0.910, 0.741, 0.439, 0.40 })
+    pc(IG.Col.PopupBg,       C.abyss)
+    pc(IG.Col.Border,        C.gold)
+    pc(IG.Col.Text,          C.text)
+    pc(IG.Col.HeaderHovered, { 0.224, 0.812, 0.898, 0.30 })
+    pc(IG.Col.HeaderActive,  { 0.910, 0.741, 0.439, 0.40 })
 
     if imgui.BeginPopup(POPUP_ID) then
         imgui.TextColored(C.gold, 'SoulspireXI Soul HUD')
@@ -369,7 +370,10 @@ function M.render(imgui, ctx)
 
     -- Viewport clamp so HUD never leaves the FFXI client screen
     local forcePos = ctx.resetPos == true
-    local vw, vh = F and F.getViewportSize(imgui) or 0, 0
+    local vw, vh = 0, 0
+    if F and F.getViewportSize then
+        vw, vh = F.getViewportSize(imgui)
+    end
     if vw > 0 and vh > 0 then
         local nx, ny = F.clampToViewport(cfg.x, cfg.y, W, H, vw, vh, 4)
         if nx ~= cfg.x or ny ~= cfg.y then
@@ -379,17 +383,18 @@ function M.render(imgui, ctx)
         end
     end
 
+    local WF = IG.WindowFlags
     local flagList = {
-        ImGuiWindowFlags_NoTitleBar or 1,
-        ImGuiWindowFlags_NoScrollbar or 8,
-        ImGuiWindowFlags_NoCollapse or 32,
-        ImGuiWindowFlags_NoBackground or 128,
-        ImGuiWindowFlags_AlwaysAutoResize or 64,
-        ImGuiWindowFlags_NoSavedSettings or 256,
-        ImGuiWindowFlags_NoFocusOnAppearing or 4096,
-        ImGuiWindowFlags_NoResize or 2,
-        ImGuiWindowFlags_NoScrollWithMouse or 16,
-        cfg.locked and (ImGuiWindowFlags_NoMove or 4) or 0,
+        WF.NoTitleBar,
+        WF.NoScrollbar,
+        WF.NoCollapse,
+        WF.NoBackground,
+        WF.AlwaysAutoResize,
+        WF.NoSavedSettings,
+        WF.NoFocusOnAppearing,
+        WF.NoResize,
+        WF.NoScrollWithMouse,
+        cfg.locked and WF.NoMove or 0,
     }
     local flags = 0
     for _, f in ipairs(flagList) do
@@ -397,8 +402,8 @@ function M.render(imgui, ctx)
     end
 
     if ctx.resetPos and ctx.onResetPosApplied then ctx.onResetPosApplied() end
-    imgui.SetNextWindowPos({ cfg.x, cfg.y }, forcePos and (ImGuiCond_Always or 1) or (ImGuiCond_FirstUseEver or 4))
-    imgui.PushStyleVar(ImGuiStyleVar_WindowPadding or 1, { 0, 0 })
+    imgui.SetNextWindowPos({ cfg.x, cfg.y }, forcePos and IG.Cond.Always or IG.Cond.FirstUseEver)
+    imgui.PushStyleVar(IG.StyleVar.WindowPadding, { 0, 0 })
 
     if imgui.Begin('SoulspireSoulHUD##gauge', nil, flags) then
         local wx, wy = toXY(imgui.GetWindowPos())

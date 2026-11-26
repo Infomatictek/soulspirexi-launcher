@@ -496,7 +496,7 @@ function SoulTalents:draw(imgui, dl, F, L, x, y, w, h, ctx)
     local listY = bodyY + 48 * s
     local listH = math.max(100, bodyH - 64 * s)
     imgui.SetCursorScreenPos({ midPanelX + pad, listY })
-    if imgui.BeginChild('##st_nodes_list', { midW - pad * 2, listH }, ImGuiChildFlags_None or 0) then
+    if imgui.BeginChild('##st_nodes_list', { midW - pad * 2, listH }, 0) then
         local cdl = imgui.GetWindowDrawList()
         local rowW = math.max(160, midW - pad * 2 - 12 * s)
         local rowH = math.floor(66 * s)

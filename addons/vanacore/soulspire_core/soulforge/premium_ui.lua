@@ -31,8 +31,14 @@ local function xy(v, b)
     if type(v)=='table' then return v[1] or v.x or 0, v[2] or v.y or 0 end
     return v or 0,b or 0
 end
+local okIG,IG=pcall(require,'core.imgui_constants')
+if not okIG then IG=nil end
+local COL_TEXT=(IG and IG.Col.Text) or 0
+local COL_BTN=(IG and IG.Col.Button) or 21
+local COL_BTN_HOV=(IG and IG.Col.ButtonHovered) or 22
+
 local function txt(t,col)
-    if col and imgui.PushStyleColor then imgui.PushStyleColor(ImGuiCol_Text or 0,col) end
+    if col and imgui.PushStyleColor then imgui.PushStyleColor(COL_TEXT,col) end
     if imgui.TextUnformatted then imgui.TextUnformatted(tostring(t or '')) else imgui.Text((tostring(t or ''):gsub('%%','%%%%'))) end
     if col and imgui.PopStyleColor then imgui.PopStyleColor() end
 end
@@ -205,7 +211,7 @@ local function drawBrowser(state,action,w)
     imgui.SetCursorScreenPos({x+18,y+146})
     line(dl,x+18,y+146,x+w-18,y+146,C.edge,1)
     imgui.SetCursorScreenPos({x+16,y+154})
-    if imgui.BeginChild('##wm_browser_list',{w-32,618},ImGuiChildFlags_None or 0) then
+    if imgui.BeginChild('##wm_browser_list',{w-32,618},0) then
         local rows=action.filtered()
         dl=imgui.GetWindowDrawList()
         for _,ws in ipairs(rows) do
@@ -287,7 +293,7 @@ local function drawMastery(state,action,w)
     local d=state.wsDetail
     drawHero(state,dl,x,y,w)
     imgui.SetCursorScreenPos({x,y+179})
-    if imgui.BeginChild('##wm_mastery_scroll',{w,592},ImGuiChildFlags_None or 0) then
+    if imgui.BeginChild('##wm_mastery_scroll',{w,592},0) then
         dl=imgui.GetWindowDrawList()
         if not d then
             txt('YOUR WEAPON, YOUR TECHNIQUE',C.gold)
@@ -405,18 +411,18 @@ local function drawInspector(state,action,w)
             imgui.SetCursorScreenPos({x+24,y+476})
             if n.rank>0 then
                 local pushed=0
-                if imgui.PushStyleColor and ImGuiCol_Button then
-                    imgui.PushStyleColor(ImGuiCol_Button,C.crimson)
-                    imgui.PushStyleColor(ImGuiCol_ButtonHovered,{0.68,0.20,0.22,1})
+                if imgui.PushStyleColor then
+                    imgui.PushStyleColor(COL_BTN,C.crimson)
+                    imgui.PushStyleColor(COL_BTN_HOV,{0.68,0.20,0.22,1})
                     pushed=2
                 end
                 if imgui.Button('REFUND TECHNIQUE##wm_refund',{w-48,34}) then chooseNode(state,action,n,true) end
                 if pushed>0 then imgui.PopStyleColor(pushed) end
             elseif n.canLearn then
                 local pushed=0
-                if imgui.PushStyleColor and ImGuiCol_Button then
-                    imgui.PushStyleColor(ImGuiCol_Button,{0.36,0.26,0.12,1})
-                    imgui.PushStyleColor(ImGuiCol_ButtonHovered,{0.52,0.38,0.17,1})
+                if imgui.PushStyleColor then
+                    imgui.PushStyleColor(COL_BTN,{0.36,0.26,0.12,1})
+                    imgui.PushStyleColor(COL_BTN_HOV,{0.52,0.38,0.17,1})
                     pushed=2
                 end
                 local investLabel=firstUnlock and ('UNLOCK '..string.upper(trunc(d.name,22))..'##wm_invest') or 'AWAKEN TECHNIQUE##wm_invest'
@@ -499,17 +505,17 @@ function UI.draw(state,action)
         line(dl,x+18,y+74,x+width-18,y+74,C.gold,1.4)
     end
     imgui.SetCursorScreenPos({x+padX,y+82})
-    if imgui.BeginChild('##wm_browser',{browserW,790},ImGuiChildFlags_None or 0) then
+    if imgui.BeginChild('##wm_browser',{browserW,790},0) then
         drawBrowser(state,action,browserW)
     end
     imgui.EndChild()
     imgui.SameLine(0,gap)
-    if imgui.BeginChild('##wm_mastery',{centerW,790},ImGuiChildFlags_None or 0) then
+    if imgui.BeginChild('##wm_mastery',{centerW,790},0) then
         drawMastery(state,action,centerW)
     end
     imgui.EndChild()
     imgui.SameLine(0,gap)
-    if imgui.BeginChild('##wm_inspector',{inspectorW,790},ImGuiChildFlags_None or 0) then
+    if imgui.BeginChild('##wm_inspector',{inspectorW,790},0) then
         drawInspector(state,action,inspectorW)
     end
     imgui.EndChild()

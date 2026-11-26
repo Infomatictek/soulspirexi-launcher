@@ -4,6 +4,8 @@
 * Soul Gold #E8BD70, Aether Cyan #39CFE5, Crystal Violet #8063BC).
 --]]
 
+local IG = require('core.imgui_constants')
+
 local M = {}
 
 function M.renderConfig(imgui, soulDef, cfg, settingsMod, callbacks)
@@ -13,22 +15,22 @@ function M.renderConfig(imgui, soulDef, cfg, settingsMod, callbacks)
 
     local pushed = 0
     local function pc(idx, v)
-        if idx ~= nil then imgui.PushStyleColor(idx, v); pushed = pushed + 1 end
+        if idx ~= nil and imgui.PushStyleColor then imgui.PushStyleColor(idx, v); pushed = pushed + 1 end
     end
-    pc(ImGuiCol_WindowBg,       { 0.043, 0.063, 0.098, 0.97 }) -- Abyss #0B1019
-    pc(ImGuiCol_ChildBg,        { 0.082, 0.098, 0.157, 0.96 }) -- Midnight #151928
-    pc(ImGuiCol_Border,         { 0.910, 0.741, 0.439, 0.90 }) -- Soul Gold #E8BD70
-    pc(ImGuiCol_TitleBg,        { 0.063, 0.078, 0.133, 1.00 })
-    pc(ImGuiCol_TitleBgActive,  { 0.094, 0.118, 0.200, 1.00 })
-    pc(ImGuiCol_FrameBg,        { 0.082, 0.098, 0.157, 1.00 })
-    pc(ImGuiCol_FrameBgHovered, { 0.125, 0.157, 0.247, 1.00 })
-    pc(ImGuiCol_CheckMark,      { 0.910, 0.741, 0.439, 1.00 })
-    pc(ImGuiCol_SliderGrab,     { 0.224, 0.812, 0.898, 1.00 }) -- Aether Cyan #39CFE5
-    pc(ImGuiCol_HeaderHovered,  { 0.224, 0.812, 0.898, 0.30 })
-    pc(ImGuiCol_HeaderActive,   { 0.910, 0.741, 0.439, 0.38 })
-    pc(ImGuiCol_Text,           { 0.945, 0.961, 0.976, 1.00 })
+    pc(IG.Col.WindowBg,       { 0.043, 0.063, 0.098, 0.97 }) -- Abyss #0B1019
+    pc(IG.Col.ChildBg,        { 0.082, 0.098, 0.157, 0.96 }) -- Midnight #151928
+    pc(IG.Col.Border,         { 0.910, 0.741, 0.439, 0.90 }) -- Soul Gold #E8BD70
+    pc(IG.Col.TitleBg,        { 0.063, 0.078, 0.133, 1.00 })
+    pc(IG.Col.TitleBgActive,  { 0.094, 0.118, 0.200, 1.00 })
+    pc(IG.Col.FrameBg,        { 0.082, 0.098, 0.157, 1.00 })
+    pc(IG.Col.FrameBgHovered, { 0.125, 0.157, 0.247, 1.00 })
+    pc(IG.Col.CheckMark,      { 0.910, 0.741, 0.439, 1.00 })
+    pc(IG.Col.SliderGrab,     { 0.224, 0.812, 0.898, 1.00 }) -- Aether Cyan #39CFE5
+    pc(IG.Col.HeaderHovered,  { 0.224, 0.812, 0.898, 0.30 })
+    pc(IG.Col.HeaderActive,   { 0.910, 0.741, 0.439, 0.38 })
+    pc(IG.Col.Text,           { 0.945, 0.961, 0.976, 1.00 })
 
-    imgui.SetNextWindowSize({ 340, 420 }, ImGuiCond_FirstUseEver or 4)
+    imgui.SetNextWindowSize({ 340, 420 }, IG.Cond.FirstUseEver)
     local open = { true }
     if imgui.Begin('SoulspireXI — Universal Soul HUD Config', open, 0) then
         imgui.TextColored({ 0.910, 0.741, 0.439, 1.0 }, 'DISPLAY MODE & LAYOUT')

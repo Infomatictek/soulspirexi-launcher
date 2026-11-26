@@ -486,7 +486,7 @@ function F.textUnformatted(imgui, text, rgba)
     if not imgui then return end
     local s = tostring(text or '')
     if rgba and imgui.PushStyleColor then
-        imgui.PushStyleColor(ImGuiCol_Text or 0, rgba)
+        imgui.PushStyleColor(0, rgba)
     end
     if imgui.TextUnformatted then
         imgui.TextUnformatted(s)
@@ -1338,6 +1338,9 @@ function F.drawBeveledCtaButton(imgui, dl, id, x, y, w, h, label, variant, opts)
     return clicked, hovered, held
 end
 
+local okIG, IG = pcall(require, 'core.imgui_constants')
+if not okIG then IG = nil end
+
 -- Unified SoulspireXI tooltip card (Abyss/Midnight + Gold/Cyan/Violet accents)
 function F.drawTooltipCard(imgui, title, lines, opts)
     if not imgui or not imgui.BeginTooltip then return end
@@ -1352,9 +1355,9 @@ function F.drawTooltipCard(imgui, title, lines, opts)
             pushed = pushed + 1
         end
     end
-    pc(ImGuiCol_PopupBg, F.rgba.abyss)
-    pc(ImGuiCol_Border, accentRgba)
-    pc(ImGuiCol_Text, F.rgba.text_primary)
+    pc(IG and IG.Col.PopupBg or 4, F.rgba.abyss)
+    pc(IG and IG.Col.Border or 5, accentRgba)
+    pc(IG and IG.Col.Text or 0, F.rgba.text_primary)
 
     imgui.BeginTooltip()
     local wrapped = false

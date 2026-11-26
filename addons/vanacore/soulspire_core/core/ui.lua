@@ -13,6 +13,7 @@
 local bit   = require('bit')
 local F     = require('core.foundations')
 local Theme = require('core.theme')
+local IG    = require('core.imgui_constants')
 
 local UI = {}
 UI.__index = UI
@@ -331,20 +332,22 @@ function UI:draw_hub(native, bridge_mode)
         end
     end
 
+    local WF = IG.WindowFlags
     local win_flags = flag_or(
-        ImGuiWindowFlags_NoTitleBar,
-        ImGuiWindowFlags_NoResize,
-        ImGuiWindowFlags_NoScrollbar,
-        ImGuiWindowFlags_NoScrollWithMouse,
-        ImGuiWindowFlags_NoCollapse,
-        ImGuiWindowFlags_NoNav,
-        ImGuiWindowFlags_NoBackground,
-        ImGuiWindowFlags_NoSavedSettings
+        WF.NoTitleBar,
+        WF.NoResize,
+        WF.NoMove,
+        WF.NoScrollbar,
+        WF.NoScrollWithMouse,
+        WF.NoCollapse,
+        WF.NoNav,
+        WF.NoBackground,
+        WF.NoSavedSettings
     )
 
-    if imgui.SetNextWindowSize then imgui.SetNextWindowSize({ L.winW, L.winH }, ImGuiCond_Always or 1) end
+    if imgui.SetNextWindowSize then imgui.SetNextWindowSize({ L.winW, L.winH }, IG.Cond.Always) end
     if imgui.SetNextWindowPos then
-        imgui.SetNextWindowPos({ L.posX, L.posY }, ImGuiCond_Always or 1)
+        imgui.SetNextWindowPos({ L.posX, L.posY }, IG.Cond.Always)
     end
     if self.focus_window_once then
         self.focus_window_once = false
@@ -352,9 +355,15 @@ function UI:draw_hub(native, bridge_mode)
             pcall(imgui.SetNextWindowFocus)
         end
     end
-    if imgui.PushStyleVar then imgui.PushStyleVar(ImGuiStyleVar_WindowPadding or 2, { 0, 0 }) end
+    local pushed_vars = 0
+    if imgui.PushStyleVar then
+        imgui.PushStyleVar(IG.StyleVar.WindowPadding, { 0, 0 })
+        imgui.PushStyleVar(IG.StyleVar.WindowBorderSize, 0.0)
+        imgui.PushStyleVar(IG.StyleVar.WindowRounding, 0.0)
+        pushed_vars = 3
+    end
 
-    local opened = imgui.Begin('SoulspireXI Core###soulspire_core_hub', nil, win_flags)
+    local opened = imgui.Begin('##soulspire_core_hub', nil, win_flags)
     if opened then
         local wx, wy = 0, 0
         if imgui.GetWindowPos then
@@ -633,7 +642,7 @@ function UI:draw_hub(native, bridge_mode)
         end
     end
     imgui.End()
-    if imgui.PopStyleVar then imgui.PopStyleVar() end
+    if imgui.PopStyleVar and pushed_vars > 0 then imgui.PopStyleVar(pushed_vars) end
 end
 
 function UI:draw(native, bridge_mode)

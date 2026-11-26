@@ -34,17 +34,18 @@ function AbilitiesMod:handle_action(action)
     return false
 end
 
-function AbilitiesMod:draw(imgui, dl, L, x, y, w, h)
+function AbilitiesMod:draw(imgui, dl, F_arg, L, x, y, w, h, _ctx)
     if not imgui then return end
+    local Fn = F_arg or F
     local s = (L and L.uiScale) or 1.0
     local pad = math.floor(18 * s)
 
-    if dl then
-        F.drawOrnatePanel(dl, x, y, w, h, {
-            fillTop  = F.abgr(F.hex('#101628', 0.94)),
-            fillBot  = F.abgr(F.hex('#070B14', 0.96)),
-            border   = F.u32.soul_gold_dim,
-            accent   = F.u32.aether_cyan,
+    if dl and Fn and Fn.drawOrnatePanel then
+        Fn.drawOrnatePanel(dl, x, y, w, h, {
+            fillTop  = Fn.abgr(Fn.hex('#101628', 0.94)),
+            fillBot  = Fn.abgr(Fn.hex('#070B14', 0.96)),
+            border   = Fn.u32.soul_gold_dim,
+            accent   = Fn.u32.aether_cyan,
             corners  = true,
             shadow   = false,
         })

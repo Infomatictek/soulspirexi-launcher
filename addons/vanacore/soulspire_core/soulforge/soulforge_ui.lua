@@ -766,7 +766,7 @@ local function drawArsenal(state, action, L, x, y, w, h, nav)
     local listH = math.max(90, (y + h) - listTop - pad - (overviewH > 0 and (overviewH + math.floor(10 * s)) or 0))
     imgui.SetCursorScreenPos({ x + pad, listTop })
 
-    if imgui.BeginChild('##sf_arsenal_list', { ctrlW, listH }, ImGuiChildFlags_None or 0) then
+    if imgui.BeginChild('##sf_arsenal_list', { ctrlW, listH }, 0) then
         local cdl = imgui.GetWindowDrawList()
         local rowH = math.floor(58 * s)
         local rowW = math.max(120, ctrlW - 10 * s)
@@ -1986,24 +1986,28 @@ function UI.draw(state, action)
         if not L.drawerMode then ui.drawerOpen = nil end
     end
 
+    local okIG, IG = pcall(require, 'core.imgui_constants')
+    local WF = (okIG and IG and IG.WindowFlags) or { NoTitleBar = 1, NoResize = 2, NoScrollbar = 8, NoScrollWithMouse = 16, NoCollapse = 32, NoBackground = 128, NoSavedSettings = 256 }
+    local COND = (okIG and IG and IG.Cond) or { Always = 1, FirstUseEver = 4 }
+    local SV = (okIG and IG and IG.StyleVar) or { WindowPadding = 2 }
     local winFlags = 0
     local okBit, bit = pcall(require, 'bit')
     local flagList = {
-        ImGuiWindowFlags_NoTitleBar or 1,
-        ImGuiWindowFlags_NoResize or 2,
-        ImGuiWindowFlags_NoScrollbar or 8,
-        ImGuiWindowFlags_NoScrollWithMouse or 16,
-        ImGuiWindowFlags_NoCollapse or 32,
-        ImGuiWindowFlags_NoBackground or 128,
-        ImGuiWindowFlags_NoSavedSettings or 256,
+        WF.NoTitleBar,
+        WF.NoResize,
+        WF.NoScrollbar,
+        WF.NoScrollWithMouse,
+        WF.NoCollapse,
+        WF.NoBackground,
+        WF.NoSavedSettings,
     }
     for _, fl in ipairs(flagList) do
         winFlags = (okBit and bit) and bit.bor(winFlags, fl) or (winFlags + fl)
     end
 
-    imgui.SetNextWindowSize({ L.winW, L.winH }, ImGuiCond_Always or 1)
-    imgui.SetNextWindowPos({ L.posX, L.posY }, resized and (ImGuiCond_Always or 1) or (ImGuiCond_FirstUseEver or 4))
-    if imgui.PushStyleVar then imgui.PushStyleVar(ImGuiStyleVar_WindowPadding or 2, { 0, 0 }) end
+    imgui.SetNextWindowSize({ L.winW, L.winH }, COND.Always)
+    imgui.SetNextWindowPos({ L.posX, L.posY }, resized and COND.Always or COND.FirstUseEver)
+    if imgui.PushStyleVar then imgui.PushStyleVar(SV.WindowPadding, { 0, 0 }) end
 
     local opened = imgui.Begin('SoulspireXI - The Soulforge###OXTalentsWin', state.open, winFlags)
     if opened then

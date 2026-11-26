@@ -1,0 +1,405 @@
+{
+  "schemaVersion": 1,
+  "registryVersion": "2026.11.22-66-souls-approved",
+  "registryHash": "cf86aa59ff8d16c6",
+  "integrityFnv1a64": "14127306521c790c",
+  "soulCount": 66,
+  "souls": [
+    {
+      "jobId": 1,
+      "branch": 1,
+      "name": "Commander",
+      "abbr": "CDR"
+    },
+    {
+      "jobId": 1,
+      "branch": 2,
+      "name": "Berserker",
+      "abbr": "BRZ"
+    },
+    {
+      "jobId": 1,
+      "branch": 3,
+      "name": "Spartan",
+      "abbr": "SPT"
+    },
+    {
+      "jobId": 2,
+      "branch": 1,
+      "name": "Sensei",
+      "abbr": "SEN"
+    },
+    {
+      "jobId": 2,
+      "branch": 2,
+      "name": "Stillwater",
+      "abbr": "STW"
+    },
+    {
+      "jobId": 2,
+      "branch": 3,
+      "name": "Wayfarer",
+      "abbr": "WAY"
+    },
+    {
+      "jobId": 3,
+      "branch": 1,
+      "name": "Bishop",
+      "abbr": "BSP"
+    },
+    {
+      "jobId": 3,
+      "branch": 2,
+      "name": "Penitent",
+      "abbr": "PEN"
+    },
+    {
+      "jobId": 3,
+      "branch": 3,
+      "name": "Intercessor",
+      "abbr": "INC"
+    },
+    {
+      "jobId": 4,
+      "branch": 1,
+      "name": "Goetist",
+      "abbr": "GOE"
+    },
+    {
+      "jobId": 4,
+      "branch": 2,
+      "name": "Channeler",
+      "abbr": "CNL"
+    },
+    {
+      "jobId": 4,
+      "branch": 3,
+      "name": "Necromancer",
+      "abbr": "NEC"
+    },
+    {
+      "jobId": 5,
+      "branch": 1,
+      "name": "Thornveil",
+      "abbr": "TVL"
+    },
+    {
+      "jobId": 5,
+      "branch": 2,
+      "name": "Arbiter",
+      "abbr": "ARB"
+    },
+    {
+      "jobId": 5,
+      "branch": 3,
+      "name": "Conflux",
+      "abbr": "CFL"
+    },
+    {
+      "jobId": 6,
+      "branch": 1,
+      "name": "Trickster",
+      "abbr": "TRK"
+    },
+    {
+      "jobId": 6,
+      "branch": 2,
+      "name": "Opportunist",
+      "abbr": "OPP"
+    },
+    {
+      "jobId": 6,
+      "branch": 3,
+      "name": "Phantom",
+      "abbr": "PTM"
+    },
+    {
+      "jobId": 7,
+      "branch": 1,
+      "name": "Lightkeeper",
+      "abbr": "LTK"
+    },
+    {
+      "jobId": 7,
+      "branch": 2,
+      "name": "Martyr",
+      "abbr": "MRT"
+    },
+    {
+      "jobId": 7,
+      "branch": 3,
+      "name": "Oathbreaker",
+      "abbr": "OTB"
+    },
+    {
+      "jobId": 8,
+      "branch": 1,
+      "name": "Harbinger",
+      "abbr": "HRB"
+    },
+    {
+      "jobId": 8,
+      "branch": 2,
+      "name": "Dreadnought",
+      "abbr": "DRN"
+    },
+    {
+      "jobId": 8,
+      "branch": 3,
+      "name": "Maleficar",
+      "abbr": "MLF"
+    },
+    {
+      "jobId": 9,
+      "branch": 1,
+      "name": "Packmate",
+      "abbr": "PKM"
+    },
+    {
+      "jobId": 9,
+      "branch": 2,
+      "name": "Alpha Warden",
+      "abbr": "ALW"
+    },
+    {
+      "jobId": 9,
+      "branch": 3,
+      "name": "Wildsavant",
+      "abbr": "WSV"
+    },
+    {
+      "jobId": 10,
+      "branch": 1,
+      "name": "Skald",
+      "abbr": "SKL"
+    },
+    {
+      "jobId": 10,
+      "branch": 2,
+      "name": "Cantor",
+      "abbr": "CNT"
+    },
+    {
+      "jobId": 10,
+      "branch": 3,
+      "name": "Provocateur",
+      "abbr": "PRV"
+    },
+    {
+      "jobId": 11,
+      "branch": 1,
+      "name": "Sniper",
+      "abbr": "SNP"
+    },
+    {
+      "jobId": 11,
+      "branch": 2,
+      "name": "Fangbound",
+      "abbr": "FGB"
+    },
+    {
+      "jobId": 11,
+      "branch": 3,
+      "name": "Spellfletcher",
+      "abbr": "SFL"
+    },
+    {
+      "jobId": 12,
+      "branch": 1,
+      "name": "Ronin",
+      "abbr": "RON"
+    },
+    {
+      "jobId": 12,
+      "branch": 2,
+      "name": "Amatsu",
+      "abbr": "AMT"
+    },
+    {
+      "jobId": 12,
+      "branch": 3,
+      "name": "Kensei",
+      "abbr": "KEN"
+    },
+    {
+      "jobId": 13,
+      "branch": 1,
+      "name": "Shinobi",
+      "abbr": "SNI"
+    },
+    {
+      "jobId": 13,
+      "branch": 2,
+      "name": "Kagemusha",
+      "abbr": "KGM"
+    },
+    {
+      "jobId": 13,
+      "branch": 3,
+      "name": "Fuin",
+      "abbr": "FUI"
+    },
+    {
+      "jobId": 14,
+      "branch": 1,
+      "name": "Highlancer",
+      "abbr": "HLC"
+    },
+    {
+      "jobId": 14,
+      "branch": 2,
+      "name": "Drachenward",
+      "abbr": "DRW"
+    },
+    {
+      "jobId": 14,
+      "branch": 3,
+      "name": "Wyvernheart",
+      "abbr": "WYV"
+    },
+    {
+      "jobId": 15,
+      "branch": 1,
+      "name": "Eidolarch",
+      "abbr": "EID"
+    },
+    {
+      "jobId": 15,
+      "branch": 2,
+      "name": "Celestial",
+      "abbr": "CEL"
+    },
+    {
+      "jobId": 15,
+      "branch": 3,
+      "name": "Accordant",
+      "abbr": "ACD"
+    },
+    {
+      "jobId": 16,
+      "branch": 1,
+      "name": "Assimilator",
+      "abbr": "ASM"
+    },
+    {
+      "jobId": 16,
+      "branch": 2,
+      "name": "Magus",
+      "abbr": "MAG"
+    },
+    {
+      "jobId": 16,
+      "branch": 3,
+      "name": "Chrysalis",
+      "abbr": "CRY"
+    },
+    {
+      "jobId": 17,
+      "branch": 1,
+      "name": "Flintlock",
+      "abbr": "FLT"
+    },
+    {
+      "jobId": 17,
+      "branch": 2,
+      "name": "Gambler",
+      "abbr": "GMB"
+    },
+    {
+      "jobId": 17,
+      "branch": 3,
+      "name": "Blackwake",
+      "abbr": "BKW"
+    },
+    {
+      "jobId": 18,
+      "branch": 1,
+      "name": "Ironlink",
+      "abbr": "IRN"
+    },
+    {
+      "jobId": 18,
+      "branch": 2,
+      "name": "Patchwork",
+      "abbr": "PTW"
+    },
+    {
+      "jobId": 18,
+      "branch": 3,
+      "name": "Tandem",
+      "abbr": "TDM"
+    },
+    {
+      "jobId": 19,
+      "branch": 1,
+      "name": "Revel",
+      "abbr": "RVL"
+    },
+    {
+      "jobId": 19,
+      "branch": 2,
+      "name": "Bladewheel",
+      "abbr": "BLW"
+    },
+    {
+      "jobId": 19,
+      "branch": 3,
+      "name": "Dervish",
+      "abbr": "DRV"
+    },
+    {
+      "jobId": 20,
+      "branch": 1,
+      "name": "Chirurgeon",
+      "abbr": "CRG"
+    },
+    {
+      "jobId": 20,
+      "branch": 2,
+      "name": "Heliarch",
+      "abbr": "HEL"
+    },
+    {
+      "jobId": 20,
+      "branch": 3,
+      "name": "Archivist",
+      "abbr": "ARC"
+    },
+    {
+      "jobId": 21,
+      "branch": 1,
+      "name": "Meridian",
+      "abbr": "MRD"
+    },
+    {
+      "jobId": 21,
+      "branch": 2,
+      "name": "Verdant",
+      "abbr": "VRD"
+    },
+    {
+      "jobId": 21,
+      "branch": 3,
+      "name": "Seismancer",
+      "abbr": "SEI"
+    },
+    {
+      "jobId": 22,
+      "branch": 1,
+      "name": "Spellblade",
+      "abbr": "SPB"
+    },
+    {
+      "jobId": 22,
+      "branch": 2,
+      "name": "Lifebinder",
+      "abbr": "LFB"
+    },
+    {
+      "jobId": 22,
+      "branch": 3,
+      "name": "Runeweft",
+      "abbr": "RNW"
+    }
+  ]
+}

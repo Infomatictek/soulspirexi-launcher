@@ -786,11 +786,21 @@ function Character:draw(imgui, dl, F, L, x, y, w, h, ctx)
         F.fitText(imgui, statusLabel, leftW - pad * 2 - 24 * s, 0.82 * s),
         snap.loaded and F.u32.success or F.u32.text_secondary, 0.82 * s, 'l')
     local dll = self:_get_dll_status()
-    local dllLine = dll and string.format('Soulspire Native: %d hooks active', dll.hooks or 0)
-        or 'Soulspire Native: standby'
+    local hooksActive = dll and (tonumber(dll.hooks) or tonumber(dll.hooks_installed) or 0) or 0
+    local hooksTotal  = dll and (tonumber(dll.hooks_total) or 0) or 0
+    local dllLine
+    if dll and dll.loaded then
+        if hooksTotal > 0 then
+            dllLine = string.format('VanaCore Native: %d/%d hooks active', hooksActive, hooksTotal)
+        else
+            dllLine = string.format('VanaCore Native: %d hooks active', hooksActive)
+        end
+    else
+        dllLine = 'VanaCore Native: standby'
+    end
     F.drawShadowText(imgui, dl, x + pad + 12 * s, boxY + 54 * s,
         F.fitText(imgui, dllLine, leftW - pad * 2 - 24 * s, 0.78 * s),
-        dll and F.u32.soul_gold or F.u32.text_muted, 0.78 * s, 'l')
+        (dll and dll.loaded and hooksActive > 0) and F.u32.soul_gold or F.u32.text_muted, 0.78 * s, 'l')
 
     -- 2. Center Panel: Rich Soul Crystal Cards
     local midPanelX = x + leftW + gap
