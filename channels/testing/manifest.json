@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.2.3-testing.14",
+  "manifestVersion": "2.2.3-testing.15",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
     "version": "main (Soulspire Native 27-hook)",
@@ -11930,28 +11930,28 @@
     "compat": {
       "profile": "compat",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-native.4",
-      "commitSha": "5b9880fc87",
+      "tag": "v0.9.9-soulspire-native.5",
+      "commitSha": "cb02b0987b",
       "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.4/soulspirexi-client-experimental-0.9.9-5b9880fc87-win32.zip",
-      "packageSha256": "84472479cbfde23803d46fc14c45a5fd8bc9442171093e03c8a1587d9886a8ea",
-      "packageSize": 99027561,
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.5/soulspirexi-client-experimental-0.9.9-cb02b0987b-win32.zip",
+      "packageSha256": "d6c29889d99e113dc045fe49a0e2be4bccb1c1e5c1111c766ee5c535e8cbe1cc",
+      "packageSize": 99029268,
       "experimentalEligible": true,
       "clientVerified": false,
-      "notes": "VanaCore-Native Soulspire v0.9.9-soulspire-native.4 (DEC-028, Compatibility Recovery profile): preserves polished Ashita compatibility overlay alongside VanaCore native hooks #28-#31 and API v2."
+      "notes": "VanaCore-Native Soulspire v0.9.9-soulspire-native.5 (DEC-028, Compatibility Recovery profile): fixes retail PlayOnline patch.ver decryption by reading real HKLM\\SOFTWARE\\PlayOnline*\\Interface read-only first, adds explicit pre-D3D early-exit failure reporting & opt-in startup.trace diagnostics."
     },
     "native": {
       "profile": "native",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-native.4",
-      "commitSha": "5b9880fc87",
+      "tag": "v0.9.9-soulspire-native.5",
+      "commitSha": "cb02b0987b",
       "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.4/soulspirexi-client-experimental-0.9.9-5b9880fc87-win32.zip",
-      "packageSha256": "84472479cbfde23803d46fc14c45a5fd8bc9442171093e03c8a1587d9886a8ea",
-      "packageSize": 99027561,
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.5/soulspirexi-client-experimental-0.9.9-cb02b0987b-win32.zip",
+      "packageSha256": "d6c29889d99e113dc045fe49a0e2be4bccb1c1e5c1111c766ee5c535e8cbe1cc",
+      "packageSize": 99029268,
       "experimentalEligible": true,
       "clientVerified": false,
-      "notes": "Full VanaCore-Native Soulspire v0.9.9-soulspire-native.4 (DEC-028, API v2): native WIC texture manager, authoritative UI input/cursor ownership, [addons] ashita.enabled=0, and single unified zero-Ashita Soulspire Core 4.0.0-vanacore."
+      "notes": "Full VanaCore-Native Soulspire v0.9.9-soulspire-native.5 (DEC-028, API v2): fixes retail PlayOnline patch.ver decryption by reading real HKLM\\SOFTWARE\\PlayOnline*\\Interface read-only first, adds explicit pre-D3D early-exit failure reporting & opt-in startup.trace diagnostics, preserving zero-Ashita Soulspire Core 4.0.0-vanacore."
     }
   }
 }
