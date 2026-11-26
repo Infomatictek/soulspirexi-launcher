@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.2.3-testing.15",
+  "manifestVersion": "2.2.3-testing.16",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
     "version": "main (Soulspire Native 27-hook)",
@@ -6206,7 +6206,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/weapon_render_probe.lua",
       "targetPath": "soulspire_core/core/weapon_render_probe.lua",
-      "sha256": "89b524d96ced1ad9e56dd4dd2ba31cd9670fdccf7b03972ee9f3a5f436dbc45b",
+      "sha256": "1e5ef20275fe76d8f76ff3b6c6f9fedb1c09918b166143b947df5f55f9087b7b",
       "size": 61093
     },
     {
