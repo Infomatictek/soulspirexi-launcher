@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.2.3-testing.16",
+  "manifestVersion": "2.2.3-testing.17",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
     "version": "main (Soulspire Native 27-hook)",
@@ -6206,7 +6206,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/weapon_render_probe.lua",
       "targetPath": "soulspire_core/core/weapon_render_probe.lua",
-      "sha256": "1e5ef20275fe76d8f76ff3b6c6f9fedb1c09918b166143b947df5f55f9087b7b",
+      "sha256": "f37ce3050a4bf74cc5b3a64bcf3ba153c25f6c3c7cb51306d1928aa1a6565112",
       "size": 61093
     },
     {
@@ -11917,41 +11917,41 @@
     "baseline": {
       "profile": "baseline",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-baseline.5",
-      "commitSha": "0036deb118",
+      "tag": "v0.9.9-soulspire-native.7",
+      "commitSha": "b4ec4d1710",
       "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-baseline.5/soulspirexi-client-experimental-0.9.9-0036deb118-win32.zip",
-      "packageSha256": "3d367cbd8017cb42fd627dc636b3c8851f3a585dbb6d96e1248a61815d1f34b0",
-      "packageSize": 98961050,
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.7/soulspirexi-client-experimental-0.9.9-b4ec4d1710-win32.zip",
+      "packageSha256": "d31fa68695c11993a00a9a775fa19e210f70900ce3333a24c7ec8a6c3e7a2ccc",
+      "packageSize": 99031306,
       "experimentalEligible": true,
       "clientVerified": false,
-      "notes": "Phase 1 minimal VanaCore Baseline (TLS 1.3 SCH_CREDENTIALS v5 + xiloader 3.0.0 + TLS 1.3 lobby relay + polcore.dll 51220 connect hook): disables all Soulspire native hooks, addons, Pivot overlays, and experimental menu hooks for clean first-login certification against play.soulspirexi.com."
+      "notes": "VanaCore Baseline profile on v0.9.9-soulspire-native.7 (b4ec4d1710): hardens real HKLM PlayOnline Interface read-only passthrough (direct, stand-in-relative, and RegCreateKeyExA) for retail patch.ver decryption, explicit pre-D3D failure exit, and Wine TLS 1.3 fallback; launcher sets [soulspire] enabled=0 and disables all addons/hooks for clean baseline certification."
     },
     "compat": {
       "profile": "compat",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-native.5",
-      "commitSha": "cb02b0987b",
+      "tag": "v0.9.9-soulspire-native.7",
+      "commitSha": "b4ec4d1710",
       "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.5/soulspirexi-client-experimental-0.9.9-cb02b0987b-win32.zip",
-      "packageSha256": "d6c29889d99e113dc045fe49a0e2be4bccb1c1e5c1111c766ee5c535e8cbe1cc",
-      "packageSize": 99029268,
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.7/soulspirexi-client-experimental-0.9.9-b4ec4d1710-win32.zip",
+      "packageSha256": "d31fa68695c11993a00a9a775fa19e210f70900ce3333a24c7ec8a6c3e7a2ccc",
+      "packageSize": 99031306,
       "experimentalEligible": true,
       "clientVerified": false,
-      "notes": "VanaCore-Native Soulspire v0.9.9-soulspire-native.5 (DEC-028, Compatibility Recovery profile): fixes retail PlayOnline patch.ver decryption by reading real HKLM\\SOFTWARE\\PlayOnline*\\Interface read-only first, adds explicit pre-D3D early-exit failure reporting & opt-in startup.trace diagnostics."
+      "notes": "VanaCore-Native Soulspire v0.9.9-soulspire-native.7 (b4ec4d1710, Compatibility Recovery profile): hardens real HKLM PlayOnline Interface read-only passthrough (direct, stand-in-relative, and RegCreateKeyExA) for retail patch.ver decryption, explicit pre-D3D failure exit, opt-in startup.trace diagnostics, and SettingsTest startup regressions."
     },
     "native": {
       "profile": "native",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-native.5",
-      "commitSha": "cb02b0987b",
+      "tag": "v0.9.9-soulspire-native.7",
+      "commitSha": "b4ec4d1710",
       "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.5/soulspirexi-client-experimental-0.9.9-cb02b0987b-win32.zip",
-      "packageSha256": "d6c29889d99e113dc045fe49a0e2be4bccb1c1e5c1111c766ee5c535e8cbe1cc",
-      "packageSize": 99029268,
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.7/soulspirexi-client-experimental-0.9.9-b4ec4d1710-win32.zip",
+      "packageSha256": "d31fa68695c11993a00a9a775fa19e210f70900ce3333a24c7ec8a6c3e7a2ccc",
+      "packageSize": 99031306,
       "experimentalEligible": true,
       "clientVerified": false,
-      "notes": "Full VanaCore-Native Soulspire v0.9.9-soulspire-native.5 (DEC-028, API v2): fixes retail PlayOnline patch.ver decryption by reading real HKLM\\SOFTWARE\\PlayOnline*\\Interface read-only first, adds explicit pre-D3D early-exit failure reporting & opt-in startup.trace diagnostics, preserving zero-Ashita Soulspire Core 4.0.0-vanacore."
+      "notes": "Full VanaCore-Native Soulspire v0.9.9-soulspire-native.7 (b4ec4d1710, DEC-028 API v2): hardens real HKLM PlayOnline Interface read-only passthrough (direct, stand-in-relative, and RegCreateKeyExA) for retail patch.ver decryption, explicit pre-D3D failure exit, opt-in startup.trace diagnostics, and SettingsTest startup regressions, preserving zero-Ashita Soulspire Core 4.0.0-vanacore."
     }
   }
 }

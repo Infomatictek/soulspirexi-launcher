@@ -236,6 +236,40 @@ class VanaCoreCompatibilityTests(unittest.TestCase):
         self.assertIn("soulhud:handle_packet_in(", vc_core)
         self.assertNotIn("character_mod:handle_packet(", vc_core)
 
+    def test_testing_modern_client_profiles_are_synced_and_pin_interface_fix(self):
+        import json
+
+        modern_cfg = json.loads((REPO_ROOT / "channels" / "testing" / "modern-client.json").read_text(encoding="utf-8"))
+        testing_mf = json.loads((REPO_ROOT / "channels" / "testing" / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            testing_mf.get("modernClient"),
+            modern_cfg,
+            "channels/testing/modern-client.json must match channels/testing/manifest.json['modernClient'] exactly",
+        )
+        self.assertFalse(modern_cfg["clientVerified"])
+        self.assertTrue(modern_cfg["experimentalEligible"])
+
+        unfixed_tags = {
+            "v0.9.9-soulspire-baseline.4",
+            "v0.9.9-soulspire-baseline.5",
+            "v0.9.9-soulspire-native.3",
+            "v0.9.9-soulspire-native.4",
+        }
+        for profile_key in ("baseline", "compat", "native"):
+            self.assertIn(profile_key, modern_cfg, f"Missing modernClient profile: {profile_key}")
+            prof = modern_cfg[profile_key]
+            self.assertEqual(prof["profile"], profile_key)
+            self.assertFalse(prof["clientVerified"])
+            self.assertTrue(prof["experimentalEligible"])
+            self.assertNotIn(
+                prof["tag"],
+                unfixed_tags,
+                f"Profile {profile_key} must not pin unfixed pre-Interface-fix VanaCore tag {prof['tag']}",
+            )
+            self.assertEqual(len(prof["packageSha256"]), 64)
+            self.assertIn(prof["tag"], prof["packageUrl"])
+            self.assertIn(prof["commitSha"], prof["packageUrl"])
+
 
 if __name__ == "__main__":
     unittest.main()

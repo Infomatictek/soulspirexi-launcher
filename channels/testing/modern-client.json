@@ -8,26 +8,40 @@
   "baseline": {
     "profile": "baseline",
     "version": "0.9.9",
-    "tag": "v0.9.9-soulspire-baseline.5",
-    "commitSha": "0036deb118",
+    "tag": "v0.9.9-soulspire-native.7",
+    "commitSha": "b4ec4d1710",
     "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-    "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-baseline.5/soulspirexi-client-experimental-0.9.9-0036deb118-win32.zip",
-    "packageSha256": "3d367cbd8017cb42fd627dc636b3c8851f3a585dbb6d96e1248a61815d1f34b0",
-    "packageSize": 98961050,
+    "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.7/soulspirexi-client-experimental-0.9.9-b4ec4d1710-win32.zip",
+    "packageSha256": "d31fa68695c11993a00a9a775fa19e210f70900ce3333a24c7ec8a6c3e7a2ccc",
+    "packageSize": 99031306,
     "experimentalEligible": true,
     "clientVerified": false,
-    "notes": "Phase 1 minimal VanaCore Baseline (TLS 1.3 SCH_CREDENTIALS v5 + xiloader 3.0.0 + TLS 1.3 lobby relay + polcore.dll 51220 connect hook): disables all Soulspire native hooks, addons, Pivot overlays, and experimental menu hooks for clean first-login certification against play.soulspirexi.com."
+    "notes": "VanaCore Baseline profile on v0.9.9-soulspire-native.7 (b4ec4d1710): hardens real HKLM PlayOnline Interface read-only passthrough (direct, stand-in-relative, and RegCreateKeyExA) for retail patch.ver decryption, explicit pre-D3D failure exit, and Wine TLS 1.3 fallback; launcher sets [soulspire] enabled=0 and disables all addons/hooks for clean baseline certification."
   },
   "compat": {
     "profile": "compat",
     "version": "0.9.9",
-    "tag": "v0.9.9-soulspire-native.3",
-    "commitSha": "ce8fba76ca",
-    "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.3/soulspirexi-client-experimental-0.9.9-ce8fba76ca-win32.zip",
-    "packageSha256": "30fa33729ca8ac0730ea161434da6a3fbb1db6e026d1e35dcce8f045a6d8d163",
-    "packageSize": 99013629,
+    "tag": "v0.9.9-soulspire-native.7",
+    "commitSha": "b4ec4d1710",
+    "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
+    "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.7/soulspirexi-client-experimental-0.9.9-b4ec4d1710-win32.zip",
+    "packageSha256": "d31fa68695c11993a00a9a775fa19e210f70900ce3333a24c7ec8a6c3e7a2ccc",
+    "packageSize": 99031306,
     "experimentalEligible": true,
     "clientVerified": false,
-    "notes": "VanaCore-Native Soulspire v0.9.9-soulspire-native.3 (DEC-028): adds native FFXI Commands menu (Status -> Soulspire -> Equipment, hooks #28-#31, kCapCommandsMenuEntry) + Hook #20 ability_list_filter, restores full polished Core UI / Soul HUD / Soulforge / Soul Actions with fixed WS talent allocation."
+    "notes": "VanaCore-Native Soulspire v0.9.9-soulspire-native.7 (b4ec4d1710, Compatibility Recovery profile): hardens real HKLM PlayOnline Interface read-only passthrough (direct, stand-in-relative, and RegCreateKeyExA) for retail patch.ver decryption, explicit pre-D3D failure exit, opt-in startup.trace diagnostics, and SettingsTest startup regressions."
+  },
+  "native": {
+    "profile": "native",
+    "version": "0.9.9",
+    "tag": "v0.9.9-soulspire-native.7",
+    "commitSha": "b4ec4d1710",
+    "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
+    "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.7/soulspirexi-client-experimental-0.9.9-b4ec4d1710-win32.zip",
+    "packageSha256": "d31fa68695c11993a00a9a775fa19e210f70900ce3333a24c7ec8a6c3e7a2ccc",
+    "packageSize": 99031306,
+    "experimentalEligible": true,
+    "clientVerified": false,
+    "notes": "Full VanaCore-Native Soulspire v0.9.9-soulspire-native.7 (b4ec4d1710, DEC-028 API v2): hardens real HKLM PlayOnline Interface read-only passthrough (direct, stand-in-relative, and RegCreateKeyExA) for retail patch.ver decryption, explicit pre-D3D failure exit, opt-in startup.trace diagnostics, and SettingsTest startup regressions, preserving zero-Ashita Soulspire Core 4.0.0-vanacore."
   }
 }
