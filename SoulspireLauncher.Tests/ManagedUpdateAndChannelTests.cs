@@ -510,6 +510,61 @@ public sealed class ManagedUpdateAndChannelTests
     }
 
     [Fact]
+    public async Task FetchManifestDetailedAsync_TestingManifestValidatesAndRejectsNativeDllShaMismatch()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        string? repoRoot = null;
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "channels", "testing", "manifest.json")))
+            {
+                repoRoot = dir.FullName;
+                break;
+            }
+            dir = dir.Parent;
+        }
+        Assert.NotNull(repoRoot);
+
+        var testingJson = await File.ReadAllTextAsync(Path.Combine(repoRoot!, "channels", "testing", "manifest.json"));
+        var bundledStable = new LauncherManifest
+        {
+            Channel = "stable",
+            ManifestVersion = "2.1.0",
+            Repo = new ManifestRepo { RawBaseUrl = "https://updates.soulspirexi.test" },
+            Files = [new ManifestFileEntry { Category = "plugin", SourcePath = "a", TargetPath = "a", Sha256 = new string('a', 64) }]
+        };
+
+        var okService = new ManifestUpdateService(new HttpClient(new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(testingJson, Encoding.UTF8, "application/json")
+        })));
+        var okResult = await okService.FetchManifestDetailedAsync(bundledStable, localOverride: null, UpdateChannel.Testing);
+        Assert.NotNull(okResult.Manifest);
+        Assert.True(okResult.FromRemote);
+        Assert.Null(okResult.ErrorMessage);
+
+        var dllEntry = okResult.Manifest!.Files.First(f =>
+            f.Category.Equals("plugin", StringComparison.OrdinalIgnoreCase) &&
+            f.TargetPath.Replace('\\', '/').EndsWith("soulspire_native.dll", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(dllEntry.Sha256, okResult.Manifest.Registry?.NativeDllSha256, ignoreCase: true);
+
+        var badJson = testingJson.Replace(
+            $"\"nativeDllSha256\": \"{dllEntry.Sha256}\"",
+            $"\"nativeDllSha256\": \"{new string('0', 64)}\"",
+            StringComparison.OrdinalIgnoreCase);
+        Assert.NotEqual(testingJson, badJson);
+
+        var badService = new ManifestUpdateService(new HttpClient(new StubHttpHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(badJson, Encoding.UTF8, "application/json")
+        })));
+        var badResult = await badService.FetchManifestDetailedAsync(bundledStable, localOverride: null, UpdateChannel.Testing);
+        Assert.Null(badResult.Manifest);
+        Assert.False(badResult.FromRemote);
+        Assert.Contains("Manifest registry.nativeDllSha256", badResult.ErrorMessage);
+    }
+
+    [Fact]
     public async Task FetchManifestDetailedAsync_RejectsIncorrectChannelMetadataAndInvalidJson()
     {
         var bundledStable = new LauncherManifest

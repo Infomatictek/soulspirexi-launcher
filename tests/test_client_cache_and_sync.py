@@ -95,7 +95,11 @@ class TestClientCacheAndSync(unittest.TestCase):
         )
 
     def test_manifests_and_cache_integrity_verify_cleanly(self) -> None:
-        for mf in (LAUNCHER_ROOT / "manifest.json", LAUNCHER_ROOT / "channels" / "testing-core-ui" / "manifest.json"):
+        for mf in (
+            LAUNCHER_ROOT / "manifest.json",
+            LAUNCHER_ROOT / "channels" / "testing" / "manifest.json",
+            LAUNCHER_ROOT / "channels" / "testing-core-ui" / "manifest.json",
+        ):
             proc = subprocess.run(
                 [sys.executable, str(LAUNCHER_ROOT / "scripts" / "verify-launcher-manifest.py"), str(LAUNCHER_ROOT), "--manifest", str(mf)],
                 capture_output=True,
@@ -103,6 +107,34 @@ class TestClientCacheAndSync(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(proc.returncode, 0, f"verify-launcher-manifest failed for {mf}:\n{proc.stdout}\n{proc.stderr}")
+
+    def test_verify_manifest_rejects_mismatched_registry_native_dll_sha256(self) -> None:
+        import tempfile
+
+        testing_manifest = json.loads(
+            (LAUNCHER_ROOT / "channels" / "testing" / "manifest.json").read_text(encoding="utf-8")
+        )
+        dll_entry = next(
+            f for f in testing_manifest["files"]
+            if f.get("category") == "plugin" and f.get("targetPath", "").replace("\\", "/").endswith("soulspire_native.dll")
+        )
+        self.assertEqual(
+            testing_manifest["registry"]["nativeDllSha256"].lower(),
+            dll_entry["sha256"].lower(),
+            "channels/testing/manifest.json registry.nativeDllSha256 must match soulspire_native.dll entry",
+        )
+        testing_manifest["registry"]["nativeDllSha256"] = "0" * 64
+        with tempfile.TemporaryDirectory() as td:
+            bad_manifest = Path(td) / "manifest.json"
+            bad_manifest.write_text(json.dumps(testing_manifest, indent=2), encoding="utf-8")
+            proc = subprocess.run(
+                [sys.executable, str(LAUNCHER_ROOT / "scripts" / "verify-launcher-manifest.py"), str(LAUNCHER_ROOT), "--manifest", str(bad_manifest)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(proc.returncode, 0, "Verifier must reject mismatched registry.nativeDllSha256")
+            self.assertIn("registry.nativeDllSha256", proc.stdout + proc.stderr)
 
     def test_testing_core_ui_staging_server_config_and_stable_isolation(self) -> None:
         testing_manifest = json.loads(

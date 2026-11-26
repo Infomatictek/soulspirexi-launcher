@@ -114,10 +114,10 @@
     },
     {
       "category": "plugin",
-      "sourcePath": "plugins/ashita4/soulspire_native.dll",
+      "sourcePath": "channels/testing/payload/plugins/ashita4/soulspire_native.dll",
       "targetPath": "soulspire_native.dll",
-      "sha256": "6307283b0dd715108213c4f25725e339872861de030504c184be46db2b4fbf7d",
-      "size": 232960
+      "sha256": "e85092d753aabb50554ad7633435d3987b4179024e93c8dc7225e8f75c866e08",
+      "size": 253440
     },
     {
       "category": "addon",
