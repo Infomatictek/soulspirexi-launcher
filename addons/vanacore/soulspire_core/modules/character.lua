@@ -207,7 +207,10 @@ function Character:handle_packet_in(id, data, now, size)
         self.data_service:record_metric('bytes_in_crys', #pkt)
     end
 
-    local ts = now or self.clock()
+    local ts = (type(now) == 'number' and now >= 0) and now or self.clock()
+    if self.crystal_state.current_job == nil or self.crystal_state.current_job == 0 then
+        self:refresh_player_context()
+    end
     if decoded.request_id >= CORE_REQ_BASE and decoded.request_id < 0x8000 then
         local ok, recv_ok, why = pcall(self.crystal_state.receive, self.crystal_state, pkt, ts)
         if ok and recv_ok then
@@ -216,6 +219,15 @@ function Character:handle_packet_in(id, data, now, size)
                     self.sync_retries = 0
                     self.retry_after = nil
                     self.last_sync_err = nil
+                    local entry = decoded.entries and decoded.entries[decoded.job + 1]
+                    local active_branch = entry and entry.active or 0
+                    self.hud_job = decoded.job
+                    self.hud_branch = active_branch
+                    if type(vana) == 'table' and vana.soulspire and type(vana.soulspire.set_identity) == 'function'
+                        and decoded.job >= 1 and decoded.job <= 22 then
+                        pcall(vana.soulspire.set_identity, decoded.job, active_branch,
+                            tonumber(self.player_info.server_id) or 0, tonumber(decoded.level) or 0)
+                    end
                     if self.data_service and self.data_service.listeners and self.data_service.listeners.perf_flow then
                         self.data_service:emit('perf_flow', {
                             flow = 'crystal_sync',
@@ -226,8 +238,6 @@ function Character:handle_packet_in(id, data, now, size)
                         })
                     end
                     if self.character_state then
-                        local entry = decoded.entries and decoded.entries[decoded.job + 1]
-                        local active_branch = entry and entry.active or 0
                         self.character_state:observe_crys_state(decoded.job, active_branch, decoded.level, ts)
                     end
                 elseif decoded.result == 3 and self.sync_retries < MAX_SYNC_RETRIES then

@@ -226,6 +226,10 @@ function Input:arm_open_guard(seconds)
     self.confirm_guard_until = self.clock() + dur
 end
 
+function Input:arm_confirm_guard(seconds)
+    self:arm_open_guard(seconds)
+end
+
 function Input:_confirm_guarded(action)
     return action == 'confirm' and self.confirm_guard_until > 0 and self.clock() < self.confirm_guard_until
 end
@@ -427,7 +431,7 @@ function Input:on_left_stick(nx, ny, dispatch_fn, hub_open, now)
     return true
 end
 
--- Helper for Ashita v4 xinput_button axis events (18 = LX, 19 = LY, range -32768..32767)
+-- Helper for Ashita v4 / VanaCore xinput_button axis events (18 = LX, 19 = LY, range -32768..32767)
 function Input:on_xinput_axis(button_id, value, dispatch_fn, hub_open, now)
     local v = tonumber(value) or 0
     if button_id == Input.XINPUT_AXIS_LX then
@@ -436,6 +440,53 @@ function Input:on_xinput_axis(button_id, value, dispatch_fn, hub_open, now)
     elseif button_id == Input.XINPUT_AXIS_LY then
         self.stick_ly = math.max(-1, math.min(1, v / 32767))
         return self:on_left_stick(self.stick_lx, self.stick_ly, dispatch_fn, hub_open, now)
+    end
+    return hub_open == true
+end
+
+-- Unified VanaCore native `xinput_button` event adapter (`e = { button, state, injected, blocked }`).
+-- Controls 0..15 are digital buttons, 16..17 triggers, 18..19 Left Stick (LX/LY), 20..21 Right Stick.
+function Input:on_xinput_button(e, dispatch_fn, hub_open, now)
+    if type(e) ~= 'table' then return hub_open == true end
+    local btn = tonumber(e.button)
+    local val = tonumber(e.state) or 0
+    if btn == nil then return hub_open == true end
+    if btn == Input.XINPUT_AXIS_LX or btn == Input.XINPUT_AXIS_LY then
+        return self:on_xinput_axis(btn, val, dispatch_fn, hub_open, now)
+    end
+    if btn >= 0 and btn < 16 then
+        return self:on_pad('xinput', btn, val ~= 0, dispatch_fn, hub_open)
+    end
+    return hub_open == true
+end
+
+-- Unified VanaCore native `dinput_button` event adapter (`e = { button, state, injected, blocked }`).
+-- VanaCore emits DIJOYSTATE byte offsets: 0=lX, 4=lY, 32=POV0 (hat angle), 48+n=Button n (0x80=down).
+-- Also accepts direct 0-based button indices (0..31) when invoked by legacy/unit callers.
+function Input:on_dinput_button(e, dispatch_fn, hub_open, now)
+    if type(e) ~= 'table' then return hub_open == true end
+    local ofs = tonumber(e.button)
+    local val = tonumber(e.state) or 0
+    if ofs == nil then return hub_open == true end
+    if ofs == 32 then
+        return self:on_dinput_pov(val, dispatch_fn, hub_open)
+    elseif ofs == 0 or ofs == 4 then
+        local norm
+        if val > 2000 or val < -2000 then
+            norm = math.max(-1, math.min(1, (val - 32767.5) / 32767.5))
+        else
+            norm = math.max(-1, math.min(1, val / 1000))
+        end
+        if ofs == 0 then
+            self.stick_lx = norm
+        else
+            self.stick_ly = -norm
+        end
+        return self:on_left_stick(self.stick_lx, self.stick_ly, dispatch_fn, hub_open, now)
+    elseif ofs >= 48 then
+        return self:on_pad('dinput', ofs - 48, val ~= 0, dispatch_fn, hub_open)
+    elseif ofs >= 0 and ofs < 32 then
+        return self:on_pad('dinput', ofs, val ~= 0, dispatch_fn, hub_open)
     end
     return hub_open == true
 end

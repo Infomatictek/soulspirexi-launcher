@@ -20,18 +20,45 @@ function AbilitiesMod:on_open() end
 function AbilitiesMod:on_activate() end
 function AbilitiesMod:on_close() end
 
-function AbilitiesMod:handle_action(action)
+function AbilitiesMod:on_action(action)
     if action == 'up' then
         self.selected = math.max(1, self.selected - 1)
         return true
     elseif action == 'down' then
-        self.selected = self.selected + 1
+        local rows = (self.actions and self.actions.search) and self.actions:search(self.query, 96) or {}
+        local max_idx = math.max(1, #rows)
+        self.selected = math.min(max_idx, self.selected + 1)
         return true
     elseif action == 'context' and self.actions then
         self.actions:sync_to_native()
         return true
     end
     return false
+end
+
+function AbilitiesMod:handle_action(action)
+    return self:on_action(action)
+end
+
+function AbilitiesMod:get_hints()
+    return '[D-Pad] Browse Actions   [X] Reload Actions   [LB/RB] Switch Module   [B] Close'
+end
+
+function AbilitiesMod:get_prompt_pills(last_device)
+    if last_device == 'keyboard' or last_device == 'mouse' then
+        return {
+            { 'Arrows', 'Browse' },
+            { 'X',      'Reload' },
+            { 'Q/E',    'Modules' },
+            { 'Esc',    'Close' },
+        }
+    end
+    return {
+        { 'D-Pad', 'Browse' },
+        { 'X',     'Reload' },
+        { 'LB/RB', 'Modules' },
+        { 'B',     'Close' },
+    }
 end
 
 function AbilitiesMod:draw(imgui, dl, F_arg, L, x, y, w, h, _ctx)

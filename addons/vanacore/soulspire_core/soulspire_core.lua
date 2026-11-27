@@ -108,9 +108,32 @@ local status_diag    = nil
 local sf_state       = nil
 local sf_actions     = nil
 
-local ui_input_held  = false
+local ui_input_held         = false
+local last_lease_refresh    = 0
+local last_known_job        = 0
+local LEASE_REFRESH_INTERVAL = 0.50
 
-local function acquire_native_ui_input()
+local runtime_diag = {
+    crys_req_sent      = 0,
+    crys_rx            = 0,
+    oxhd_rx            = 0,
+    xinput_events      = 0,
+    dinput_events      = 0,
+    actions_dispatched = 0,
+    last_action        = 'none',
+    last_device        = 'gamepad',
+}
+
+local function native_clock()
+    if type(vana) == 'table' and vana.time and type(vana.time.clock) == 'function' then
+        local ok, t = pcall(vana.time.clock)
+        if ok and type(t) == 'number' and t >= 0 then return t end
+    end
+    return os.clock()
+end
+
+local function acquire_native_ui_input(now)
+    local ts = now or native_clock()
     if type(vana) == 'table' and vana.soulspire and type(vana.soulspire.acquire_ui_input) == 'function' then
         vana.soulspire.acquire_ui_input('soulspire_core', {
             block_mouse     = true,
@@ -119,20 +142,59 @@ local function acquire_native_ui_input()
             lease_ms        = 2000,
         })
         ui_input_held = true
+        last_lease_refresh = ts
     elseif type(vana) == 'table' and vana.gamepad and type(vana.gamepad.nav) == 'function' then
         vana.gamepad.nav(true)
         ui_input_held = true
+        last_lease_refresh = ts
+    end
+end
+
+-- Refresh lease while foreground & active without causing 60 Hz acquire/release churn on focus_loss.
+local function refresh_native_ui_input_if_active(now)
+    local ts = now or native_clock()
+    if not ui_input_held then return end
+    if type(vana) == 'table' and vana.soulspire and type(vana.soulspire.ui_input_state) == 'function' then
+        local ok, st = pcall(vana.soulspire.ui_input_state)
+        if ok and type(st) == 'table' then
+            if st.active ~= true then
+                -- C++ released ownership (e.g. focus_loss); do NOT re-acquire until user interacts again.
+                ui_input_held = false
+                return
+            end
+        end
+    end
+    if (ts - last_lease_refresh) >= LEASE_REFRESH_INTERVAL then
+        acquire_native_ui_input(ts)
     end
 end
 
 local function release_native_ui_input(reason)
     if not ui_input_held then return end
     ui_input_held = false
+    last_lease_refresh = 0
     if type(vana) == 'table' and vana.soulspire and type(vana.soulspire.release_ui_input) == 'function' then
         vana.soulspire.release_ui_input('soulspire_core', reason or 'closed')
     elseif type(vana) == 'table' and vana.gamepad and type(vana.gamepad.nav) == 'function' then
         vana.gamepad.nav(false)
     end
+end
+
+local function dispatch_ui_action(act, source)
+    if not focus or not focus:is_hub_open() or type(act) ~= 'string' or act == '' then
+        return false
+    end
+    if not ui_input_held then
+        acquire_native_ui_input()
+    end
+    runtime_diag.actions_dispatched = runtime_diag.actions_dispatched + 1
+    runtime_diag.last_action = act
+    runtime_diag.last_device = (input and input.last_device) or source or 'gamepad'
+    local handled = focus:handle_action(act, nil)
+    if not focus:is_hub_open() then
+        release_native_ui_input((source or 'ui') .. '_close')
+    end
+    return handled
 end
 
 local function save_core_settings()
@@ -143,7 +205,7 @@ local function save_core_settings()
     end
 end
 
-local function open_hub(module_id)
+local function open_hub(module_id, from_native_menu)
     if not focus then return end
     if type(module_id) == 'string' and module_id ~= '' and registry then
         local idx = registry:find_index(module_id)
@@ -152,11 +214,15 @@ local function open_hub(module_id)
             focus:select_module(m.id)
         end
     end
-    focus:open_hub()
+    if from_native_menu and type(focus.open_from_native_menu) == 'function' then
+        focus:open_from_native_menu(nil)
+    else
+        focus:open_hub()
+    end
     if ui then ui:request_window_focus() end
     acquire_native_ui_input()
-    if input and input.arm_confirm_guard then
-        input:arm_confirm_guard(0.22)
+    if input and type(input.arm_open_guard) == 'function' then
+        input:arm_open_guard(0.22)
     end
     if sf_actions and sf_state and (not sf_state.synced or #(sf_state.catalog or {}) == 0) then
         sf_actions.sync()
@@ -166,6 +232,9 @@ end
 local function close_hub(reason)
     if focus and focus:is_hub_open() then
         focus:close_hub()
+    end
+    if input and type(input.reset) == 'function' then
+        input:reset()
     end
     release_native_ui_input(reason or 'closed')
 end
@@ -259,7 +328,7 @@ local function init_all()
     focus    = (FocusMod and registry) and FocusMod.new(registry) or nil
     input    = InputMod and InputMod.new({
         bindings = saved_binds,
-        clock    = (type(vana) == 'table' and vana.time and vana.time.clock) or os.clock,
+        clock    = native_clock,
     }) or nil
 
     if SfArt and SfArt.setRoot then
@@ -287,6 +356,18 @@ local function init_all()
             soul_registry = RegistryMod and RegistryMod.souls or nil,
             data_service  = data_service,
             assets        = assets,
+            clock         = native_clock,
+            send_packet   = function(pkt)
+                if type(pkt) ~= 'string' or #pkt ~= 16 then
+                    return nil, 'Invalid crystal packet.'
+                end
+                if type(vana) == 'table' and vana.packets and type(vana.packets.inject) == 'function' then
+                    runtime_diag.crys_req_sent = runtime_diag.crys_req_sent + 1
+                    vana.packets.inject(false, CsProto.REQUEST_ID, pkt)
+                    return true
+                end
+                return nil, 'VanaCore packet transport unavailable.'
+            end,
             dll_status_fn = function()
                 local d = (type(vana) == 'table' and vana.soulspire and vana.soulspire.diagnostics)
                     and vana.soulspire.diagnostics() or {}
@@ -344,7 +425,7 @@ local function init_all()
 
     -- 5. Diagnostics, Mob Status & Flintlock
     if StatusDiagMod and registry then
-        status_diag = StatusDiagMod.new(flintlock, mob_status, startup_report, identity, actions)
+        status_diag = StatusDiagMod.new(flintlock, mob_status, startup_report, identity, actions, runtime_diag)
         registry:attach_controller('journal', status_diag, true)
     end
 
@@ -438,12 +519,16 @@ if type(vana) == 'table' and vana.events then
     end)
 
     vana.events.on('present', function()
-        local now = (vana.time and vana.time.clock and vana.time.clock()) or os.clock()
+        local now = native_clock()
 
         -- Native main Commands menu activation (Hooks #28-#31: Status -> Soulspire -> Equipment)
         if vana.soulspire and type(vana.soulspire.consume_open_core) == 'function' then
             if vana.soulspire.consume_open_core() > 0 then
-                toggle_hub(nil)
+                if focus and focus:is_hub_open() then
+                    close_hub('native_menu_toggle')
+                else
+                    open_hub(nil, true)
+                end
             end
         end
 
@@ -454,25 +539,15 @@ if type(vana) == 'table' and vana.events then
         if character_mod and type(character_mod.tick) == 'function' then
             character_mod:tick(now)
         end
-        if character_mod and type(character_mod.observe_hud_identity) == 'function'
-            and type(vana) == 'table' and vana.soulspire and type(vana.soulspire.identity) == 'function' then
-            local nid = vana.soulspire.identity()
-            if type(nid) == 'table' and nid.known and tonumber(nid.job) and tonumber(nid.job) > 0 then
-                character_mod:observe_hud_identity(tonumber(nid.branch) or 0, tonumber(nid.job))
-            end
-        end
 
-        -- Tick directional hold-to-repeat when hub is open
+        -- Tick directional hold-to-repeat & throttle lease refresh when hub is open
         local hub_open = focus ~= nil and focus:is_hub_open()
         if hub_open then
-            acquire_native_ui_input()
+            refresh_native_ui_input_if_active(now)
             if input and type(input.tick) == 'function' then
-                local repeats = input:tick(now)
-                if type(repeats) == 'table' then
-                    for _, act in ipairs(repeats) do
-                        focus:handle_action(act, nil)
-                    end
-                end
+                input:tick(now, function(act)
+                    dispatch_ui_action(act, 'repeat')
+                end, true)
             end
         elseif ui_input_held then
             release_native_ui_input('hub_closed')
@@ -480,6 +555,22 @@ if type(vana) == 'table' and vana.events then
 
         local imgui = vana.imgui
         if imgui then
+            if hub_open and input and type(input.on_mouse_activity) == 'function' and type(imgui.GetIO) == 'function' then
+                local ok_io, io_obj = pcall(imgui.GetIO)
+                if ok_io and io_obj then
+                    local dx = (io_obj.MouseDelta and tonumber(io_obj.MouseDelta.x)) or 0
+                    local dy = (io_obj.MouseDelta and tonumber(io_obj.MouseDelta.y)) or 0
+                    local clicked = (type(imgui.IsMouseClicked) == 'function')
+                        and (imgui.IsMouseClicked(0) or imgui.IsMouseClicked(1)) or false
+                    if clicked or math.abs(dx) > 1.5 or math.abs(dy) > 1.5 then
+                        input:on_mouse_activity(now)
+                        runtime_diag.last_device = 'mouse'
+                        if not ui_input_held then
+                            acquire_native_ui_input(now)
+                        end
+                    end
+                end
+            end
             if soulhud then
                 soulhud:render(imgui, hub_open)
             end
@@ -495,7 +586,7 @@ if type(vana) == 'table' and vana.events then
     vana.events.on('packet_in', function(e)
         if type(e) ~= 'table' then return end
         local id, data, size = e.id, e.data, e.size
-        local now = (vana.time and vana.time.clock and vana.time.clock()) or os.clock()
+        local now = native_clock()
         if sf_actions then
             if type(sf_actions.handlePacketIn) == 'function' then
                 sf_actions.handlePacketIn(id, data, size)
@@ -503,11 +594,52 @@ if type(vana) == 'table' and vana.events then
                 sf_actions.handlePacket(id, data, size)
             end
         end
-        if character_mod and type(character_mod.handle_packet_in) == 'function' then
-            character_mod:handle_packet_in(id, data, now, size)
+        if id == 0x1FF and character_mod and type(character_mod.handle_packet_in) == 'function' then
+            if character_mod:handle_packet_in(id, data, now, size) then
+                runtime_diag.crys_rx = runtime_diag.crys_rx + 1
+            end
+        end
+        -- Decode binary 0x1FC OXHD authoritatively in Lua so Soul identity is always accurate
+        -- even on VanaCore builds where C++ 0x1FC byte offsets differed.
+        if id == 0x1FC and type(data) == 'string' then
+            local len = (type(size) == 'number' and size > 0 and size <= #data) and size or #data
+            if len >= 16 and data:sub(5, 8) == 'OXHD' and data:byte(9) == 1 then
+                runtime_diag.oxhd_rx = runtime_diag.oxhd_rx + 1
+                local unlocked = (data:byte(10) or 0) == 1
+                local job_id   = data:byte(11) or 0
+                local key_len  = data:byte(12) or 0
+                if key_len > 0 and 16 + key_len <= len and identity and type(identity.resolve_key) == 'function' then
+                    local soul_key = data:sub(17, 16 + key_len)
+                    local rec = identity:resolve_key(soul_key)
+                    if rec and rec.job_id == job_id and unlocked then
+                        if character_mod and type(character_mod.observe_hud_identity) == 'function' then
+                            character_mod:observe_hud_identity(rec.branch_id, rec.job_id)
+                        end
+                        if type(vana) == 'table' and vana.soulspire and type(vana.soulspire.set_identity) == 'function' then
+                            pcall(vana.soulspire.set_identity, rec.job_id, rec.branch_id, 0, 0)
+                        end
+                    end
+                end
+            end
         end
         if soulhud and type(soulhud.handle_packet_in) == 'function' then
             soulhud:handle_packet_in(id, data, now, size)
+        end
+        -- Job / Level change (0x061 Char Stats): refresh Soul collection & invalidate stale Soulforge state
+        if id == 0x061 and type(data) == 'string' and #data >= 14 then
+            local new_job = data:byte(13) or 0
+            if new_job >= 1 and new_job <= 22 and new_job ~= last_known_job then
+                local prev_job = last_known_job
+                last_known_job = new_job
+                if prev_job > 0 then
+                    if sf_actions and type(sf_actions.invalidate) == 'function' then
+                        sf_actions.invalidate('job_change')
+                    end
+                    if character_mod and type(character_mod.sync) == 'function' then
+                        character_mod:sync(false)
+                    end
+                end
+            end
         end
         if id == 0x00A or id == 0x00B then
             close_hub(id == 0x00A and 'zone_in' or 'zone_out')
@@ -527,40 +659,49 @@ if type(vana) == 'table' and vana.events then
     -- Authoritative native XInput controller routing (LB=8 / RB=9 module switching, D-Pad, A/B/X/Y, L-Stick)
     vana.events.on('xinput_button', function(e)
         if type(e) ~= 'table' or not focus or not focus:is_hub_open() then return false end
+        runtime_diag.xinput_events = runtime_diag.xinput_events + 1
         if input and type(input.on_xinput_button) == 'function' then
-            local consumed = input:on_xinput_button(e, function(act)
-                if act == 'cancel' and not (focus:active_module() and focus:active_module().controller and focus:active_module().controller.has_modal and focus:active_module().controller:has_modal()) then
-                    local handled = focus:handle_action(act, nil)
-                    if not focus:is_hub_open() then release_native_ui_input('gamepad_cancel') end
-                    return handled
-                end
-                return focus:handle_action(act, nil)
-            end, true)
-            if consumed then
-                e.blocked = true
-                return true
-            end
+            input:on_xinput_button(e, function(act)
+                return dispatch_ui_action(act, 'xinput')
+            end, true, native_clock())
         end
         -- While Core Hub is active, consume ALL gamepad events so nothing leaks to FFXI gameplay
         e.blocked = true
         return true
     end)
 
-    -- Authoritative native DirectInput controller routing (L1=4 / R1=5 module switching, POV, buttons)
+    -- Authoritative native XInput state filtering (Left Stick navigation + zeroing game state while Hub open)
+    vana.events.on('xinput_state', function(e)
+        if type(e) ~= 'table' or not focus or not focus:is_hub_open() then return false end
+        if input and type(input.filter_xinput_state) == 'function' then
+            input:filter_xinput_state(e.state, e.state_modified, function(act)
+                return dispatch_ui_action(act, 'xinput_stick')
+            end, true, native_clock())
+        end
+        return true
+    end)
+
+    -- Authoritative native DirectInput controller routing (DIJOYSTATE offsets: 32=POV, 48+n=buttons, 0/4=LX/LY)
     vana.events.on('dinput_button', function(e)
         if type(e) ~= 'table' or not focus or not focus:is_hub_open() then return false end
+        runtime_diag.dinput_events = runtime_diag.dinput_events + 1
         if input and type(input.on_dinput_button) == 'function' then
-            local consumed = input:on_dinput_button(e, function(act)
-                local handled = focus:handle_action(act, nil)
-                if not focus:is_hub_open() then release_native_ui_input('gamepad_cancel') end
-                return handled
-            end, true)
-            if consumed then
-                e.blocked = true
-                return true
-            end
+            input:on_dinput_button(e, function(act)
+                return dispatch_ui_action(act, 'dinput')
+            end, true, native_clock())
         end
         e.blocked = true
+        return true
+    end)
+
+    -- Authoritative native DirectInput state filtering (Left Stick navigation + neutralizing game state while Hub open)
+    vana.events.on('dinput_state', function(e)
+        if type(e) ~= 'table' or not focus or not focus:is_hub_open() then return false end
+        if input and type(input.filter_dinput_state) == 'function' then
+            input:filter_dinput_state(e.state, e.state_modified, function(act)
+                return dispatch_ui_action(act, 'dinput_stick')
+            end, true, native_clock())
+        end
         return true
     end)
 
@@ -573,6 +714,8 @@ if type(vana) == 'table' and vana.events then
         if not is_down then return false end
         local vk_to_action = {
             [0x1B] = 'cancel',      -- VK_ESCAPE
+            [0x08] = 'cancel',      -- VK_BACK
+            [0x09] = 'focus_dock',  -- VK_TAB
             [0x51] = 'module_prev', -- Q
             [0x45] = 'module_next', -- E
             [0xDB] = 'module_prev', -- [
@@ -582,16 +725,16 @@ if type(vana) == 'table' and vana.events then
             [0x25] = 'left',        -- VK_LEFT
             [0x27] = 'right',       -- VK_RIGHT
             [0x0D] = 'confirm',     -- VK_RETURN
+            [0x20] = 'confirm',     -- VK_SPACE
+            [0x58] = 'context',     -- X
+            [0x59] = 'details',     -- Y
             [0x52] = 'respec_ws',   -- R
             [0x54] = 'toggle_paths',-- T
         }
         local act = vk_to_action[vk]
         if act then
             if input then input.last_device = 'keyboard' end
-            focus:handle_action(act, nil)
-            if not focus:is_hub_open() then
-                release_native_ui_input('keyboard_cancel')
-            end
+            dispatch_ui_action(act, 'keyboard')
             e.blocked = true
             return true
         end
@@ -679,7 +822,22 @@ end
 
 return {
     startup_report = startup_report,
+    runtime_diag   = runtime_diag,
     open_hub       = open_hub,
     close_hub      = close_hub,
     toggle_hub     = toggle_hub,
+    get_state      = function()
+        return {
+            focus         = focus,
+            input         = input,
+            character_mod = character_mod,
+            weapon_mod    = weapon_mod,
+            soul_talents  = soul_talents,
+            abilities_mod = abilities_mod,
+            status_diag   = status_diag,
+            assets        = assets,
+            sf_state      = sf_state,
+            runtime_diag  = runtime_diag,
+        }
+    end,
 }

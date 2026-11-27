@@ -7,13 +7,14 @@ local F = require('core.foundations')
 local StatusDiagMod = {}
 StatusDiagMod.__index = StatusDiagMod
 
-function StatusDiagMod.new(flintlock_svc, mob_status_svc, startup_report, identity_svc, actions_svc)
+function StatusDiagMod.new(flintlock_svc, mob_status_svc, startup_report, identity_svc, actions_svc, runtime_diag)
     return setmetatable({
         flintlock      = flintlock_svc,
         mob_status     = mob_status_svc,
         startup_report = startup_report,
         identity       = identity_svc,
         actions        = actions_svc,
+        runtime_diag   = runtime_diag,
         subtab         = 'diag', -- 'diag' | 'mobs' | 'flintlock'
     }, StatusDiagMod)
 end
@@ -22,7 +23,7 @@ function StatusDiagMod:on_open() end
 function StatusDiagMod:on_activate() end
 function StatusDiagMod:on_close() end
 
-function StatusDiagMod:handle_action(action)
+function StatusDiagMod:on_action(action)
     if action == 'left' or action == 'right' then
         local order = { 'diag', 'mobs', 'flintlock' }
         local idx = 1
@@ -32,8 +33,38 @@ function StatusDiagMod:handle_action(action)
         idx = (action == 'right') and ((idx % #order) + 1) or (((idx - 2) % #order) + 1)
         self.subtab = order[idx]
         return true
+    elseif action == 'context' then
+        if type(vana) == 'table' and vana.soulspire and type(vana.soulspire.reload) == 'function' then
+            pcall(vana.soulspire.reload)
+        end
+        return true
     end
     return false
+end
+
+function StatusDiagMod:handle_action(action)
+    return self:on_action(action)
+end
+
+function StatusDiagMod:get_hints()
+    return '[D-Pad Left/Right] Switch Subtab   [X] Reload Native   [LB/RB] Switch Module   [B] Close'
+end
+
+function StatusDiagMod:get_prompt_pills(last_device)
+    if last_device == 'keyboard' or last_device == 'mouse' then
+        return {
+            { 'Left/Right', 'Subtab' },
+            { 'X',          'Reload' },
+            { 'Q/E',        'Modules' },
+            { 'Esc',        'Close' },
+        }
+    end
+    return {
+        { 'D-Pad', 'Subtab' },
+        { 'X',     'Reload' },
+        { 'LB/RB', 'Modules' },
+        { 'B',     'Close' },
+    }
 end
 
 function StatusDiagMod:draw(imgui, dl, F_arg, L, x, y, w, h, _ctx)
@@ -122,11 +153,20 @@ function StatusDiagMod:draw(imgui, dl, F_arg, L, x, y, w, h, _ctx)
                 tonumber(tstats.loaded) or 0, tonumber(tstats.bytes) or 0,
                 tonumber(tstats.hits) or 0, tonumber(tstats.misses) or 0,
                 tonumber(tstats.failures) or 0, tostring(tstats.device_ready)))
-            imgui.Text(string.format('Packets: 1FF=%d 1FC=%d 1FD=%d 1FE=%d | OXHUD=%d OXMOB=%d OXTAL=%d | Suppressed=%d',
+            imgui.Text(string.format('Packets (Binary): 1FF=%d 1FC=%d 1FD=%d 1FE=%d | Legacy 0x017 Chat: OXHUD=%d OXMOB=%d OXTAL=%d Suppressed=%d',
                 tonumber(d.packets_1ff) or 0, tonumber(d.packets_1fc) or 0,
                 tonumber(d.packets_1fd) or 0, tonumber(d.packets_1fe) or 0,
                 tonumber(d.packets_oxhud) or 0, tonumber(d.packets_oxmob) or 0,
                 tonumber(d.packets_oxtal) or 0, tonumber(d.suppressed_chat_frames) or 0))
+            local rd = self.runtime_diag
+            if type(rd) == 'table' then
+                imgui.Text(string.format('Soul Sync (Lua): req_sent=%d crys_rx=%d oxhd_rx=%d | Controller: xinput=%d dinput=%d actions=%d last=%s (%s)',
+                    tonumber(rd.crys_req_sent) or 0, tonumber(rd.crys_rx) or 0, tonumber(rd.oxhd_rx) or 0,
+                    tonumber(rd.xinput_events) or 0, tonumber(rd.dinput_events) or 0,
+                    tonumber(rd.actions_dispatched) or 0,
+                    tostring(rd.last_action or 'none'), tostring(rd.last_device or 'gamepad')))
+            end
+            imgui.Text('Note: [OK] hooks and active input ownership indicate installation/claim only, not live Windows certification.')
             imgui.Separator()
             for _, h in ipairs(d.hooks or {}) do
                 imgui.Text(string.format('[%s] %-24s (%s / %s) +0x%X hits=%d — %s',

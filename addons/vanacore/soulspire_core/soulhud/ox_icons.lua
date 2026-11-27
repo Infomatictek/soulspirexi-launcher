@@ -18,6 +18,17 @@ local function resolveBase()
     return base, inst
 end
 
+local function fileExists(path)
+    if type(path) ~= 'string' or path == '' then return false end
+    if type(vana) == 'table' and vana.fs and type(vana.fs.exists) == 'function' then
+        local ok, ex = pcall(vana.fs.exists, path)
+        if ok then return ex == true end
+    end
+    local f = io.open(path, 'rb')
+    if f then f:close(); return true end
+    return false
+end
+
 local function loadCandidates(key, candidates)
     local cached = fileCache[key]
     if cached ~= nil then return cached ~= false and cached or nil end
@@ -26,10 +37,12 @@ local function loadCandidates(key, candidates)
         return nil
     end
     for _, path in ipairs(candidates) do
-        local id = vana.soulspire.load_texture(path)
-        if type(id) == 'number' and id ~= 0 then
-            fileCache[key] = id
-            return id
+        if fileExists(path) then
+            local id = vana.soulspire.load_texture(path)
+            if type(id) == 'number' and id ~= 0 then
+                fileCache[key] = id
+                return id
+            end
         end
     end
     fileCache[key] = false

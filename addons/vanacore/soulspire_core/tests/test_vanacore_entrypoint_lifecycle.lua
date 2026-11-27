@@ -33,6 +33,7 @@ local VALID_VANACORE_EVENTS = {
     load = true, unload = true, present = true, command = true,
     packet_in = true, packet_out = true, key = true, mouse = true,
     xinput_button = true, dinput_button = true,
+    xinput_state = true, dinput_state = true,
     zone_change = true, job_change = true, logout = true,
 }
 
@@ -215,7 +216,11 @@ _G.vana = {
         folder = function() return '/tmp/soulspire_test_cfg' end,
     },
     fs = {
-        exists = function() return false end,
+        exists = function(p)
+            local f = type(p) == 'string' and io.open(p, 'rb') or nil
+            if f then f:close(); return true end
+            return false
+        end,
         create_dir = function() return true end,
     },
     gamepad = {

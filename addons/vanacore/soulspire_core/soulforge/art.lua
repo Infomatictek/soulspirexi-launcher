@@ -31,6 +31,17 @@ local function resolveBase()
     return base
 end
 
+local function fileExists(path)
+    if type(path) ~= 'string' or path == '' then return false end
+    if type(vana) == 'table' and vana.fs and type(vana.fs.exists) == 'function' then
+        local ok, ex = pcall(vana.fs.exists, path)
+        if ok then return ex == true end
+    end
+    local f = io.open(path, 'rb')
+    if f then f:close(); return true end
+    return false
+end
+
 local function loadCandidates(cacheKey, candidates)
     local cached = A.textures[cacheKey]
     if cached ~= nil then
@@ -45,13 +56,15 @@ local function loadCandidates(cacheKey, candidates)
 
     local last_err = 'missing'
     for _, filename in ipairs(candidates) do
-        local id, why = vana.soulspire.load_texture(filename)
-        if type(id) == 'number' and id ~= 0 then
-            A.textures[cacheKey] = id
-            A.status[cacheKey] = 'ready'
-            return id
-        elseif type(why) == 'string' then
-            last_err = why
+        if fileExists(filename) then
+            local id, why = vana.soulspire.load_texture(filename)
+            if type(id) == 'number' and id ~= 0 then
+                A.textures[cacheKey] = id
+                A.status[cacheKey] = 'ready'
+                return id
+            elseif type(why) == 'string' then
+                last_err = why
+            end
         end
     end
 

@@ -17,6 +17,20 @@ function Assets.new(addon_path, install_dir)
     }, Assets)
 end
 
+local function file_exists(path)
+    if type(path) ~= 'string' or path == '' then return false end
+    if type(vana) == 'table' and vana.fs and type(vana.fs.exists) == 'function' then
+        local ok, ex = pcall(vana.fs.exists, path)
+        if ok then return ex == true end
+    end
+    local f = io.open(path, 'rb')
+    if f then
+        f:close()
+        return true
+    end
+    return false
+end
+
 local function load_candidates(self, cache_key, candidates)
     if self.textures[cache_key] ~= nil then
         return self.textures[cache_key] ~= false and self.textures[cache_key] or nil
@@ -30,14 +44,16 @@ local function load_candidates(self, cache_key, candidates)
 
     local last_err = 'not found'
     for _, full_path in ipairs(candidates) do
-        local id, w, h = vana.soulspire.load_texture(full_path)
-        if type(id) == 'number' and id ~= 0 then
-            self.textures[cache_key] = id
-            self.dims[cache_key] = { width = tonumber(w) or 0, height = tonumber(h) or 0 }
-            self.status[cache_key] = 'ready'
-            return id
-        elseif type(w) == 'string' then
-            last_err = w
+        if file_exists(full_path) then
+            local id, w, h = vana.soulspire.load_texture(full_path)
+            if type(id) == 'number' and id ~= 0 then
+                self.textures[cache_key] = id
+                self.dims[cache_key] = { width = tonumber(w) or 0, height = tonumber(h) or 0 }
+                self.status[cache_key] = 'ready'
+                return id
+            elseif type(w) == 'string' then
+                last_err = w
+            end
         end
     end
 
@@ -52,6 +68,7 @@ function Assets:load_texture(name)
     if safe == '' then return nil end
     return load_candidates(self, name, {
         self.addon_path .. '/assets/' .. safe .. '.png',
+        self.addon_path .. '/assets/crystals/' .. safe .. '.png',
         self.install_dir .. '/addons/vanacore/soulspire_core/assets/' .. safe .. '.png',
         self.install_dir .. '/addons/ashita4/soulspire_core/assets/' .. safe .. '.png',
         self.install_dir .. '/addons/ashita/soulspire_core/assets/' .. safe .. '.png',
@@ -66,6 +83,7 @@ function Assets:load_from_addon(sibling_addon, name)
     local safe_name  = name:gsub('[^%w_%-]', '')
     if safe_addon == '' or safe_name == '' then return nil end
     return load_candidates(self, safe_addon .. ':' .. safe_name, {
+        self.addon_path .. '/assets/crystals/' .. safe_name .. '.png',
         self.addon_path .. '/assets/' .. safe_addon .. '/' .. safe_name .. '.png',
         self.addon_path .. '/assets/' .. safe_name .. '.png',
         self.install_dir .. '/addons/ashita4/' .. safe_addon .. '/assets/' .. safe_name .. '.png',
