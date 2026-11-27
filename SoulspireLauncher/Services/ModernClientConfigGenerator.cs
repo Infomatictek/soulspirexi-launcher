@@ -214,6 +214,10 @@ public sealed class ModernClientConfigGenerator
         sb.AppendLine("enabled=0");
         sb.AppendLine();
         sb.AppendLine("[mcp]");
+        sb.AppendLine("available=0");
+        sb.AppendLine("enabled=0");
+        sb.AppendLine();
+        sb.AppendLine("[developer]");
         sb.AppendLine("enabled=0");
         sb.AppendLine();
         sb.AppendLine("[soulspire]");

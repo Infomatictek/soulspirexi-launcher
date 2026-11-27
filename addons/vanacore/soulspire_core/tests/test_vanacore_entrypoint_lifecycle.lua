@@ -451,22 +451,28 @@ local REQUIRED_HUB_FLAGS = 1 + 2 + 4 + 8 + 16 + 32 + 128 + 256 -- NoTitleBar|NoR
 assert_eq(bit.band(hub_begin.flags, REQUIRED_HUB_FLAGS), REQUIRED_HUB_FLAGS,
     string.format('Core Shell missing required frameless flags (got 0x%X, need 0x%X)', hub_begin.flags, REQUIRED_HUB_FLAGS))
 
--- Verify unified native hooks readout (never 0 hooks active!) and confirmed Shinobi state!
-assert_true(has_drawn_text('VanaCore Native: 21/21 hooks active'), 'Character tab must show 21/21 hooks active')
-assert_true(not has_drawn_text('0 hooks active'), 'Character tab must NEVER show 0 hooks active when 21/21 are installed')
+-- Verify default player UI hides developer hook counts & Diagnostics tab while displaying live synced Shinobi!
+assert_true(has_drawn_text('Soul Sanctum Ready'), 'Default player Character tab must show clean Soul Sanctum Ready status')
+assert_true(not has_drawn_text('VanaCore Native: 21/21 hooks active'), 'Default player Character tab must NOT expose internal hook counts')
+assert_true(not has_drawn_text('Diagnostics'), 'Default player tab ribbon must NOT expose Diagnostics tab')
+assert_true(not has_drawn_text('Equipment'), 'Default player tab ribbon must NOT expose PHASE D placeholder tab')
 assert_true(has_drawn_text('SHINOBI') or has_drawn_text('Shinobi'), 'Character tab must display live synced Shinobi')
 assert_true(not has_drawn_text('Server did not confirm Soul state'), 'Character tab must NOT show timeout error after valid 0x1FF CRYS reply')
 
--- 6. Render EVERY Core module tab & Diagnostics subtabs via real :draw(...) (catches signature/Vec2/nil bugs!)
-local module_commands = {
+-- Verify developer diagnostic commands are gated by default in player mode
+mod.close_hub('dev_gate_check')
+assert_true(emit('command', { command = '/soulspire diag' }) == true, '/soulspire diag must be handled')
+assert_eq(ui_input.active, false, '/soulspire diag must NOT open Diagnostics hub when devmode is off')
+assert_true(emit('command', { command = '/soulhud demo shinobi' }) == true, '/soulhud demo must be handled')
+assert_true(string.find(logs[#logs] or '', 'developer mode', 1, true) ~= nil, '/soulhud demo must be gated when devmode is off')
+
+-- 6. Render EVERY player Core module tab via real :draw(...) (catches signature/Vec2/nil bugs!)
+local player_module_commands = {
     { cmd = '/soulspire character',   label = 'character' },
     { cmd = '/talents',               label = 'weapon_mastery' },
     { cmd = '/soulspire soultalents', label = 'soul_talents' },
-    { cmd = '/soulspire diag',        label = 'journal_diag' },
-    { cmd = '/mobstatus',             label = 'journal_mobs' },
-    { cmd = '/flintlock',             label = 'journal_flintlock' },
 }
-for _, tc in ipairs(module_commands) do
+for _, tc in ipairs(player_module_commands) do
     mod.close_hub('switch')
     assert_true(emit('command', { command = tc.cmd }) == true, tc.cmd .. ' must be handled')
     drawn_texts = {}
@@ -474,12 +480,39 @@ for _, tc in ipairs(module_commands) do
     assert_stacks_balanced('module_' .. tc.label)
 end
 
--- Also directly test 'abilities' tab via open_hub
+-- Verify Soul Talents live telemetry populated from binary 0x1FC OXHD (PLAYER-CMD-001 fix)
+assert_true(not has_drawn_text('Waiting for live [OXHUD] server telemetry'), 'Soul Talents tab must receive live 0x1FC OXHD telemetry')
+
+-- Also directly test 'abilities' tab via open_hub (default player view must hide dev reload button & raw vis=)
 mod.open_hub('abilities')
 drawn_texts = {}
 emit('present')
 assert_stacks_balanced('module_abilities')
 assert_true(has_drawn_text('SOUL ACTIONS') or has_drawn_text('Soul Actions') or draw_calls > 0, 'Abilities module must draw cleanly')
+assert_true(not has_drawn_text('Native hooks:'), 'Player Soul Actions view must NOT expose raw native hook counts')
+
+-- 6b. Enable explicit local developer diagnostics (/soulspire devmode on) and verify Diagnostics, Mob Status, Flintlock & hooks
+mod.close_hub('devmode_enable')
+assert_true(emit('command', { command = '/soulspire devmode on' }) == true, '/soulspire devmode on must be handled')
+mod.open_hub('character')
+drawn_texts = {}
+emit('present')
+assert_stacks_balanced('devmode_character')
+assert_true(has_drawn_text('VanaCore Native: 21/21 hooks active'), 'Devmode Character tab must show 21/21 hooks active')
+assert_true(not has_drawn_text('0 hooks active'), 'Character tab must NEVER show 0 hooks active when 21/21 are installed')
+
+local dev_module_commands = {
+    { cmd = '/soulspire diag',        label = 'journal_diag' },
+    { cmd = '/mobstatus',             label = 'journal_mobs' },
+    { cmd = '/flintlock',             label = 'journal_flintlock' },
+}
+for _, tc in ipairs(dev_module_commands) do
+    mod.close_hub('switch')
+    assert_true(emit('command', { command = tc.cmd }) == true, tc.cmd .. ' must be handled in devmode')
+    drawn_texts = {}
+    emit('present')
+    assert_stacks_balanced('module_' .. tc.label)
+end
 
 -- Verify Diagnostics tab specifically rendered real catalog paths & 21/21 hooks without crashing drawOrnatePanel
 mod.close_hub('diag_check')

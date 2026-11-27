@@ -620,7 +620,9 @@ function UI:draw_hub(native, bridge_mode)
         end
 
         -- Center: Floating Beveled Dark Ribbon housing Dynamic Registry Tabs
-        local modules = self.registry:sections()
+        local modules = (type(self.registry.visible_sections) == 'function')
+            and self.registry:visible_sections(self.dev_mode == true)
+            or self.registry:sections()
         local count = math.max(1, #modules)
         local availNavW = math.max(220, navRightLimit - brandEnd - math.floor(14 * s))
         local idealRibW = math.min(availNavW, math.floor(count * 196 * s + 96 * s))
@@ -668,12 +670,13 @@ function UI:draw_hub(native, bridge_mode)
 
         for idx, mod in ipairs(modules) do
             local tx = tabsX + (idx - 1) * (tabW + tabGap)
-            local isActive = (idx == self.focus.active_index)
+            local real_idx = self.registry:index_of(mod.id) or idx
+            local isActive = (real_idx == self.focus.active_index)
             local isAvail  = (mod.available == true)
 
             imgui.SetCursorScreenPos({ tx, tabY })
             if imgui.InvisibleButton('##core_tab_' .. mod.id, { tabW, tabH }) then
-                self.focus:select_index(idx)
+                self.focus:select_index(real_idx)
             end
             local hovered = imgui.IsItemHovered and imgui.IsItemHovered() or false
 

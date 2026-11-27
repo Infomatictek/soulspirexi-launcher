@@ -88,10 +88,6 @@ function M.renderConfig(imgui, soulDef, cfg, settingsMod, callbacks)
             settingsMod.save(cfg)
         end
 
-        imgui.Separator()
-        imgui.TextColored({ 0.224, 0.812, 0.898, 1.0 }, 'PREVIEW WITHOUT COMBAT')
-        imgui.Text('/soulhud demo <soulKey|cycle|off>')
-
         if soulDef and #(soulDef.resources or {}) > 0 then
             imgui.Separator()
             imgui.TextColored({ 0.655, 0.549, 0.878, 1.0 }, ('TRACKERS (%s):'):format(soulDef.name))

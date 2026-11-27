@@ -817,14 +817,18 @@ function Character:draw(imgui, dl, F, L, x, y, w, h, ctx)
     local hooksActive = dll and (tonumber(dll.hooks) or tonumber(dll.hooks_installed) or 0) or 0
     local hooksTotal  = dll and (tonumber(dll.hooks_total) or 0) or 0
     local dllLine
-    if dll and dll.loaded then
-        if hooksTotal > 0 then
-            dllLine = string.format('VanaCore Native: %d/%d hooks active', hooksActive, hooksTotal)
+    if self.dev_mode then
+        if dll and dll.loaded then
+            if hooksTotal > 0 then
+                dllLine = string.format('VanaCore Native: %d/%d hooks active', hooksActive, hooksTotal)
+            else
+                dllLine = string.format('VanaCore Native: %d hooks active', hooksActive)
+            end
         else
-            dllLine = string.format('VanaCore Native: %d hooks active', hooksActive)
+            dllLine = 'VanaCore Native: standby'
         end
     else
-        dllLine = 'VanaCore Native: standby'
+        dllLine = (dll and dll.loaded and hooksActive > 0) and 'Soul Sanctum Ready' or 'Soul Sanctum Connecting...'
     end
     F.drawShadowText(imgui, dl, x + pad + 12 * s, boxY + 54 * s,
         F.fitText(imgui, dllLine, leftW - pad * 2 - 24 * s, 0.78 * s),
@@ -861,10 +865,13 @@ function Character:draw(imgui, dl, F, L, x, y, w, h, ctx)
         local ry = rowStartY + (i - 1) * (rowH + rowGap)
         local isSel = (i == self.selected_idx)
         imgui.SetCursorScreenPos({ midPanelX + pad, ry })
+        local effLvl = tonumber(snap.effective_level) or 0
+        local reqLvl = tonumber(e.req_level) or 1
+        local levelOk = (e.branch == 0) or (effLvl == 0) or (effLvl >= reqLvl)
         if imgui.InvisibleButton('##ch_soul_' .. tostring(e.branch), { rowW, rowH }) then
             self.selected_idx = i
             self.region = 'crystals'
-            if self:_can_socket(snap) and e.owned and not e.active then
+            if self:_can_socket(snap) and e.owned and levelOk and not e.active then
                 self.confirm_entry = e
                 self.region = 'confirm_socket'
                 self.confirm_btn = 1
@@ -995,7 +1002,11 @@ function Character:draw(imgui, dl, F, L, x, y, w, h, ctx)
         end
 
         if self.data_service and self.data_service.get_abilities_for_soul and focused.key and focused.key ~= 'base' then
-            local okAb, abList = pcall(self.data_service.get_abilities_for_soul, self.data_service, focused.key)
+            local lookup_id = (type(focused.id) == 'string' and focused.id ~= '') and focused.id or focused.key
+            local okAb, abList = pcall(self.data_service.get_abilities_for_soul, self.data_service, lookup_id)
+            if (not okAb or type(abList) ~= 'table' or #abList == 0) and lookup_id ~= focused.key then
+                okAb, abList = pcall(self.data_service.get_abilities_for_soul, self.data_service, focused.key)
+            end
             if okAb and type(abList) == 'table' and #abList > 0 and iy < bodyY + bodyH - 140 * s then
                 F.drawDivider(dl, rx + pad, iy, innerW, F.u32.border_subtle)
                 iy = iy + 10 * s
@@ -1017,6 +1028,9 @@ function Character:draw(imgui, dl, F, L, x, y, w, h, ctx)
 
         local actBtnH = math.floor(42 * s)
         local actY = bodyY + bodyH - pad - actBtnH
+        local focusedEffLvl = tonumber(snap.effective_level) or 0
+        local focusedReqLvl = tonumber(focused.req_level) or 1
+        local focusedLevelOk = (focused.branch == 0) or (focusedEffLvl == 0) or (focusedEffLvl >= focusedReqLvl)
         if modalActive and self.confirm_entry then
             local cH = math.floor(76 * s)
             local cTop = bodyY + bodyH - pad - cH
@@ -1048,6 +1062,9 @@ function Character:draw(imgui, dl, F, L, x, y, w, h, ctx)
         elseif focused.active then
             F.drawBeveledCtaButton(imgui, dl, '##ch_actv', rx + pad, actY, innerW, actBtnH,
                 'Currently Socketed', 'gold', { disabled = true, fontScale = 0.90 * s })
+        elseif focused.owned and not focusedLevelOk then
+            F.drawBeveledCtaButton(imgui, dl, '##ch_lvl', rx + pad, actY, innerW, actBtnH,
+                string.format('Requires Lv.%d', focusedReqLvl), 'gold', { disabled = true, fontScale = 0.88 * s })
         elseif focused.owned and self:_can_socket(snap) then
             local okKeyLbl = resolve_lbl(lbl_fn, 'confirm', last_dev, 'A')
             if F.drawBeveledCtaButton(imgui, dl, '##ch_sock', rx + pad, actY, innerW, actBtnH,

@@ -64,7 +64,7 @@ local DEFAULT_MODULES = {
         badge          = 'UNAVAILABLE',
         accent         = 'cyan',
         summary        = 'Unified Soul Actions, spells, and macro reference.',
-        details        = 'Integration pending. Native FFXI Magic & Job Ability menus continue showing live Soul action names and filtering via soulspire_soul_actions and crystaljobs.dll.',
+        details        = 'Integration pending. Native FFXI Magic & Job Ability menus continue showing live Soul action names and filtering via soulspire_soul_actions and soulspire_native.dll.',
         existing_addon = 'soulspire_soul_actions',
     },
     {
