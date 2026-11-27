@@ -11,7 +11,7 @@
     "notes": "Production Stable channel paired with live SoulspireXI main server."
   },
   "serverName": "SoulspireXI",
-  "tagline": "Faerie Companions (Eos & Titania) • Job Specs • 4-Tier Weaponskill Talent Trees",
+  "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
   "defaultHost": "play.soulspirexi.com",
   "useHairpin": false,
   "ports": {
@@ -9663,7 +9663,7 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/data/soul-companions.json",
       "targetPath": "vanacore/soulspire_core/data/soul-companions.json",
-      "sha256": "31110da9c5380253612612b99bfccfa54bc68269e8ce851d4084e119a19fe650",
+      "sha256": "87546eb6407fd36efe62a36bff4314dc02fe83642768d8de667d768310c6a436",
       "size": 21194
     },
     {
