@@ -52,11 +52,17 @@ print('PASS: Phase C Soulforge WS talent allocation & timeout recovery verified'
 
 -- 5. Real soulforge/soulforge_state.lua packet_in (0x1FD OXTL), investNode, refundNode, and authoritative 66-Soul weapon filtering
 package.path = 'addons/vanacore/soulspire_core/?.lua;' .. package.path
+package.loaded['imgui'] = package.loaded['imgui'] or {}
 local sf_state_mod = dofile('addons/vanacore/soulspire_core/soulforge/soulforge_state.lua')
+local DataService  = dofile('addons/vanacore/soulspire_core/core/data_service.lua')
+local WeaponMod    = dofile('addons/vanacore/soulspire_core/modules/weapon_mastery.lua')
+local SfUi         = dofile('addons/vanacore/soulspire_core/soulforge/soulforge_ui.lua')
 local json_mod     = dofile('addons/vanacore/soulspire_core/core/json.lua')
+local ds = DataService.new({ addon_path = 'addons/vanacore/soulspire_core', auto_load = true })
 local sent2 = {}
 local now2 = 20.0
 local st, act = sf_state_mod.new({
+    dataService = ds,
     clock = function() return now2 end,
     sendPacket = function(id, bytes, op, wsId, a1, a2)
         sent2[#sent2 + 1] = { id = id, bytes = bytes, op = op, wsId = wsId, a1 = a1, a2 = a2 }
@@ -76,27 +82,58 @@ end
 assert(type(act.handlePacketIn) == 'function', 'handlePacketIn must be exported')
 assert(act.handlePacket == act.handlePacketIn, 'handlePacket alias must point to handlePacketIn')
 assert(type(act.onZone) == 'function', 'onZone alias must be exported')
+assert(type(act.setActiveIdentity) == 'function', 'setActiveIdentity must be exported')
 
--- Feed binary 0x1FD OXTL packets for NIN Shinobi
-assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('META|NIN|75|5|0|5|9|0|Shinobi')))
-assert(st.jobKey == 'NIN' and st.avail == 5 and st.specKey == 'shinobi')
+-- 5a. Unavailable identity MUST fail-closed (never display all 15 weapon families or all 219 skills!)
 assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('CAT_BEGIN')))
-assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('CAT|135:9:Blade: Ten:physical,80:6:Upheaval:physical,96:7:Cross Reaper:physical,212:26:Leaden Salute:magical,42:3:Savage Blade:physical')))
+assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('CAT|135:9:Blade: Ten:physical,80:6:Upheaval:physical,96:7:Cross Reaper:physical,212:26:Leaden Salute:magical,42:3:Savage Blade:physical,112:8:Stardiver:physical,192:25:Sidewinder:physical,16:2:Evisceration:physical')))
 assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('CAT_END')))
-
--- Shinobi (NIN) All Weapons (selectedSkill=0) must include Katana (9) and Sword (3), exclude Great Axe (6), Scythe (7), Marksmanship (26)
 st.selectedSkill = 0
+local uninit_rows = act.filtered()
+assert(#uninit_rows == 0, 'Unavailable identity must NOT display all weapons as eligible, got ' .. tostring(#uninit_rows))
+local uninit_skills = act.getAvailableSkills()
+assert(#uninit_skills == 2, 'Unavailable identity must only show All/Equipped tabs, got ' .. tostring(#uninit_skills))
+
+-- 5b. NIN Shinobi: strictly Katana (9) ONLY (no broad vanilla NIN Sword/Dagger/H2H fallback!)
+assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('META|NIN|75|5|0|5|3|0|Shinobi')))
+assert(st.jobKey == 'NIN' and st.avail == 5 and (st.specKey == 'kurogane' or st.specKey == 'shinobi'))
 local nin_rows = act.filtered()
-assert(#nin_rows == 2, 'Shinobi All Weapons should include only NIN-eligible skills (Katana+Sword), got ' .. tostring(#nin_rows))
+assert(#nin_rows == 1 and nin_rows[1].id == 135, 'Shinobi must restrict strictly to Katana (9) even with Sword equipped, got ' .. tostring(#nin_rows))
 local nin_skills = act.getAvailableSkills()
-local has_gaxe, has_katana = false, false
+local has_gaxe, has_katana, has_sword = false, false, false
 for _, s in ipairs(nin_skills) do
     if s.id == 6 then has_gaxe = true end
     if s.id == 9 then has_katana = true end
+    if s.id == 3 then has_sword = true end
 end
-assert(has_katana and not has_gaxe, 'Shinobi skill list must include Katana and exclude Great Axe')
+assert(has_katana and not has_gaxe and not has_sword, 'Shinobi skill list must include ONLY Katana (not Great Axe or Sword)')
 
--- COR Flintlock (ranged-only from authoritative soul-weapon-config.json):
+-- 5c. WAR Souls: Commander (Great Axe ONLY), Berserker (Great Axe ONLY), Spartan (Polearm ONLY)
+act.setActiveIdentity('WAR', 'commander', 'Commander')
+local cdr_rows = act.filtered()
+assert(#cdr_rows == 1 and cdr_rows[1].id == 80, 'WAR Commander must show Great Axe (6) ONLY, got ' .. tostring(#cdr_rows))
+act.setActiveIdentity('WAR', 'berserker', 'Berserker')
+local bsk_rows = act.filtered()
+assert(#bsk_rows == 1 and bsk_rows[1].id == 80, 'WAR Berserker must show Great Axe (6) ONLY, got ' .. tostring(#bsk_rows))
+act.setActiveIdentity('WAR', 'spartan', 'Spartan')
+local spt_rows = act.filtered()
+assert(#spt_rows == 1 and spt_rows[1].id == 112, 'WAR Spartan must show Polearm (8) ONLY, got ' .. tostring(#spt_rows))
+
+-- 5d. Intentional multi-weapon Soul exceptions: COR Gambler (Marksmanship + Dagger), RNG Huntsman (Archery + Marksmanship)
+act.setActiveIdentity('COR', 'gambler', 'Gambler')
+local gmb_rows = act.filtered()
+assert(#gmb_rows == 2, 'COR Gambler must allow both Marksmanship (26) and Dagger (2), got ' .. tostring(#gmb_rows))
+act.setActiveIdentity('RNG', 'huntsman', 'Huntsman')
+local hnt_rows = act.filtered()
+assert(#hnt_rows == 2, 'RNG Huntsman must allow both Archery (25) and Marksmanship (26), got ' .. tostring(#hnt_rows))
+
+-- 5e. Base-job state (unspecced WAR) uses base WAR job weapons cleanly
+act.setActiveIdentity('WAR', 'base', 'Unspecced')
+local base_war_elig = act.getEligibleSkillSet()
+assert(base_war_elig and base_war_elig[6] == true and base_war_elig[8] == true and base_war_elig[3] == true,
+    'Unspecced base WAR must allow base WAR job weapons')
+
+-- 5f. COR Flintlock (ranged-only from authoritative soul-weapon-config.json):
 -- Equipped Sword (mainSkill=3) must NOT grant Sword WS eligibility!
 assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('META|COR|75|5|0|5|3|26|Flintlock')))
 local cor_rows = act.filtered()
@@ -128,12 +165,12 @@ assert(st.pendingOp == nil and st.rejectedMsg == 'Refund test error')
 assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('SPENT_BEGIN')))
 assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('SPENT_END')))
 
--- BLM Necromancer must add Scythe (7) to BLM weapons
+-- BLM Necromancer must restrict strictly to Scythe (7)
 assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('META|BLM|75|5|0|5|0|0|Necromancer')))
 local blm_rows = act.filtered()
-assert(#blm_rows == 1 and blm_rows[1].id == 96, 'BLM Necromancer must include Scythe WS')
+assert(#blm_rows == 1 and blm_rows[1].id == 96, 'BLM Necromancer must restrict to Scythe WS')
 
--- Validate ALL 66 canonical Souls from authoritative soul-identities.json
+-- 5g. Validate ALL 66 canonical Souls from authoritative soul-identities.json + Weapon Mastery agreement
 local id_f = assert(io.open('addons/vanacore/soulspire_core/data/soul-identities.json', 'rb'))
 local id_data = json_mod.decode(id_f:read('*a'))
 id_f:close()
@@ -147,20 +184,37 @@ for _, entry in ipairs(id_data.souls or {}) do
     local skey = entry.internalKey or entry.canonicalKey or entry.name or entry.displayName
     assert(act.handlePacketIn(0x1FD, make_oxtl_1fd(string.format('META|%s|75|5|0|5|0|0|%s', jkey, skey))))
     local elig = act.getEligibleSkillSet()
-    assert(type(elig) == 'table', 'Eligible skill set must exist for ' .. tostring(jkey) .. ':' .. tostring(skey))
+    local ds_elig = ds:get_eligible_weapon_skills(jkey, skey)
+    assert(type(elig) == 'table' and type(ds_elig) == 'table', 'Eligible skill set must exist for ' .. tostring(jkey) .. ':' .. tostring(skey))
     local cnt = 0
-    for _, v in pairs(elig) do if v then cnt = cnt + 1 end end
-    assert(cnt >= 1, 'Every canonical Soul must have >=1 eligible weapon family: ' .. tostring(skey))
-    if string.lower(skey) == 'flintlock' then
+    for sid, v in pairs(elig) do
+        if v then
+            cnt = cnt + 1
+            assert(ds_elig[sid] == true, 'Weapon Mastery and DataService must agree on skill ' .. tostring(sid) .. ' for ' .. tostring(skey))
+        end
+    end
+    assert(cnt >= 1 and cnt <= 5, 'Every canonical Soul must have narrow authoritative weapon family eligibility (1..5), got ' .. tostring(cnt) .. ' for ' .. tostring(skey))
+    local low = string.lower(skey):gsub('[^a-z0-9]', '')
+    if low == 'flintlock' then
         assert(cnt == 1 and elig[26] == true, 'Flintlock must be strictly Marksmanship (26)')
-    elseif string.lower(skey) == 'necromancer' then
-        assert(elig[7] == true and elig[11] == true and elig[12] == true, 'Necromancer must include Scythe/Club/Staff')
-    elseif string.lower(skey) == 'berserker' then
-        assert(elig[6] == true, 'Berserker must include Great Axe (6)')
+    elseif low == 'necromancer' then
+        assert(cnt == 1 and elig[7] == true, 'Necromancer must be strictly Scythe (7)')
+    elseif low == 'berserker' or low == 'commander' then
+        assert(cnt == 1 and elig[6] == true, low .. ' must be strictly Great Axe (6)')
+    elseif low == 'spartan' then
+        assert(cnt == 1 and elig[8] == true, 'Spartan must be strictly Polearm (8)')
+    elseif low == 'gambler' then
+        assert(cnt == 2 and elig[26] == true and elig[2] == true, 'Gambler must be Marksmanship + Dagger')
     end
     checked_souls = checked_souls + 1
 end
 assert(checked_souls == 66, 'Expected 66 canonical Souls validated, got ' .. tostring(checked_souls))
+
+-- 5h. Weapon Mastery controller navigation after filtering changes
+local wm = WeaponMod.new(st, act, SfUi)
+act.setActiveIdentity('WAR', 'spartan', 'Spartan')
+wm:on_open()
+assert(wm:on_action('up') == true or wm:on_action('down') == true or wm.arsenal_index == 1, 'WeaponMastery navigation stays valid after strict filtering')
 
 -- Back to NIN Shinobi -> load WS detail via 0x1FD and verify investNode + duplicate prevention + refundNode + zone invalidation
 assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('META|NIN|75|5|0|5|9|0|Shinobi')))

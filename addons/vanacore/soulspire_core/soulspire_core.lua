@@ -213,8 +213,29 @@ local function save_core_settings()
     end
 end
 
+local function sync_soulforge_identity()
+    if not (sf_actions and type(sf_actions.setActiveIdentity) == 'function' and identity and type(identity.active) == 'function') then
+        return
+    end
+    local id = identity:active()
+    if type(id) ~= 'table' then return end
+    local job_key = (id.job and id.job > 0 and data_service and type(data_service.souls_by_jb) == 'table')
+        and (function()
+            local jb = data_service.souls_by_jb[id.job]
+            local s = jb and jb[id.branch or 1] or nil
+            return s and s.jobKey or nil
+        end)() or nil
+    if (not job_key) and type(id.soul_key) == 'string' and id.soul_key ~= '' and data_service and data_service.get_soul_by_key then
+        local s = data_service:get_soul_by_key(id.soul_key)
+        job_key = s and s.jobKey or nil
+    end
+    local spec_key = (type(id.soul_key) == 'string' and id.soul_key ~= '') and id.soul_key or 'base'
+    sf_actions.setActiveIdentity(job_key, spec_key, id.full_name)
+end
+
 local function open_hub(module_id, from_native_menu)
     if not focus then return end
+    sync_soulforge_identity()
     if type(module_id) == 'string' and module_id ~= '' and registry then
         local idx = registry:find_index(module_id)
         local m = idx and registry:get(idx) or nil
@@ -610,6 +631,7 @@ if type(vana) == 'table' and vana.events then
         if id == 0x1FF and character_mod and type(character_mod.handle_packet_in) == 'function' then
             if character_mod:handle_packet_in(id, data, now, size) then
                 runtime_diag.crys_rx = runtime_diag.crys_rx + 1
+                sync_soulforge_identity()
             end
         end
         -- Decode binary 0x1FC OXHD authoritatively in Lua so Soul identity is always accurate
@@ -631,6 +653,7 @@ if type(vana) == 'table' and vana.events then
                         if type(vana) == 'table' and vana.soulspire and type(vana.soulspire.set_identity) == 'function' then
                             pcall(vana.soulspire.set_identity, rec.job_id, rec.branch_id, 0, 0)
                         end
+                        sync_soulforge_identity()
                     end
                 end
             end

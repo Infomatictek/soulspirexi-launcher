@@ -63,75 +63,9 @@ for _, sk in ipairs(M.SKILL_LIST) do
     M.SKILL_NAMES[sk.id] = sk.name
 end
 
--- Canonical per-job base weapon skill IDs (aligned with server soulspire_test_gear.JOB_WEAPONS).
--- Soul-specific restrictions and grants are derived directly from authoritative `data/soul-weapon-config.json`
--- (compiled from `registry/weapon_configs.json` + `registry/souls.json` by `tools/registry_compiler.py`).
--- Skill IDs: 1=H2H, 2=Dagger, 3=Sword, 4=GSword, 5=Axe, 6=GAxe, 7=Scythe,
---            8=Polearm, 9=Katana, 10=GKatana, 11=Club, 12=Staff, 25=Archery, 26=Marksmanship, 27=Throwing
-M.JOB_WEAPON_SKILLS = {
-    WAR = { 6, 5, 4, 3, 7, 8, 11, 2, 1, 12, 25, 26, 27 },
-    MNK = { 1, 12, 11, 27 },
-    WHM = { 11, 12 },
-    BLM = { 12, 11 },
-    RDM = { 3, 2, 11, 12, 25 },
-    THF = { 2, 3, 1, 11, 25, 26, 27 },
-    PLD = { 3, 11, 4, 8, 12, 2 },
-    DRK = { 7, 4, 3, 6, 5, 11, 2, 26 },
-    BST = { 5, 7, 3, 2, 11 },
-    BRD = { 2, 3, 11, 12 },
-    RNG = { 25, 26, 5, 2, 3, 11, 27 },
-    SAM = { 10, 8, 3, 11, 25, 27 },
-    NIN = { 9, 2, 3, 10, 1, 11, 27, 25 },
-    DRG = { 8, 12, 3, 11, 2 },
-    SMN = { 12, 11 },
-    BLU = { 3, 11 },
-    COR = { 2, 3, 26, 27 },
-    PUP = { 1, 2, 11, 27 },
-    DNC = { 2, 3, 1, 27 },
-    SCH = { 12, 11 },
-    GEO = { 11, 12, 2 },
-    RUN = { 4, 3, 6, 5, 11 },
-}
-
--- Server-mirrored intentional Soul weapon grant not yet in weapon_configs.json (blm_specs.lua: Necromancer Scythe)
-M.SOUL_SPEC_EXTRA_SKILLS = {
-    necromancer = { 7 },
-}
-
-local function loadAuthoritativeWeaponConfig()
-    local okJson, jsonMod = pcall(require, 'core.json')
-    if not okJson or type(jsonMod) ~= 'table' or type(jsonMod.decode) ~= 'function' then
-        return nil
-    end
-    local candidates = {}
-    if type(vana) == 'table' and vana.paths and type(vana.paths.addon) == 'function' then
-        candidates[#candidates + 1] = vana.paths.addon() .. '/data/soul-weapon-config.json'
-    end
-    candidates[#candidates + 1] = 'addons/vanacore/soulspire_core/data/soul-weapon-config.json'
-    for _, path in ipairs(candidates) do
-        local f = io.open(path, 'rb')
-        if f then
-            local raw = f:read('*a')
-            f:close()
-            local okDec, decoded = pcall(jsonMod.decode, raw)
-            if okDec and type(decoded) == 'table' then
-                return decoded
-            end
-        end
-    end
-    return nil
-end
-
-local function addMaskSkills(set, mask)
-    local m = tonumber(mask) or 0
-    if m <= 0 then return end
-    for _, sid in ipairs({ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 25, 26, 27 }) do
-        local bitVal = math.floor(m / (2 ^ sid)) % 2
-        if bitVal == 1 then
-            set[sid] = true
-        end
-    end
-end
+-- Authoritative 66-Soul weapon eligibility is owned by core/data_service.lua (shared by Weapon Mastery & Soulforge).
+local ok_ds_mod, DataServiceMod = pcall(require, 'core.data_service')
+if not ok_ds_mod then DataServiceMod = nil end
 
 local SC_SHORT_FALLBACK = {
     [1] = 'Trn', [2] = 'Cmp', [3] = 'Liq', [4] = 'Sci',
@@ -303,7 +237,7 @@ function M.new(opts)
     local soulRegistry = opts.soulRegistry
     local wsRegistry   = opts.wsRegistry
     local dataService  = opts.dataService
-    local weaponConfig = opts.weaponConfig or loadAuthoritativeWeaponConfig()
+    local weaponConfig = opts.weaponConfig or (dataService and dataService.get_weapon_config and dataService:get_weapon_config()) or nil
     local sendFn       = opts.sendPacket
     local clockFn      = opts.clock or os.clock
     local onJobChange  = opts.onJobChange
@@ -916,59 +850,26 @@ function M.new(opts)
     end
 
     getEligibleSkillSet = function()
-        local jobKey = string.upper(tostring(state.jobKey or ''))
-        local baseList = M.JOB_WEAPON_SKILLS[jobKey]
-        if not baseList then
-            return nil -- Job not synced yet; do not prematurely hide skills
+        if dataService and type(dataService.get_eligible_weapon_skills) == 'function' then
+            return dataService:get_eligible_weapon_skills(state.jobKey, state.specKey)
         end
-        local set = {}
-        local specKey = string.lower(tostring(state.specKey or ''))
-
-        -- 1. Check authoritative soul-weapon-config.json rangedOnly restrictions first
-        local isRangedOnly = false
-        if type(weaponConfig) == 'table' and type(weaponConfig.rangedOnly) == 'table' then
-            for _, ro in ipairs(weaponConfig.rangedOnly) do
-                if type(ro) == 'table' and string.lower(tostring(ro.soulKey or '')) == specKey and ro.firearmOnly == true then
-                    set[26] = true -- Marksmanship (firearm-only Soul)
-                    isRangedOnly = true
-                    break
-                end
-            end
+        if DataServiceMod and type(DataServiceMod.resolve_eligible_weapon_skills) == 'function' then
+            return DataServiceMod.resolve_eligible_weapon_skills(state.jobKey, state.specKey, {
+                weapon_config = weaponConfig,
+            })
         end
-
-        -- 2. Otherwise start from canonical job weapon skills + authoritative soul-weapon-config.json rule masks
-        if not isRangedOnly then
-            for _, sid in ipairs(baseList) do
-                set[sid] = true
-            end
-            if type(weaponConfig) == 'table' and type(weaponConfig.rules) == 'table' then
-                for _, rule in ipairs(weaponConfig.rules) do
-                    if type(rule) == 'table' and string.lower(tostring(rule.soulKey or '')) == specKey then
-                        addMaskSkills(set, rule.mainSkillMask)
-                        addMaskSkills(set, rule.subSkillMask)
-                    end
-                end
-            end
-            local extra = M.SOUL_SPEC_EXTRA_SKILLS[specKey]
-            if type(extra) == 'table' then
-                for _, sid in ipairs(extra) do
-                    set[sid] = true
-                end
-            end
-        end
-        -- NOTE: Equipped weapons intentionally do NOT automatically grant WS eligibility.
-        return set
+        return nil
     end
 
     isSkillEligible = function(skillId)
         local elig = getEligibleSkillSet()
-        if elig == nil then return true end
+        if elig == nil then return false end
         return elig[tonumber(skillId) or 0] == true
     end
 
     isWsEligible = function(wsId)
         local ws = state.catalogById and state.catalogById[wsId]
-        if not ws then return true end
+        if not ws then return false end
         return isSkillEligible(ws.skill)
     end
 
@@ -979,13 +880,13 @@ function M.new(opts)
 
     local function getAvailableSkills()
         local eligible = getEligibleSkillSet()
-        if not eligible then
-            return M.SKILL_LIST
-        end
-        -- Include eligible weapon families plus any family holding a refund-only invested WS
+        -- Fail-closed when identity is unavailable: NEVER display all 15 weapon families!
+        -- Include eligible weapon families plus any family holding a refund-only invested WS.
         local visible = {}
-        for sid, ok in pairs(eligible) do
-            if ok then visible[sid] = true end
+        if type(eligible) == 'table' then
+            for sid, ok in pairs(eligible) do
+                if ok then visible[sid] = true end
+            end
         end
         for wsId, pts in pairs(state.spentByWs or {}) do
             if (tonumber(pts) or 0) > 0 then
@@ -1013,7 +914,8 @@ function M.new(opts)
 
         for _, ws in ipairs(state.catalog) do
             local spent = tonumber(state.spentByWs[ws.id]) or 0
-            local wsEligible = (eligible == nil) or (eligible[ws.skill] == true)
+            -- Fail-closed: when eligible is nil (identity unavailable), never treat all weapons as eligible.
+            local wsEligible = (eligible ~= nil) and (eligible[ws.skill] == true)
             local refundOnly = (spent > 0) and (not wsEligible)
             ws.refundOnly = refundOnly
 
@@ -1045,23 +947,23 @@ function M.new(opts)
             return false
         end
         if state.selectedWsId ~= nil then
-            if (state.wsDetail == nil or state.wsDetail.id ~= state.selectedWsId) and state.wsRequest == nil then
-                requestWS(state.selectedWsId)
-                return true
+            local curWs = state.catalogById and state.catalogById[state.selectedWsId]
+            local curAllowed = curWs and (isWsEligible(state.selectedWsId) or isWsRefundOnly(state.selectedWsId))
+            if curAllowed then
+                if (state.wsDetail == nil or state.wsDetail.id ~= state.selectedWsId) and state.wsRequest == nil then
+                    requestWS(state.selectedWsId)
+                    return true
+                end
+                return false
+            else
+                state.selectedWsId = nil
+                state.wsDetail = nil
             end
-            return false
         end
         local rows = getFilteredCatalog()
         if #rows > 0 then
             requestWS(rows[1].id)
             return true
-        end
-        for _, ws in ipairs(state.catalog) do
-            if (state.mainSkill ~= 0 and ws.skill == state.mainSkill)
-                or (state.rangedSkill ~= 0 and ws.skill == state.rangedSkill) then
-                requestWS(ws.id)
-                return true
-            end
         end
         return false
     end
@@ -1349,10 +1251,13 @@ function M.new(opts)
             state.rawSpecKey  = parts[9] or 'Base'
             state.specName    = resolveSpecDisplayName(parts[9])
             if parts[10] and parts[10] ~= '' then
-                state.specKey = string.lower(parts[10])
+                local s = dataService and dataService:get_soul_by_key(parts[10])
+                state.specKey = (s and s.canonicalKey and string.lower(s.canonicalKey))
+                    or string.lower(parts[10])
             else
                 local s = dataService and dataService:get_soul_by_key(parts[9])
-                state.specKey = (s and s.internalKey and string.lower(s.internalKey))
+                state.specKey = (s and s.canonicalKey and string.lower(s.canonicalKey))
+                    or (s and s.internalKey and string.lower(s.internalKey))
                     or string.lower(tostring(parts[9] or 'base'))
             end
             state.soulRole = resolveSpecRole(state.specKey ~= 'base' and state.specKey or parts[9])
@@ -1399,8 +1304,11 @@ function M.new(opts)
                 state.wsRequest        = nil
                 state.wsError          = nil
                 local elig = getEligibleSkillSet()
-                if elig and (tonumber(state.selectedSkill) or 0) > 0 and not elig[state.selectedSkill] then
+                if (tonumber(state.selectedSkill) or 0) > 0 and (not elig or not elig[state.selectedSkill]) then
                     state.selectedSkill = 0
+                end
+                if state.selectedWsId ~= nil and not isWsEligible(state.selectedWsId) and not isWsRefundOnly(state.selectedWsId) then
+                    state.selectedWsId = nil
                 end
                 if dataService then
                     dataService:invalidate_dynamic_state('job_or_soul_change:' .. tostring(state.jobKey) .. ':' .. tostring(state.specKey))
@@ -1883,6 +1791,23 @@ function M.new(opts)
         skills             = M.SKILL_LIST,
         getAvailableSkills = getAvailableSkills,
         getEligibleSkillSet = getEligibleSkillSet,
+        setActiveIdentity  = function(jobKey, specKey, specName)
+            local nextJob  = (type(jobKey) == 'string' and jobKey ~= '' and jobKey ~= '---') and string.upper(jobKey) or state.jobKey
+            local nextSpec = (type(specKey) == 'string' and specKey ~= '') and string.lower(specKey) or 'base'
+            local changed  = (nextJob ~= state.jobKey) or (nextSpec ~= state.specKey)
+            state.jobKey   = nextJob
+            state.specKey  = nextSpec
+            if type(specName) == 'string' and specName ~= '' then
+                state.specName = specName
+            end
+            if changed then
+                local elig = getEligibleSkillSet()
+                if (tonumber(state.selectedSkill) or 0) > 0 and (not elig or not elig[state.selectedSkill]) then
+                    state.selectedSkill = 0
+                end
+                autoSelectEligibleWS()
+            end
+        end,
         isWsEligible       = isWsEligible,
         isWsRefundOnly     = isWsRefundOnly,
         cycleSkillFilter   = cycleSkillFilter,

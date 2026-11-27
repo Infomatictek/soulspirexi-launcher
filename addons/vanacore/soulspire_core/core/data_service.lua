@@ -1162,6 +1162,253 @@ function DataService:get_ui_metadata()
     return self.ui_metadata
 end
 
+-- Authoritative 66-Soul weapon family eligibility (aligned with server soulspire_ws_spec_profiles.lua
+-- P.ALLOWED_SKILLS_BY_SPEC + soulspire_ws_talents.lua SPEC_KEY_TO_CATEGORY + soul-weapon-config.json).
+-- Single shared source of truth for BOTH Weapon Mastery and Soulforge.
+-- Skill IDs: 1=H2H, 2=Dagger, 3=Sword, 4=GSword, 5=Axe, 6=GAxe, 7=Scythe,
+--            8=Polearm, 9=Katana, 10=GKatana, 11=Club, 12=Staff, 25=Archery, 26=Marksmanship, 27=Throwing
+DataService.BASE_JOB_WEAPON_SKILLS = {
+    WAR = { 6, 5, 4, 3, 7, 8, 11, 2, 1, 12, 25, 26, 27 },
+    MNK = { 1, 12, 11, 27 },
+    WHM = { 11, 12 },
+    BLM = { 12, 11 },
+    RDM = { 3, 2, 11, 12, 25 },
+    THF = { 2, 3, 1, 11, 25, 26, 27 },
+    PLD = { 3, 11, 4, 8, 12, 2 },
+    DRK = { 7, 4, 3, 6, 5, 11, 2, 26 },
+    BST = { 5, 7, 3, 2, 11 },
+    BRD = { 2, 3, 11, 12 },
+    RNG = { 25, 26, 5, 2, 3, 11, 27 },
+    SAM = { 10, 8, 3, 11, 25, 27 },
+    NIN = { 9, 2, 3, 10, 1, 11, 27, 25 },
+    DRG = { 8, 12, 3, 11, 2 },
+    SMN = { 12, 11 },
+    BLU = { 3, 11 },
+    COR = { 2, 3, 26, 27 },
+    PUP = { 1, 2, 11, 27 },
+    DNC = { 2, 3, 1, 27 },
+    SCH = { 12, 11 },
+    GEO = { 11, 12, 2 },
+    RUN = { 4, 3, 6, 5, 11 },
+}
+
+DataService.SOUL_ELIGIBLE_SKILLS = {
+    -- WAR
+    commander      = { 6 },
+    berserker      = { 6 },
+    spartan        = { 8 },
+    gladiator      = { 8 },
+    -- MNK
+    blackbelt      = { 1 },
+    chiweaver      = { 1 },
+    sensei         = { 12 },
+    -- WHM
+    bishop         = { 11, 12 },
+    zealot         = { 12 },
+    valkyrie       = { 8 },
+    -- BLM
+    astromancer    = { 12 },
+    channeler      = { 12 },
+    necromancer    = { 7 },
+    -- RDM
+    crimsonduelist = { 3 },
+    royaltactician = { 3 },
+    scarletweaver  = { 3 },
+    -- THF
+    bandit         = { 2, 3 },
+    trickster      = { 2, 3 },
+    phantom        = { 2, 9 },
+    -- PLD
+    defender       = { 3, 11 },
+    templar        = { 11 },
+    lightkeeper    = { 11 },
+    aegistemplar   = { 11 },
+    oathbreaker    = { 4 },
+    -- DRK
+    reaper         = { 7 },
+    scourge        = { 7 },
+    dreadnought    = { 7 },
+    -- BST
+    alphawarden    = { 5 },
+    untamed        = { 5, 6 },
+    beastspeaker   = { 5 },
+    -- BRD
+    adventurer     = { 2, 3 },
+    musician       = { 2, 3, 11, 12 },
+    minstrel       = { 2, 11, 12 },
+    -- RNG
+    sniper         = { 26 },
+    arcanearcher   = { 25 },
+    huntsman       = { 25, 26 },
+    -- SAM
+    ronin          = { 10 },
+    warlord        = { 10 },
+    imperialarcher = { 10, 25 },
+    -- NIN
+    shinobi        = { 9 },
+    kagemusha      = { 9 },
+    kurogane       = { 9 },
+    nightblade     = { 9 },
+    fuin           = { 9 },
+    -- DRG
+    lancer         = { 8 },
+    skyborn        = { 8 },
+    wyvernheart    = { 8 },
+    -- SMN
+    celestial      = { 12, 11 },
+    caller         = { 12, 11 },
+    primalist      = { 11, 12 },
+    herald         = { 11, 12 },
+    -- BLU
+    warmage        = { 3, 11 },
+    magus          = { 3, 11 },
+    azurebastion   = { 3, 11 },
+    -- COR
+    flintlock      = { 26 },
+    buccaneer      = { 3 },
+    gambler        = { 26, 2 },
+    -- PUP
+    pugilist       = { 1 },
+    vanguard       = { 1 },
+    marionettist   = { 1 },
+    animist        = { 1 },
+    -- DNC
+    bladewheel     = { 27, 2, 3 },
+    vampire        = { 2, 27 },
+    miragesentinel = { 2 },
+    -- SCH
+    medic          = { 2, 11, 12 },
+    archivist      = { 11, 12 },
+    sage           = { 2, 3, 11, 12 },
+    -- GEO
+    verdant        = { 11, 12 },
+    terramancer    = { 11, 12 },
+    diviner        = { 11, 12 },
+    -- RUN
+    spellblade     = { 4 },
+    inquisitor     = { 4, 3, 5, 6, 11 },
+    lifebinder     = { 4, 3, 5, 6, 11 },
+}
+
+local function add_mask_skills(set, mask)
+    local m = tonumber(mask) or 0
+    if m <= 0 then return end
+    for _, sid in ipairs({ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 25, 26, 27 }) do
+        if math.floor(m / (2 ^ sid)) % 2 == 1 then
+            set[sid] = true
+        end
+    end
+end
+
+local function normalize_spec_token(raw)
+    return string.lower(tostring(raw or '')):gsub('[^a-z0-9]', '')
+end
+
+function DataService:get_weapon_config()
+    if self._weapon_config_loaded then
+        return self._weapon_config
+    end
+    self._weapon_config_loaded = true
+    local candidates = {}
+    if type(self.cache_dir) == 'string' and self.cache_dir ~= '' then
+        local root = self.cache_dir:gsub('/cache$', '')
+        candidates[#candidates + 1] = root .. '/data/soul-weapon-config.json'
+    end
+    if type(vana) == 'table' and vana.paths and type(vana.paths.addon) == 'function' then
+        candidates[#candidates + 1] = normalize_dir(vana.paths.addon()) .. '/data/soul-weapon-config.json'
+    end
+    candidates[#candidates + 1] = 'addons/vanacore/soulspire_core/data/soul-weapon-config.json'
+    for _, path in ipairs(candidates) do
+        local raw = read_file_bytes(path)
+        if type(raw) == 'string' and raw ~= '' then
+            local ok, decoded = pcall(json.decode, raw)
+            if ok and type(decoded) == 'table' then
+                self._weapon_config = decoded
+                return decoded
+            end
+        end
+    end
+    return nil
+end
+
+-- Single authoritative 66-Soul weapon family eligibility resolver for BOTH Weapon Mastery & Soulforge.
+-- Returns a set `{ [skillId] = true }` or `nil` when Soul/Job identity is unavailable (fail-closed).
+function DataService.resolve_eligible_weapon_skills(job_key, spec_key, opts)
+    opts = opts or {}
+    local ds = opts.data_service
+    local wc = opts.weapon_config or (ds and ds.get_weapon_config and ds:get_weapon_config()) or nil
+
+    local raw_spec = tostring(spec_key or '')
+    local norm_spec = normalize_spec_token(raw_spec)
+    local job_u = string.upper(tostring(job_key or ''))
+    if job_u == '---' then job_u = '' end
+
+    -- Resolve canonical Soul key via DataService's 66-Soul registry if available
+    if ds and norm_spec ~= '' and norm_spec ~= 'base' and norm_spec ~= 'unspecced' and norm_spec ~= 'none' then
+        local soul = ds.get_soul_by_key and ds:get_soul_by_key(raw_spec) or nil
+        if type(soul) == 'table' then
+            if type(soul.canonicalKey) == 'string' and soul.canonicalKey ~= '' then
+                norm_spec = normalize_spec_token(soul.canonicalKey)
+            elseif type(soul.internalKey) == 'string' and soul.internalKey ~= '' then
+                norm_spec = normalize_spec_token(soul.internalKey)
+            end
+            if job_u == '' and type(soul.jobKey) == 'string' then
+                job_u = string.upper(soul.jobKey)
+            end
+        end
+    end
+
+    local is_base = (norm_spec == '' or norm_spec == 'base' or norm_spec == 'unspecced' or norm_spec == 'none')
+    if is_base then
+        -- Base-job state: allow base job weapons ONLY when job is genuinely known & unspecced.
+        -- Unavailable job identity returns nil (fail-closed: never expose all 15 weapon families!).
+        local base_list = DataService.BASE_JOB_WEAPON_SKILLS[job_u]
+        if not base_list then return nil end
+        local set = {}
+        for _, sid in ipairs(base_list) do set[sid] = true end
+        return set
+    end
+
+    local set = {}
+    -- 1. Authoritative soul-weapon-config.json rangedOnly restrictions (e.g. Flintlock firearm-only)
+    if type(wc) == 'table' and type(wc.rangedOnly) == 'table' then
+        for _, ro in ipairs(wc.rangedOnly) do
+            if type(ro) == 'table' and normalize_spec_token(ro.soulKey) == norm_spec and ro.firearmOnly == true then
+                set[26] = true
+                return set
+            end
+        end
+    end
+
+    -- 2. Authoritative per-Soul weapon family list (all 66 canonical Souls, no broad vanilla job fallback)
+    local soul_list = DataService.SOUL_ELIGIBLE_SKILLS[norm_spec]
+    if type(soul_list) == 'table' then
+        for _, sid in ipairs(soul_list) do
+            set[sid] = true
+        end
+        -- Merge any explicit weapon_config rule masks for this Soul (e.g. Berserker dual_2h GAxe, Adventurer dual_1h Dagger/Sword)
+        if type(wc) == 'table' and type(wc.rules) == 'table' then
+            for _, rule in ipairs(wc.rules) do
+                if type(rule) == 'table' and normalize_spec_token(rule.soulKey) == norm_spec then
+                    add_mask_skills(set, rule.mainSkillMask)
+                    add_mask_skills(set, rule.subSkillMask)
+                end
+            end
+        end
+        return set
+    end
+
+    -- Unknown / unrecognized Soul key: fail-closed (never dump all 15 weapon families!)
+    return nil
+end
+
+function DataService:get_eligible_weapon_skills(job_key, spec_key)
+    return DataService.resolve_eligible_weapon_skills(job_key, spec_key, {
+        data_service  = self,
+        weapon_config = self:get_weapon_config(),
+    })
+end
+
 function DataService:get_diagnostics()
     local info = self:get_cache_info()
     local loaded_pkgs = {}
