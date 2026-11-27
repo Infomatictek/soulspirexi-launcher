@@ -395,6 +395,9 @@ public sealed class ModernClientInstallService
             }
         }
 
+        // 4. Safely remove retired addons (e.g., overlords_boost) without touching user settings or optional addons.
+        RemoveRetiredModernAddons(compatDir);
+
         return copied;
     }
 
@@ -458,7 +461,7 @@ public sealed class ModernClientInstallService
             }
         }
 
-        // 3. Pivot DAT overlays
+        // 3. Pivot DAT overlays (mandatory base soulspirexi + protected COR flintlock-akimbo-compact)
         foreach (var overlay in new[] { AshitaConfigGenerator.OverlayFolderName, AshitaConfigGenerator.FlintlockOverlayFolderName })
         {
             var srcOverlay = Path.Combine(ashitaDir, "polplugins", "DATs", overlay);
@@ -468,7 +471,65 @@ public sealed class ModernClientInstallService
             }
         }
 
+        // 4. Safely remove retired addons (e.g., overlords_boost / boost) from upgraded VanaCore profiles.
+        RemoveRetiredModernAddons(nativeDir);
+
         return copied;
+    }
+
+    private static readonly string[] RetiredModernAddonNames =
+    {
+        "overlords_boost",
+        "boost",
+        "overlords_talents",
+        "overlords_gear",
+        "overlords_soulhud",
+        "overlords_soul_actions"
+    };
+
+    /// <summary>
+    /// Removes retired SoulspireXI/OverlordsXI addon folders from a VanaCore profile without
+    /// touching user-owned optional addons or settings directories.
+    /// </summary>
+    public static int RemoveRetiredModernAddons(string profileDir)
+    {
+        if (string.IsNullOrWhiteSpace(profileDir) || !Directory.Exists(profileDir))
+        {
+            return 0;
+        }
+
+        var removed = 0;
+        foreach (var flavour in new[] { "vanacore", "ashita" })
+        {
+            var flavourDir = Path.Combine(profileDir, "addons", flavour);
+            if (!Directory.Exists(flavourDir))
+            {
+                continue;
+            }
+
+            foreach (var name in RetiredModernAddonNames)
+            {
+                var target = Path.Combine(flavourDir, name);
+                if (!Directory.Exists(target))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    Directory.Delete(target, recursive: true);
+                    removed++;
+                }
+                catch (IOException)
+                {
+                }
+                catch (UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+
+        return removed;
     }
 
     private static int CopyDirectoryContents(string sourceDir, string targetDir, bool preserveExistingSettings = false)

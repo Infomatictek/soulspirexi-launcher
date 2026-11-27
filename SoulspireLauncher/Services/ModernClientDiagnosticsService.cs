@@ -16,6 +16,21 @@ public sealed record ModernSignatureScanSummary(
     IReadOnlyList<string> FailedLines,
     IReadOnlyList<string> RendererLines);
 
+public sealed record ClientComponentHealthEntry(
+    string Id,
+    string Category,
+    string Classification,
+    string Status,
+    bool IsFailure,
+    string Detail);
+
+public sealed record ClientComponentHealthReport(
+    string Profile,
+    bool Healthy,
+    int MandatoryFailureCount,
+    int RetiredPresentCount,
+    IReadOnlyList<ClientComponentHealthEntry> Components);
+
 public sealed record ModernDiagnosticsExportResult(
     bool Success,
     string ZipPath,
@@ -152,6 +167,148 @@ public sealed class ModernClientDiagnosticsService
         return new ModernSignatureScanSummary(ffxiInfo, matched, failed, failedLines, rendererLines);
     }
 
+    /// <summary>
+    /// Evaluates mandatory core addons, mandatory DAT overlays, optional addons, developer tools,
+    /// and retired components (e.g. overlords_boost) for a VanaCore profile (CLIENT-ADDON-001).
+    /// Missing mandatory components produce actionable failures; missing optional components never fail;
+    /// retired components are never expected to load.
+    /// </summary>
+    public static ClientComponentHealthReport EvaluateClientComponentHealth(
+        string profileDir,
+        ClientEngineMode mode,
+        string? vanacoreLogText,
+        bool developerModeEnabled = false)
+    {
+        var profile = ModernClientConfigGenerator.GetProfileFolderName(mode);
+        var entries = new List<ClientComponentHealthEntry>();
+        var isBaseline = mode == ClientEngineMode.ModernBaseline;
+        var log = vanacoreLogText ?? string.Empty;
+
+        // 1. Mandatory Core Addon: soulspire_core (required on ModernNative & ModernCompat; omitted on ModernBaseline)
+        if (!isBaseline)
+        {
+            var coreLua = Path.Combine(profileDir, "addons", "vanacore", "soulspire_core", "soulspire_core.lua");
+            if (!File.Exists(coreLua))
+            {
+                entries.Add(new ClientComponentHealthEntry(
+                    "soulspire_core", "addon", "protected_core", "missing_file", true,
+                    "Required core addon file addons\\vanacore\\soulspire_core\\soulspire_core.lua is missing. Run Check / Sync Updates to repair."));
+            }
+            else if (!string.IsNullOrWhiteSpace(log))
+            {
+                var loaded = log.Contains("soulspire_core", StringComparison.OrdinalIgnoreCase) &&
+                             (log.Contains("Loaded: soulspire_core", StringComparison.OrdinalIgnoreCase) ||
+                              log.Contains("loaded soulspire_core", StringComparison.OrdinalIgnoreCase));
+                var crashed = log.Contains("soulspire_core", StringComparison.OrdinalIgnoreCase) &&
+                              (log.Contains("crashed", StringComparison.OrdinalIgnoreCase) ||
+                               log.Contains("seconds of errors", StringComparison.OrdinalIgnoreCase));
+                var initErr = log.Contains("soulspire_core", StringComparison.OrdinalIgnoreCase) &&
+                              (log.Contains("failed to load", StringComparison.OrdinalIgnoreCase) ||
+                               log.Contains("syntax error", StringComparison.OrdinalIgnoreCase));
+
+                if (initErr)
+                {
+                    entries.Add(new ClientComponentHealthEntry(
+                        "soulspire_core", "addon", "protected_core", "init_failed", true,
+                        "Protected core addon soulspire_core failed during initialization (check logs\\vanacore.log)."));
+                }
+                else if (crashed)
+                {
+                    entries.Add(new ClientComponentHealthEntry(
+                        "soulspire_core", "addon", "protected_core", "runtime_failed", true,
+                        "Protected core addon soulspire_core encountered a runtime fault (check logs\\vanacore.log)."));
+                }
+                else if (!loaded)
+                {
+                    entries.Add(new ClientComponentHealthEntry(
+                        "soulspire_core", "addon", "protected_core", "unloaded", true,
+                        "Protected core addon soulspire_core is present on disk but did not load in logs\\vanacore.log."));
+                }
+                else
+                {
+                    entries.Add(new ClientComponentHealthEntry(
+                        "soulspire_core", "addon", "protected_core", "healthy", false,
+                        "Protected core addon soulspire_core is present and loaded."));
+                }
+            }
+            else
+            {
+                entries.Add(new ClientComponentHealthEntry(
+                    "soulspire_core", "addon", "protected_core", "present_unverified", false,
+                    "Protected core addon soulspire_core is present on disk (no runtime log captured yet)."));
+            }
+
+            // 2. Mandatory Core DAT Overlays: soulspirexi (8 DATs) & flintlock-akimbo-compact (278 DATs)
+            foreach (var (ovId, expectedMinDats, label) in new[]
+                     {
+                         (AshitaConfigGenerator.OverlayFolderName, 8, "Base SoulspireXI DAT overlay"),
+                         (AshitaConfigGenerator.FlintlockOverlayFolderName, 278, "COR Flintlock Dual Pistols DAT overlay")
+                     })
+            {
+                var romDir = Path.Combine(profileDir, "pivot", ovId, "ROM");
+                if (!Directory.Exists(romDir))
+                {
+                    entries.Add(new ClientComponentHealthEntry(
+                        ovId, "dat_overlay", "protected_core", "missing_file", true,
+                        $"{label} is missing ({romDir}). Run Check / Sync Updates to install/repair."));
+                }
+                else
+                {
+                    var datCount = Directory.EnumerateFiles(romDir, "*.DAT", SearchOption.AllDirectories).Count();
+                    if (datCount < expectedMinDats)
+                    {
+                        entries.Add(new ClientComponentHealthEntry(
+                            ovId, "dat_overlay", "protected_core", "missing_file", true,
+                            $"{label} is incomplete ({datCount}/{expectedMinDats} DAT files). Run Check / Sync Updates to repair."));
+                    }
+                    else
+                    {
+                        entries.Add(new ClientComponentHealthEntry(
+                            ovId, "dat_overlay", "protected_core", "healthy", false,
+                            $"{label} verified ({datCount} DAT files present)."));
+                    }
+                }
+            }
+        }
+
+        // 3. Optional VanaCore Addons: missing optional addons NEVER fail diagnostics.
+        foreach (var opt in new[] { "freecam", "loadscreen", "sendkey" })
+        {
+            var optLua = Path.Combine(profileDir, "addons", "vanacore", opt, opt + ".lua");
+            entries.Add(new ClientComponentHealthEntry(
+                opt, "addon", "optional", File.Exists(optLua) ? "present" : "not_installed", false,
+                File.Exists(optLua) ? "Optional addon installed." : "Optional addon not installed (non-blocking)."));
+        }
+
+        // 4. Developer-Only Components: evaluated strictly against developerModeEnabled.
+        foreach (var dev in new[] { "mcp", "apiexplorer" })
+        {
+            var devLua = Path.Combine(profileDir, "addons", "vanacore", dev, dev + ".lua");
+            entries.Add(new ClientComponentHealthEntry(
+                dev, "addon", "developer_only",
+                developerModeEnabled ? (File.Exists(devLua) ? "present" : "not_installed") : "disabled_by_policy",
+                false,
+                developerModeEnabled ? "Developer tool evaluated under active developer mode." : "Disabled by default in player builds (DEC-033)."));
+        }
+
+        // 5. Retired Components: overlords_boost / boost / crystaljobs.dll — NEVER expected to load.
+        foreach (var retired in new[] { "overlords_boost", "boost" })
+        {
+            var presentVana = Directory.Exists(Path.Combine(profileDir, "addons", "vanacore", retired));
+            var presentAshita = Directory.Exists(Path.Combine(profileDir, "addons", "ashita", retired));
+            var present = presentVana || presentAshita;
+            entries.Add(new ClientComponentHealthEntry(
+                retired, "addon", "retired", present ? "retired_present" : "retired_absent", false,
+                present
+                    ? $"Retired legacy addon '{retired}' still exists on disk; run Check / Sync Updates to remove it safely."
+                    : $"Retired legacy addon '{retired}' is absent (expected)."));
+        }
+
+        var mandatoryFailures = entries.Count(e => e.IsFailure);
+        var retiredPresent = entries.Count(e => e.Status == "retired_present");
+        return new ClientComponentHealthReport(profile, mandatoryFailures == 0, mandatoryFailures, retiredPresent, entries);
+    }
+
     public static IReadOnlyList<string> DetectGpuAdapters()
     {
         var gpus = new List<string>();
@@ -236,6 +393,7 @@ public sealed class ModernClientDiagnosticsService
             : null;
 
         var sigSummary = ParseVanaCoreLog(redactedVanaLog);
+        var componentHealth = EvaluateClientComponentHealth(profileDir, mode, redactedVanaLog);
         var installState = ModernClientInstallService.LoadState(profileDir);
 
         var crashFiles = new List<object>();
@@ -274,6 +432,7 @@ public sealed class ModernClientDiagnosticsService
             gpuAdapters = DetectGpuAdapters(),
             installedPackage = installState,
             signatureScan = sigSummary,
+            componentHealth,
             hasVanaCoreLog = redactedVanaLog is not null,
             hasNativeDllLog = redactedNativeLog is not null,
             crashArtifacts = crashFiles

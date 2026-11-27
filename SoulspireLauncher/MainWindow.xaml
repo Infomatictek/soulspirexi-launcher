@@ -235,9 +235,9 @@
                                     <CheckBox Content="Auto-load mobdb (Target level, aggro &amp; info)" IsChecked="{Binding AutoLoadMobDbAddon}" />
                                     <CheckBox Content="Auto-load kazenoeye (Debuffs &amp; HP over mobs)" IsChecked="{Binding AutoLoadKazenoeyeAddon}" />
                                     <CheckBox Content="Auto-load soulspire_gear (/og Gear Manager)" IsChecked="{Binding AutoLoadGearAddon}" />
-                                    <CheckBox Content="Auto-load soulspire_soulhud (/soulhud Crystal Job Gauge + Chi Weaver Boost)" IsChecked="{Binding AutoLoadSoulHudAddon}" />
+                                    <CheckBox Content="Auto-load soulspire_soulhud (/soulhud Crystal Job Gauge)" IsChecked="{Binding AutoLoadSoulHudAddon}" />
                                     <CheckBox Content="Enable Pivot DAT overlay (Call Eos)" IsChecked="{Binding EnablePivotOverlay}" />
-                                    <CheckBox Content="Enable Flintlock Dual Pistols DAT overlay (75% compact, COR Flintlock opt-in)" IsChecked="{Binding EnableFlintlockDualPistolsOverlay}" IsEnabled="{Binding EnablePivotOverlay}" />
+                                    <CheckBox Content="Enable Flintlock Dual Pistols DAT overlay (Classic opt-in; protected core on VanaCore)" IsChecked="{Binding EnableFlintlockDualPistolsOverlay}" IsEnabled="{Binding EnablePivotOverlay}" />
                                     <CheckBox Content="Close launcher when game starts" IsChecked="{Binding AutoCloseOnLaunch}" />
 
                                     <Border Background="{StaticResource AbyssBrush}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,12,0,0">

@@ -307,6 +307,9 @@ public sealed class ManifestOptionalOverlay
     [JsonPropertyName("defaultEnabled")]
     public bool DefaultEnabled { get; set; }
 
+    [JsonPropertyName("required")]
+    public bool Required { get; set; }
+
     [JsonPropertyName("soulGate")]
     public ManifestSoulGate? SoulGate { get; set; }
 

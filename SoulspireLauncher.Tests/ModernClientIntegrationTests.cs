@@ -542,6 +542,63 @@ public sealed class ModernClientIntegrationTests
         }
     }
 
+    [Fact]
+    public void ClientAddon001_ProtectedCoreCorDatAndDiagnosticsAndBoostRetirement()
+    {
+        var profileDir = Path.Combine(Path.GetTempPath(), "soulspire-addon001-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            // 1. ModernNative always includes both mandatory DAT overlays even if optional flags are false
+            var settings = new LauncherSettings
+            {
+                UpdateChannel = UpdateChannel.Testing,
+                ClientEngine = ClientEngineMode.ModernNative,
+                EnablePivotOverlay = false,
+                EnableFlintlockDualPistolsOverlay = false
+            };
+            var ini = ModernClientConfigGenerator.BuildIniContent(settings, ClientEngineMode.ModernNative, "play.soulspirexi.com", null, null);
+            Assert.Contains("[pivot]\nenabled=1", ini.Replace("\r\n", "\n"));
+            Assert.Contains("0=soulspirexi", ini);
+            Assert.Contains("1=flintlock-akimbo-compact", ini);
+
+            // 2. Required overlay in manifest is always enabled regardless of user optional checkboxes
+            var reqOverlay = new ManifestOptionalOverlay
+            {
+                Id = AshitaConfigGenerator.FlintlockOverlayId,
+                OverlayFolder = AshitaConfigGenerator.FlintlockOverlayFolderName,
+                DefaultEnabled = true,
+                Required = true
+            };
+            Assert.True(ManifestUpdateService.IsOptionalOverlayEnabled(settings, reqOverlay));
+
+            // 3. Retired Boost folder is removed while user optional addon is preserved
+            var boostDir = Path.Combine(profileDir, "addons", "vanacore", "overlords_boost");
+            var optDir = Path.Combine(profileDir, "addons", "vanacore", "freecam");
+            Directory.CreateDirectory(boostDir);
+            Directory.CreateDirectory(optDir);
+            File.WriteAllText(Path.Combine(boostDir, "overlords_boost.lua"), "-- retired");
+            File.WriteAllText(Path.Combine(optDir, "freecam.lua"), "-- optional");
+            var removed = ModernClientInstallService.RemoveRetiredModernAddons(profileDir);
+            Assert.Equal(1, removed);
+            Assert.False(Directory.Exists(boostDir));
+            Assert.True(Directory.Exists(optDir));
+
+            // 4. Component health diagnostics fail on missing mandatory core addon/DATs, never on missing optional or retired Boost
+            var missingReport = ModernClientDiagnosticsService.EvaluateClientComponentHealth(profileDir, ClientEngineMode.ModernNative, "");
+            Assert.False(missingReport.Healthy);
+            Assert.Equal(3, missingReport.MandatoryFailureCount); // soulspire_core + soulspirexi + flintlock-akimbo-compact
+            Assert.DoesNotContain(missingReport.Components, c => c.Id == "overlords_boost" && c.IsFailure);
+            Assert.DoesNotContain(missingReport.Components, c => c.Classification == "optional" && c.IsFailure);
+        }
+        finally
+        {
+            if (Directory.Exists(profileDir))
+            {
+                Directory.Delete(profileDir, recursive: true);
+            }
+        }
+    }
+
     private static byte[] BuildStubModernZipBytes(string exeBody, string coreBody)
     {
         using var ms = new MemoryStream();

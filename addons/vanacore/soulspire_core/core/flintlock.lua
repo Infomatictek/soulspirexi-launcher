@@ -25,7 +25,7 @@ function M.new(identity_mod)
         imgui.Text('Weapon Config Hash: ' .. tostring(diag.weapon_config_hash or 'not loaded'))
         imgui.Text('Weapon Eligibility Rules: ' .. tostring(diag.weapon_rule_count or 0))
         imgui.Text('Holster Mode: ' .. tostring(self.holster_mode))
-        imgui.TextWrapped('Note: Phase D weapon presentation hooks (dual-pistol offhand bone & Berserker 2H offhand) remain cleanly separated from Phase C UI consolidation.')
+        imgui.TextWrapped('Protected Core COR DAT overlay (flintlock-akimbo-compact, 278 DATs) and Phase D native weapon hooks provide dual-pistol rendering while preserving other COR Souls.')
     end
 
     return self
