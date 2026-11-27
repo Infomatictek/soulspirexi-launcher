@@ -14,8 +14,16 @@
 --   - Immediate control restoration on close, keeping physically held keys owned only
 --     until physical release to prevent phantom inputs in FFXI.
 
+local bit = require('bit')
 local Input = {}
 Input.__index = Input
+
+local XINPUT_BUTTON_LABELS = {
+    [0]  = 'DPAD_UP', [1] = 'DPAD_DOWN', [2] = 'DPAD_LEFT', [3] = 'DPAD_RIGHT',
+    [4]  = 'START',   [5] = 'BACK',      [6] = 'L3',        [7] = 'R3',
+    [8]  = 'LB',      [9] = 'RB',
+    [12] = 'A',       [13] = 'B',        [14] = 'X',        [15] = 'Y',
+}
 
 -- Default DirectInput keyboard scan codes (DIK_*)
 Input.DEFAULT_KEY_MAP = {
@@ -139,6 +147,16 @@ function Input.new(opts)
         clock           = opts.clock or os.clock,
         confirm_guard_until = 0,
         last_device     = 'gamepad',
+        xinput_active_user = 0,
+        diag = {
+            raw_button_mask      = 0,
+            last_physical_button = 'none',
+            last_button_state    = 'idle',
+            last_action          = 'none',
+            last_action_reached  = false,
+            stick_dir            = 'neutral',
+            active_mode          = 'gamepad',
+        },
     }, Input)
 
     if type(opts.bindings) == 'table' then
@@ -216,7 +234,14 @@ end
 -- transitions update prompt hints cleanly and stop any stale directional repeat.
 function Input:on_mouse_activity(_now)
     self.last_device = 'mouse'
+    self.diag.active_mode = 'mouse'
     self.repeat_state = {}
+end
+
+function Input:get_diagnostics()
+    self.diag.stick_dir = self.stick_dir or 'neutral'
+    self.diag.active_mode = self.last_device or 'gamepad'
+    return self.diag
 end
 
 -- Suppress accidental double-confirm inside Core immediately after opening from
@@ -321,9 +346,16 @@ function Input:on_pad(source, button_id, down, dispatch_fn, hub_open)
     local map = (source == 'xinput') and self.xinput_map or self.dinput_map
     local action = map[button_id]
     local token = source .. ':' .. tostring(button_id)
+    local label = (source == 'xinput' and XINPUT_BUTTON_LABELS[button_id])
+        and (token .. ' (' .. XINPUT_BUTTON_LABELS[button_id] .. ')')
+        or token
 
     if not down then
         local owned = self.pad_owner[token] == true
+        if self.pad_owner[token] ~= nil then
+            self.diag.last_physical_button = label
+            self.diag.last_button_state = 'released'
+        end
         self.pad_owner[token] = nil
         self.repeat_state[token] = nil
         return owned or (hub_open == true)
@@ -334,16 +366,26 @@ function Input:on_pad(source, button_id, down, dispatch_fn, hub_open)
     end
 
     self.pad_owner[token] = false
+    self.diag.last_physical_button = label
+    self.diag.last_button_state = 'pressed'
+    self.diag.active_mode = 'gamepad'
     if hub_open == true and self:_confirm_guarded(action) then
         self.pad_owner[token] = true
         self.last_device = 'gamepad'
+        self.diag.last_action = tostring(action) .. ' (guarded)'
+        self.diag.last_action_reached = false
         return true
     end
-    if action and type(dispatch_fn) == 'function' and dispatch_fn(action) then
-        self.pad_owner[token] = true
-        self.last_device = 'gamepad'
-        arm_repeat(self, token, action, self.clock())
-        return true
+    if action and type(dispatch_fn) == 'function' then
+        local reached = dispatch_fn(action) == true
+        self.diag.last_action = action
+        self.diag.last_action_reached = reached
+        if reached then
+            self.pad_owner[token] = true
+            self.last_device = 'gamepad'
+            arm_repeat(self, token, action, self.clock())
+            return true
+        end
     end
 
     if hub_open == true then
@@ -363,6 +405,10 @@ function Input:on_dinput_pov(angle, dispatch_fn, hub_open)
 
     if not action then
         local owned = self.pad_owner[token] == true
+        if self.pad_owner[token] ~= nil then
+            self.diag.last_physical_button = 'dinput:pov'
+            self.diag.last_button_state = 'released'
+        end
         self.pad_owner[token] = nil
         self.repeat_state[token] = nil
         return owned or (hub_open == true)
@@ -375,11 +421,19 @@ function Input:on_dinput_pov(angle, dispatch_fn, hub_open)
 
     self.pad_owner[token] = false
     self.repeat_state[token] = nil
-    if type(dispatch_fn) == 'function' and dispatch_fn(action) then
-        self.pad_owner[token] = true
-        self.last_device = 'gamepad'
-        arm_repeat(self, token, action, self.clock())
-        return true
+    self.diag.last_physical_button = 'dinput:pov (' .. tostring(angle) .. ')'
+    self.diag.last_button_state = 'pressed'
+    self.diag.active_mode = 'gamepad'
+    if type(dispatch_fn) == 'function' then
+        local reached = dispatch_fn(action) == true
+        self.diag.last_action = action
+        self.diag.last_action_reached = reached
+        if reached then
+            self.pad_owner[token] = true
+            self.last_device = 'gamepad'
+            arm_repeat(self, token, action, self.clock())
+            return true
+        end
     end
 
     if hub_open == true then
@@ -421,11 +475,16 @@ function Input:on_left_stick(nx, ny, dispatch_fn, hub_open, now)
     if new_dir ~= nil and new_dir ~= self.stick_dir then
         self.stick_dir = new_dir
         self.last_device = 'gamepad'
+        self.diag.stick_dir = new_dir
+        self.diag.active_mode = 'gamepad'
         if type(dispatch_fn) == 'function' then
-            dispatch_fn(new_dir)
+            local reached = dispatch_fn(new_dir) == true
+            self.diag.last_action = new_dir
+            self.diag.last_action_reached = reached
         end
         arm_repeat(self, token, new_dir, now or self.clock())
     elseif new_dir == nil and self.stick_dir == nil then
+        self.diag.stick_dir = 'neutral'
         self.repeat_state[token] = nil
     end
     return true
@@ -540,10 +599,11 @@ local function normalize_dinput_state(obj)
 end
 
 -- Filter raw Ashita v4 / VanaCore XINPUT_STATE table/cdata/lightuserdata:
--- Reads Left Stick for Core navigation AND zeroes modified state when Core Hub owns focus
--- so FFXI character movement / camera / macro triggers never fire behind Core.
--- All cdata field accesses are pcall-guarded so differing Ashita v4 / VanaCore FFI layouts never error.
-function Input:filter_xinput_state(state_obj, modified_obj, dispatch_fn, hub_open, now)
+-- In VanaCore (`src/core/addons.cpp`), `e.state` and `e.state_modified` point to the SAME
+-- `XINPUT_STATE*` buffer, and `addons::on_xinput_state` runs BEFORE `gamepad.cpp`'s per-button
+-- edge loop. Therefore we MUST read BOTH analog stick AND digital `wButtons` bitmask BEFORE
+-- zeroing `modified_obj`, deriving clean press/release edges without leaking to FFXI.
+function Input:filter_xinput_state(state_obj, modified_obj, dispatch_fn, hub_open, now, user_index)
     if not hub_open then
         self.stick_dir = nil
         self.repeat_state['pad:lstick'] = nil
@@ -554,7 +614,7 @@ function Input:filter_xinput_state(state_obj, modified_obj, dispatch_fn, hub_ope
     modified_obj = normalize_xinput_state(modified_obj)
 
     if state_obj ~= nil then
-        local ok, lx, ly = pcall(function()
+        local ok, wButtons, lx, ly = pcall(function()
             local gp = nil
             local okG, g1 = pcall(function() return state_obj.Gamepad end)
             if okG and g1 ~= nil then
@@ -563,12 +623,25 @@ function Input:filter_xinput_state(state_obj, modified_obj, dispatch_fn, hub_ope
                 local okG2, g2 = pcall(function() return state_obj.gamepad end)
                 gp = (okG2 and g2 ~= nil) and g2 or state_obj
             end
-            return tonumber(gp.sThumbLX) or 0, tonumber(gp.sThumbLY) or 0
+            return tonumber(gp.wButtons) or 0, tonumber(gp.sThumbLX) or 0, tonumber(gp.sThumbLY) or 0
         end)
         if ok then
-            self.stick_lx = math.max(-1, math.min(1, lx / 32767))
-            self.stick_ly = math.max(-1, math.min(1, ly / 32767))
-            self:on_left_stick(self.stick_lx, self.stick_ly, dispatch_fn, true, now)
+            local u = tonumber(user_index) or 0
+            local has_activity = (wButtons ~= 0) or (math.abs(lx) > 6000) or (math.abs(ly) > 6000)
+            if has_activity then
+                self.xinput_active_user = u
+            end
+            if u == self.xinput_active_user then
+                self.diag.raw_button_mask = wButtons
+                self.stick_lx = math.max(-1, math.min(1, lx / 32767))
+                self.stick_ly = math.max(-1, math.min(1, ly / 32767))
+                self:on_left_stick(self.stick_lx, self.stick_ly, dispatch_fn, true, now)
+                -- Derive digital button press/release edges for all 16 XInput bits (DPad 0..3, LB/RB 8..9, A/B/X/Y 12..15)
+                for b = 0, 15 do
+                    local down = bit.band(wButtons, bit.lshift(1, b)) ~= 0
+                    self:on_pad('xinput', b, down, dispatch_fn, true)
+                end
+            end
         end
     end
 
@@ -595,7 +668,7 @@ function Input:filter_xinput_state(state_obj, modified_obj, dispatch_fn, hub_ope
 end
 
 -- Filter raw DirectInput joystick state table/cdata (DIJOYSTATE / DIJOYSTATE2).
--- Auto-detects 0..65535 vs -1000..1000 centered axes; neutralizes axes/buttons while hub_open.
+-- Reads Left Stick, POV0 hat, and digital rgbButtons[0..15] BEFORE neutralizing modified_obj.
 function Input:filter_dinput_state(state_obj, modified_obj, dispatch_fn, hub_open, now)
     if not hub_open then
         return false
@@ -619,6 +692,29 @@ function Input:filter_dinput_state(state_obj, modified_obj, dispatch_fn, hub_ope
                 self.stick_ly = math.max(-1, math.min(1, -ly / 1000))
             end
             self:on_left_stick(self.stick_lx, self.stick_ly, dispatch_fn, true, now)
+        end
+
+        local ok_pov, pov = pcall(function() return tonumber(state_obj.rgdwPOV[0]) end)
+        if ok_pov and pov ~= nil then
+            self:on_dinput_pov(pov, dispatch_fn, true)
+        end
+
+        local ok_btns, mask = pcall(function()
+            local m = 0
+            for b = 0, 15 do
+                local v = tonumber(state_obj.rgbButtons[b]) or 0
+                if v >= 0x80 then
+                    m = bit.bor(m, bit.lshift(1, b))
+                end
+            end
+            return m
+        end)
+        if ok_btns and type(mask) == 'number' then
+            self.diag.raw_button_mask = mask
+            for b = 0, 15 do
+                local down = bit.band(mask, bit.lshift(1, b)) ~= 0
+                self:on_pad('dinput', b, down, dispatch_fn, true)
+            end
         end
     end
 

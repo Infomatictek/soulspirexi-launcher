@@ -9467,8 +9467,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/core/input.lua",
       "targetPath": "vanacore/soulspire_core/core/input.lua",
-      "sha256": "cf8b20db6dd57ee56ba1304489feb929231b2d2a2e021ba92485d99b29e76013",
-      "size": 22931
+      "sha256": "87a515cccee71e4f86e5ddf4d47ee59411c9355d4f2304c557788ff118afc00c",
+      "size": 26914
     },
     {
       "category": "addon",
@@ -9628,8 +9628,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/modules/status_and_diag.lua",
       "targetPath": "vanacore/soulspire_core/modules/status_and_diag.lua",
-      "sha256": "79331a1f3175b9e235dcaf165cd7eece07cb4ca5285fa87b09327e8234dfbc39",
-      "size": 9253
+      "sha256": "dbef93e7d11af928672da15727030a55bee86310b16129cb8478c8c501d593ff",
+      "size": 10088
     },
     {
       "category": "addon",
@@ -9789,15 +9789,15 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/soulspire_core.lua",
       "targetPath": "vanacore/soulspire_core/soulspire_core.lua",
-      "sha256": "9f3ca15efa7ba05f740df21e3f05ca929e41886d482476e8a7d46af4b3a9177a",
-      "size": 36321
+      "sha256": "c209ae2cd31f691c6d0ed6b8779d64423e0995da1d7687435daa44f04761a03a",
+      "size": 36846
     },
     {
       "sourcePath": "addons/vanacore/soulspire_core/tests/test_soul_sync_and_controller.lua",
       "targetPath": "vanacore/soulspire_core/tests/test_soul_sync_and_controller.lua",
       "category": "addon",
-      "size": 16485,
-      "sha256": "785f1d64325c0e22d98a970f3ef753d10c551e0630e05592a749af69a14073b4",
+      "size": 21997,
+      "sha256": "ea2b93660204c16a0fcf9c6388ea7f24016bb1ce580bb05b84514945f5ffab7b",
       "required": true
     },
     {

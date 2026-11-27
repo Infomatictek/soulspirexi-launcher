@@ -114,14 +114,18 @@ local last_known_job        = 0
 local LEASE_REFRESH_INTERVAL = 0.50
 
 local runtime_diag = {
-    crys_req_sent      = 0,
-    crys_rx            = 0,
-    oxhd_rx            = 0,
-    xinput_events      = 0,
-    dinput_events      = 0,
-    actions_dispatched = 0,
-    last_action        = 'none',
-    last_device        = 'gamepad',
+    crys_req_sent       = 0,
+    crys_rx             = 0,
+    oxhd_rx             = 0,
+    xinput_events       = 0,
+    dinput_events       = 0,
+    xinput_state_events = 0,
+    dinput_state_events = 0,
+    actions_dispatched  = 0,
+    last_action         = 'none',
+    last_action_reached = false,
+    last_device         = 'gamepad',
+    input_diag_fn       = nil,
 }
 
 local function native_clock()
@@ -190,7 +194,8 @@ local function dispatch_ui_action(act, source)
     runtime_diag.actions_dispatched = runtime_diag.actions_dispatched + 1
     runtime_diag.last_action = act
     runtime_diag.last_device = (input and input.last_device) or source or 'gamepad'
-    local handled = focus:handle_action(act, nil)
+    local handled = focus:handle_action(act, nil) == true
+    runtime_diag.last_action_reached = handled
     if not focus:is_hub_open() then
         release_native_ui_input((source or 'ui') .. '_close')
     end
@@ -330,6 +335,9 @@ local function init_all()
         bindings = saved_binds,
         clock    = native_clock,
     }) or nil
+    runtime_diag.input_diag_fn = function()
+        return (input and type(input.get_diagnostics) == 'function') and input:get_diagnostics() or nil
+    end
 
     if SfArt and SfArt.setRoot then
         SfArt.setRoot(addon_dir, install_dir)
@@ -670,13 +678,14 @@ if type(vana) == 'table' and vana.events then
         return true
     end)
 
-    -- Authoritative native XInput state filtering (Left Stick navigation + zeroing game state while Hub open)
+    -- Authoritative native XInput state filtering (Left Stick + digital wButtons edge detection + zeroing game state)
     vana.events.on('xinput_state', function(e)
         if type(e) ~= 'table' or not focus or not focus:is_hub_open() then return false end
+        runtime_diag.xinput_state_events = runtime_diag.xinput_state_events + 1
         if input and type(input.filter_xinput_state) == 'function' then
             input:filter_xinput_state(e.state, e.state_modified, function(act)
-                return dispatch_ui_action(act, 'xinput_stick')
-            end, true, native_clock())
+                return dispatch_ui_action(act, 'xinput_state')
+            end, true, native_clock(), e.user)
         end
         return true
     end)
@@ -694,12 +703,13 @@ if type(vana) == 'table' and vana.events then
         return true
     end)
 
-    -- Authoritative native DirectInput state filtering (Left Stick navigation + neutralizing game state while Hub open)
+    -- Authoritative native DirectInput state filtering (Left Stick + POV + rgbButtons edge detection + neutralizing game state)
     vana.events.on('dinput_state', function(e)
         if type(e) ~= 'table' or not focus or not focus:is_hub_open() then return false end
+        runtime_diag.dinput_state_events = runtime_diag.dinput_state_events + 1
         if input and type(input.filter_dinput_state) == 'function' then
             input:filter_dinput_state(e.state, e.state_modified, function(act)
-                return dispatch_ui_action(act, 'dinput_stick')
+                return dispatch_ui_action(act, 'dinput_state')
             end, true, native_clock())
         end
         return true

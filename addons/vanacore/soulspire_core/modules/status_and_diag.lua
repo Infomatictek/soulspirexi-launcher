@@ -160,11 +160,22 @@ function StatusDiagMod:draw(imgui, dl, F_arg, L, x, y, w, h, _ctx)
                 tonumber(d.packets_oxtal) or 0, tonumber(d.suppressed_chat_frames) or 0))
             local rd = self.runtime_diag
             if type(rd) == 'table' then
-                imgui.Text(string.format('Soul Sync (Lua): req_sent=%d crys_rx=%d oxhd_rx=%d | Controller: xinput=%d dinput=%d actions=%d last=%s (%s)',
+                imgui.Text(string.format('Soul Sync (Lua): req_sent=%d crys_rx=%d oxhd_rx=%d | Events: xstate=%d dstate=%d xbtn=%d dbtn=%d actions=%d',
                     tonumber(rd.crys_req_sent) or 0, tonumber(rd.crys_rx) or 0, tonumber(rd.oxhd_rx) or 0,
+                    tonumber(rd.xinput_state_events) or 0, tonumber(rd.dinput_state_events) or 0,
                     tonumber(rd.xinput_events) or 0, tonumber(rd.dinput_events) or 0,
-                    tonumber(rd.actions_dispatched) or 0,
-                    tostring(rd.last_action or 'none'), tostring(rd.last_device or 'gamepad')))
+                    tonumber(rd.actions_dispatched) or 0))
+                local idg = (type(rd.input_diag_fn) == 'function') and rd.input_diag_fn() or nil
+                if type(idg) == 'table' then
+                    imgui.Text(string.format('Controller Diag: raw_mask=0x%04X | last_btn=%s (%s) | action=%s (reached_ui=%s) | stick=%s | mode=%s',
+                        tonumber(idg.raw_button_mask) or 0,
+                        tostring(idg.last_physical_button or 'none'),
+                        tostring(idg.last_button_state or 'idle'),
+                        tostring(idg.last_action or rd.last_action or 'none'),
+                        tostring(idg.last_action_reached == true or rd.last_action_reached == true),
+                        tostring(idg.stick_dir or 'neutral'),
+                        tostring(idg.active_mode or rd.last_device or 'gamepad')))
+                end
             end
             imgui.Text('Note: [OK] hooks and active input ownership indicate installation/claim only, not live Windows certification.')
             imgui.Separator()

@@ -312,13 +312,97 @@ fire('dinput_button', { button = 52, state = 0x80 })
 fire('dinput_button', { button = 52, state = 0 })
 assert(st.focus:active_module().id ~= before_mod, 'DirectInput L1 (offset 52) must switch module')
 
--- 7. Analog Left Stick via xinput_state zeroes modified state & dispatches navigation
+-- 7. Real VanaCore C++ xinput_state / dinput_state contract (`e.state == e.state_modified` SAME pointer!)
+-- Proves ALL physical digital buttons (DPad U/D/L/R, LB/RB, A/B/X/Y) + Left Stick work BEFORE zeroing!
 st.focus:select_module('journal')
-local stick_state = { Gamepad = { sThumbLX = 30000, sThumbLY = 0, wButtons = 0x1000 } }
-local stick_mod   = { Gamepad = { sThumbLX = 30000, sThumbLY = 0, wButtons = 0x1000 } }
-fire('xinput_state', { user = 0, state = stick_state, state_modified = stick_mod })
-assert(stick_mod.Gamepad.sThumbLX == 0 and stick_mod.Gamepad.wButtons == 0, 'xinput_state must neutralize modified gamepad state while Hub is open')
+local shared_x = { Gamepad = { sThumbLX = 30000, sThumbLY = 0, wButtons = 0 } }
+fire('xinput_state', { user = 0, state = shared_x, state_modified = shared_x })
+assert(shared_x.Gamepad.sThumbLX == 0 and shared_x.Gamepad.wButtons == 0,
+    'xinput_state must neutralize shared state buffer while Hub is open')
 assert(st.status_diag.subtab == 'flintlock', 'Left Stick Right must navigate Diagnostics subtab')
+-- Release stick to neutral
+shared_x.Gamepad.sThumbLX = 0
+fire('xinput_state', { user = 0, state = shared_x, state_modified = shared_x })
+
+local function pulse_xinput_state(mask, user)
+    local buf = { Gamepad = { sThumbLX = 0, sThumbLY = 0, wButtons = mask } }
+    fire('xinput_state', { user = user or 0, state = buf, state_modified = buf })
+    assert(buf.Gamepad.wButtons == 0, 'xinput_state must zero wButtons in-place so nothing leaks to FFXI')
+end
+
+-- Helper: hold button across 2 frames + idle user=1 frame -> must fire ONCE (no duplicate, no premature release)
+st.focus:select_module('character')
+local before_rb_mod = st.focus:active_module().id
+pulse_xinput_state(0x0200, 0) -- RB (bit 9)
+local after_rb_mod = st.focus:active_module().id
+assert(after_rb_mod ~= before_rb_mod, 'Physical XInput RB (0x0200) via xinput_state must switch top-level module')
+local idg = st.input:get_diagnostics()
+assert(idg.raw_button_mask == 0x0200 and idg.last_physical_button == 'xinput:9 (RB)' and
+    idg.last_button_state == 'pressed' and idg.last_action == 'module_next' and idg.last_action_reached == true,
+    'Controller diagnostics must record raw_mask, physical button, pressed state, action, and reached_ui')
+-- Idle controller user=1 with wButtons=0 must NOT clear user=0 held RB state
+pulse_xinput_state(0x0000, 1)
+pulse_xinput_state(0x0200, 0) -- Still held on user=0 -> must NOT double-advance!
+assert(st.focus:active_module().id == after_rb_mod, 'Held RB across frames + idle user=1 must NOT double-fire')
+pulse_xinput_state(0x0000, 0) -- Release RB
+assert(st.input:get_diagnostics().last_button_state == 'released', 'Releasing RB must record released state')
+
+-- LB (0x0100) returns back to Character
+pulse_xinput_state(0x0100, 0); pulse_xinput_state(0x0000, 0)
+assert(st.focus:active_module().id == before_rb_mod, 'Physical XInput LB (0x0100) via xinput_state must switch module back')
+
+-- D-Pad Up (0x0001) & Down (0x0002) on Character
+local idx_before_dpad = st.character_mod.selected_idx
+pulse_xinput_state(0x0001, 0); pulse_xinput_state(0x0000, 0) -- D-Pad Up
+assert(st.character_mod.selected_idx ~= idx_before_dpad, 'Physical XInput D-Pad Up (0x0001) must move cursor')
+pulse_xinput_state(0x0002, 0); pulse_xinput_state(0x0000, 0) -- D-Pad Down
+assert(st.character_mod.selected_idx == idx_before_dpad, 'Physical XInput D-Pad Down (0x0002) must move cursor back')
+
+-- D-Pad Left (0x0004) & Right (0x0008) on Diagnostics inner subtabs
+st.focus:select_module('journal')
+local sub_start = st.status_diag.subtab
+pulse_xinput_state(0x0008, 0); pulse_xinput_state(0x0000, 0) -- D-Pad Right
+assert(st.status_diag.subtab ~= sub_start, 'Physical XInput D-Pad Right (0x0008) must switch inner tab')
+pulse_xinput_state(0x0004, 0); pulse_xinput_state(0x0000, 0) -- D-Pad Left
+assert(st.status_diag.subtab == sub_start, 'Physical XInput D-Pad Left (0x0004) must switch inner tab back')
+
+-- Y (0x8000) opens Help overlay; B (0x2000) closes Help overlay without closing Hub
+pulse_xinput_state(0x8000, 0); pulse_xinput_state(0x0000, 0) -- Y
+assert(st.focus.help_open == true, 'Physical XInput Y (0x8000) must toggle Help modal open')
+pulse_xinput_state(0x2000, 0); pulse_xinput_state(0x0000, 0) -- B
+assert(st.focus.help_open == false and st.focus:is_hub_open() == true, 'Physical XInput B (0x2000) must dismiss Help modal')
+
+-- X (0x4000) triggers Soul Sync on Character; A (0x1000) opens confirm modal on owned inactive Soul
+st.focus:select_module('character')
+local reqs_before_x = #sent_packets
+pulse_xinput_state(0x4000, 0); pulse_xinput_state(0x0000, 0) -- X
+assert(#sent_packets > reqs_before_x, 'Physical XInput X (0x4000) must trigger Soul Sync')
+-- Clear pending so A can open socket modal on Berserker (index 3, owned, inactive since Spartan is active)
+local rx_pkt = sent_packets[#sent_packets]
+local rx_id = rx_pkt.data:byte(11) + rx_pkt.data:byte(12) * 256
+fire('packet_in', { id = 0x1FF, data = build_crys_reply(rx_id, 1, 75, 0x0E, 3, 0), size = 64 })
+st.character_mod.selected_idx = 3
+pulse_xinput_state(0x1000, 0); pulse_xinput_state(0x0000, 0) -- A
+assert(st.character_mod:has_modal() == true, 'Physical XInput A (0x1000) must open Confirm Socket modal')
+pulse_xinput_state(0x2000, 0); pulse_xinput_state(0x0000, 0) -- B dismisses modal
+assert(st.character_mod:has_modal() == false and st.focus:is_hub_open() == true, 'Physical XInput B (0x2000) must dismiss modal')
+
+-- DirectInput shared-buffer `dinput_state` (POV + rgbButtons)
+st.focus:select_module('journal')
+local dsub_before = st.status_diag.subtab
+local shared_d = { lX = 0, lY = 0, rgdwPOV = { [0] = 9000, [1] = 0xFFFFFFFF, [2] = 0xFFFFFFFF, [3] = 0xFFFFFFFF }, rgbButtons = {} }
+for i = 0, 31 do shared_d.rgbButtons[i] = 0 end
+fire('dinput_state', { state = shared_d, state_modified = shared_d })
+assert(shared_d.rgdwPOV[0] == 0xFFFFFFFF, 'dinput_state must neutralize rgdwPOV[0] in-place')
+assert(st.status_diag.subtab ~= dsub_before, 'DirectInput POV via dinput_state must switch Diagnostics subtab')
+shared_d.rgdwPOV[0] = 0xFFFFFFFF
+shared_d.rgbButtons[5] = 0x80 -- R1 -> module_next
+local dmod_before = st.focus:active_module().id
+fire('dinput_state', { state = shared_d, state_modified = shared_d })
+assert(shared_d.rgbButtons[5] == 0, 'dinput_state must neutralize rgbButtons in-place')
+assert(st.focus:active_module().id ~= dmod_before, 'DirectInput R1 (rgbButtons[5]) via dinput_state must switch module')
+shared_d.rgbButtons[5] = 0
+fire('dinput_state', { state = shared_d, state_modified = shared_d })
 
 -- 8. Hold-to-repeat via present tick & Mouse <-> Gamepad device switching
 st.focus:select_module('character')
