@@ -63,7 +63,9 @@ for _, sk in ipairs(M.SKILL_LIST) do
     M.SKILL_NAMES[sk.id] = sk.name
 end
 
--- Canonical per-job weapon skill IDs (aligned with server soulspire_test_gear.JOB_WEAPONS)
+-- Canonical per-job base weapon skill IDs (aligned with server soulspire_test_gear.JOB_WEAPONS).
+-- Soul-specific restrictions and grants are derived directly from authoritative `data/soul-weapon-config.json`
+-- (compiled from `registry/weapon_configs.json` + `registry/souls.json` by `tools/registry_compiler.py`).
 -- Skill IDs: 1=H2H, 2=Dagger, 3=Sword, 4=GSword, 5=Axe, 6=GAxe, 7=Scythe,
 --            8=Polearm, 9=Katana, 10=GKatana, 11=Club, 12=Staff, 25=Archery, 26=Marksmanship, 27=Throwing
 M.JOB_WEAPON_SKILLS = {
@@ -91,15 +93,45 @@ M.JOB_WEAPON_SKILLS = {
     RUN = { 4, 3, 6, 5, 11 },
 }
 
--- Soul-specific weapon eligibility overrides (aligned with registry/weapon_configs.json)
-M.SOUL_WEAPON_OVERRIDES = {
-    flintlock   = { only = { 26 } },        -- Ranged-only firearm Soul (Marksmanship)
-    necromancer = { add  = { 7 } },         -- BLM Necromancer unlocks Scythe
-    berserker   = { add  = { 6 } },         -- WAR Berserker dual Great Axe
-    spartan     = { add  = { 8 } },         -- WAR Spartan Polearm + Buckler
-    gladiator   = { add  = { 8 } },         -- Legacy alias for Spartan
-    adventurer  = { add  = { 2, 3 } },      -- BRD Adventurer dual 1H Dagger/Sword
+-- Server-mirrored intentional Soul weapon grant not yet in weapon_configs.json (blm_specs.lua: Necromancer Scythe)
+M.SOUL_SPEC_EXTRA_SKILLS = {
+    necromancer = { 7 },
 }
+
+local function loadAuthoritativeWeaponConfig()
+    local okJson, jsonMod = pcall(require, 'core.json')
+    if not okJson or type(jsonMod) ~= 'table' or type(jsonMod.decode) ~= 'function' then
+        return nil
+    end
+    local candidates = {}
+    if type(vana) == 'table' and vana.paths and type(vana.paths.addon) == 'function' then
+        candidates[#candidates + 1] = vana.paths.addon() .. '/data/soul-weapon-config.json'
+    end
+    candidates[#candidates + 1] = 'addons/vanacore/soulspire_core/data/soul-weapon-config.json'
+    for _, path in ipairs(candidates) do
+        local f = io.open(path, 'rb')
+        if f then
+            local raw = f:read('*a')
+            f:close()
+            local okDec, decoded = pcall(jsonMod.decode, raw)
+            if okDec and type(decoded) == 'table' then
+                return decoded
+            end
+        end
+    end
+    return nil
+end
+
+local function addMaskSkills(set, mask)
+    local m = tonumber(mask) or 0
+    if m <= 0 then return end
+    for _, sid in ipairs({ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 25, 26, 27 }) do
+        local bitVal = math.floor(m / (2 ^ sid)) % 2
+        if bitVal == 1 then
+            set[sid] = true
+        end
+    end
+end
 
 local SC_SHORT_FALLBACK = {
     [1] = 'Trn', [2] = 'Cmp', [3] = 'Liq', [4] = 'Sci',
@@ -271,6 +303,7 @@ function M.new(opts)
     local soulRegistry = opts.soulRegistry
     local wsRegistry   = opts.wsRegistry
     local dataService  = opts.dataService
+    local weaponConfig = opts.weaponConfig or loadAuthoritativeWeaponConfig()
     local sendFn       = opts.sendPacket
     local clockFn      = opts.clock or os.clock
     local onJobChange  = opts.onJobChange
@@ -762,8 +795,17 @@ function M.new(opts)
         return tonumber(node.slot) or 0
     end
 
+    local getEligibleSkillSet, isSkillEligible, isWsEligible, isWsRefundOnly
+
     local function investNode(wsId, node)
         if not wsId or not node or isPendingActive() then return false end
+        if not isWsEligible(wsId) then
+            state.rejectedNodeKey = node.key
+            state.rejectedMsg = 'Ineligible for active Soul — refund existing points only.'
+            state.rejectedAt = clockFn()
+            setStatus(state.rejectedMsg)
+            return false
+        end
         local nodeIdx = resolveServerNodeIndex(wsId, node)
         if nodeIdx < 1 then
             state.rejectedNodeKey = node.key
@@ -873,7 +915,7 @@ function M.new(opts)
         end
     end
 
-    local function getEligibleSkillSet()
+    getEligibleSkillSet = function()
         local jobKey = string.upper(tostring(state.jobKey or ''))
         local baseList = M.JOB_WEAPON_SKILLS[jobKey]
         if not baseList then
@@ -881,37 +923,58 @@ function M.new(opts)
         end
         local set = {}
         local specKey = string.lower(tostring(state.specKey or ''))
-        local ov = M.SOUL_WEAPON_OVERRIDES[specKey]
-        if ov and type(ov.only) == 'table' then
-            for _, sid in ipairs(ov.only) do
-                set[sid] = true
+
+        -- 1. Check authoritative soul-weapon-config.json rangedOnly restrictions first
+        local isRangedOnly = false
+        if type(weaponConfig) == 'table' and type(weaponConfig.rangedOnly) == 'table' then
+            for _, ro in ipairs(weaponConfig.rangedOnly) do
+                if type(ro) == 'table' and string.lower(tostring(ro.soulKey or '')) == specKey and ro.firearmOnly == true then
+                    set[26] = true -- Marksmanship (firearm-only Soul)
+                    isRangedOnly = true
+                    break
+                end
             end
-        else
+        end
+
+        -- 2. Otherwise start from canonical job weapon skills + authoritative soul-weapon-config.json rule masks
+        if not isRangedOnly then
             for _, sid in ipairs(baseList) do
                 set[sid] = true
             end
-            if ov and type(ov.add) == 'table' then
-                for _, sid in ipairs(ov.add) do
+            if type(weaponConfig) == 'table' and type(weaponConfig.rules) == 'table' then
+                for _, rule in ipairs(weaponConfig.rules) do
+                    if type(rule) == 'table' and string.lower(tostring(rule.soulKey or '')) == specKey then
+                        addMaskSkills(set, rule.mainSkillMask)
+                        addMaskSkills(set, rule.subSkillMask)
+                    end
+                end
+            end
+            local extra = M.SOUL_SPEC_EXTRA_SKILLS[specKey]
+            if type(extra) == 'table' then
+                for _, sid in ipairs(extra) do
                     set[sid] = true
                 end
             end
         end
-        -- Always keep currently equipped weapon skills & any already-invested WS families accessible
-        if (tonumber(state.mainSkill) or 0) > 0 then
-            set[tonumber(state.mainSkill)] = true
-        end
-        if (tonumber(state.rangedSkill) or 0) > 0 then
-            set[tonumber(state.rangedSkill)] = true
-        end
-        for wsId, pts in pairs(state.spentByWs or {}) do
-            if (tonumber(pts) or 0) > 0 then
-                local ws = state.catalogById and state.catalogById[wsId]
-                if ws and ws.skill then
-                    set[ws.skill] = true
-                end
-            end
-        end
+        -- NOTE: Equipped weapons intentionally do NOT automatically grant WS eligibility.
         return set
+    end
+
+    isSkillEligible = function(skillId)
+        local elig = getEligibleSkillSet()
+        if elig == nil then return true end
+        return elig[tonumber(skillId) or 0] == true
+    end
+
+    isWsEligible = function(wsId)
+        local ws = state.catalogById and state.catalogById[wsId]
+        if not ws then return true end
+        return isSkillEligible(ws.skill)
+    end
+
+    isWsRefundOnly = function(wsId)
+        local spent = tonumber(state.spentByWs and state.spentByWs[wsId]) or 0
+        return spent > 0 and not isWsEligible(wsId)
     end
 
     local function getAvailableSkills()
@@ -919,9 +982,22 @@ function M.new(opts)
         if not eligible then
             return M.SKILL_LIST
         end
+        -- Include eligible weapon families plus any family holding a refund-only invested WS
+        local visible = {}
+        for sid, ok in pairs(eligible) do
+            if ok then visible[sid] = true end
+        end
+        for wsId, pts in pairs(state.spentByWs or {}) do
+            if (tonumber(pts) or 0) > 0 then
+                local ws = state.catalogById and state.catalogById[wsId]
+                if ws and ws.skill then
+                    visible[ws.skill] = true
+                end
+            end
+        end
         local out = {}
         for _, sk in ipairs(M.SKILL_LIST) do
-            if sk.id <= 0 or eligible[sk.id] then
+            if sk.id <= 0 or visible[sk.id] then
                 out[#out + 1] = sk
             end
         end
@@ -936,15 +1012,20 @@ function M.new(opts)
         local eligible = getEligibleSkillSet()
 
         for _, ws in ipairs(state.catalog) do
-            local spent = state.spentByWs[ws.id] or 0
+            local spent = tonumber(state.spentByWs[ws.id]) or 0
+            local wsEligible = (eligible == nil) or (eligible[ws.skill] == true)
+            local refundOnly = (spent > 0) and (not wsEligible)
+            ws.refundOnly = refundOnly
+
             local matchSkill = false
             if sk == 0 then
-                matchSkill = (eligible == nil) or (eligible[ws.skill] == true) or (spent > 0)
+                matchSkill = wsEligible or refundOnly
             elseif sk == -1 then
-                matchSkill = (state.mainSkill ~= 0 and ws.skill == state.mainSkill)
+                local eqMatch = (state.mainSkill ~= 0 and ws.skill == state.mainSkill)
                     or (state.rangedSkill ~= 0 and ws.skill == state.rangedSkill)
+                matchSkill = eqMatch and (wsEligible or refundOnly)
             else
-                matchSkill = (ws.skill == sk)
+                matchSkill = (ws.skill == sk) and (wsEligible or refundOnly)
             end
 
             if matchSkill then
@@ -1802,6 +1883,8 @@ function M.new(opts)
         skills             = M.SKILL_LIST,
         getAvailableSkills = getAvailableSkills,
         getEligibleSkillSet = getEligibleSkillSet,
+        isWsEligible       = isWsEligible,
+        isWsRefundOnly     = isWsRefundOnly,
         cycleSkillFilter   = cycleSkillFilter,
         getEquippedSummary = getEquippedSummary,
         getArsenalStatus   = getArsenalStatus,

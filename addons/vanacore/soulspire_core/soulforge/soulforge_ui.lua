@@ -280,6 +280,14 @@ function UI.evaluateNode(state, detail, node, tierHasOtherChosen, now)
         reason   = 'Locked — unlock prerequisite stages or weapon skill chapter first.'
     end
 
+    local isRefundOnlyWs = false
+    if detail and detail.id and state and state.catalogById and state.catalogById[detail.id] then
+        isRefundOnlyWs = (state.catalogById[detail.id].refundOnly == true)
+    end
+    if isRefundOnlyWs then
+        reason = 'Ineligible for active Soul — refund existing points only.'
+    end
+
     return {
         stateKey        = stateKey,
         spec            = F.NODE_STATES[stateKey] or F.NODE_STATES.locked,
@@ -292,7 +300,7 @@ function UI.evaluateNode(state, detail, node, tierHasOtherChosen, now)
         parentNode      = parentNode,
         availOk         = availOk,
         isAuthoritative = isAuthoritative,
-        canUpgrade      = isAuthoritative and (not isPending) and (rank < maxRank) and (not tierHasOtherChosen) and node.canLearn == true,
+        canUpgrade      = (not isRefundOnlyWs) and isAuthoritative and (not isPending) and (rank < maxRank) and (not tierHasOtherChosen) and node.canLearn == true,
         canRefund       = isAuthoritative and (not isPending) and (rank > 0),
         reason          = reason,
     }
@@ -834,13 +842,14 @@ local function drawArsenal(state, action, L, x, y, w, h, nav)
             end
             cdl:AddRect({ ix, iy }, { ix + icSz, iy + icSz }, selected and F.u32.soul_gold_bright or border, 4, 0, 1.2)
 
-            -- WS Name + clear right-aligned state label (Mastered / Eligible / Locked)
+            -- WS Name + clear right-aligned state label (Mastered / Eligible / Locked / Refund Only)
             local tx = ix + icSz + 10 * s
             local rightBadgeW = math.floor(86 * s)
             local nameMaxW = math.max(40, rowW - (tx - rx) - rightBadgeW - 8 * s)
+            local displayWsName = ws.refundOnly and (tostring(ws.name) .. ' [REFUND ONLY]') or ws.name
             F.drawShadowText(imgui, cdl, tx, ry + math.floor(rh * 0.5 - 9 * s),
-                F.fitText(imgui, ws.name, nameMaxW, 0.96 * s),
-                selected and F.u32.white or (unlocked and F.u32.text_primary or F.u32.text_secondary),
+                F.fitText(imgui, displayWsName, nameMaxW, 0.96 * s),
+                ws.refundOnly and F.u32.crimson_bright or (selected and F.u32.white or (unlocked and F.u32.text_primary or F.u32.text_secondary)),
                 0.96 * s, 'l')
 
             local stRightX = rx + rowW - 10 * s

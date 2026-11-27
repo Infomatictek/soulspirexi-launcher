@@ -50,8 +50,10 @@ assert(sent[#sent].op == sf_mod.OP_WS and sent[#sent].ws_id == 135, 'tick() must
 
 print('PASS: Phase C Soulforge WS talent allocation & timeout recovery verified')
 
--- 5. Real soulforge/soulforge_state.lua packet_in (0x1FD OXTL), investNode, refundNode, and Job+Soul weapon filtering
+-- 5. Real soulforge/soulforge_state.lua packet_in (0x1FD OXTL), investNode, refundNode, and authoritative 66-Soul weapon filtering
+package.path = 'addons/vanacore/soulspire_core/?.lua;' .. package.path
 local sf_state_mod = dofile('addons/vanacore/soulspire_core/soulforge/soulforge_state.lua')
+local json_mod     = dofile('addons/vanacore/soulspire_core/core/json.lua')
 local sent2 = {}
 local now2 = 20.0
 local st, act = sf_state_mod.new({
@@ -79,13 +81,13 @@ assert(type(act.onZone) == 'function', 'onZone alias must be exported')
 assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('META|NIN|75|5|0|5|9|0|Shinobi')))
 assert(st.jobKey == 'NIN' and st.avail == 5 and st.specKey == 'shinobi')
 assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('CAT_BEGIN')))
-assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('CAT|135:9:Blade: Ten:physical,80:6:Upheaval:physical,96:7:Cross Reaper:physical,212:26:Leaden Salute:magical')))
+assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('CAT|135:9:Blade: Ten:physical,80:6:Upheaval:physical,96:7:Cross Reaper:physical,212:26:Leaden Salute:magical,42:3:Savage Blade:physical')))
 assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('CAT_END')))
 
--- Shinobi (NIN) All Weapons (selectedSkill=0) must include Katana (9) and exclude Great Axe (6), Scythe (7), Marksmanship (26)
+-- Shinobi (NIN) All Weapons (selectedSkill=0) must include Katana (9) and Sword (3), exclude Great Axe (6), Scythe (7), Marksmanship (26)
 st.selectedSkill = 0
 local nin_rows = act.filtered()
-assert(#nin_rows == 1 and nin_rows[1].id == 135, 'Shinobi All Weapons should only include NIN-eligible skills, got ' .. tostring(#nin_rows))
+assert(#nin_rows == 2, 'Shinobi All Weapons should include only NIN-eligible skills (Katana+Sword), got ' .. tostring(#nin_rows))
 local nin_skills = act.getAvailableSkills()
 local has_gaxe, has_katana = false, false
 for _, s in ipairs(nin_skills) do
@@ -94,17 +96,73 @@ for _, s in ipairs(nin_skills) do
 end
 assert(has_katana and not has_gaxe, 'Shinobi skill list must include Katana and exclude Great Axe')
 
--- COR Flintlock (ranged-only) must restrict All Weapons strictly to Marksmanship (26)
-assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('META|COR|75|5|0|5|0|26|Flintlock')))
+-- COR Flintlock (ranged-only from authoritative soul-weapon-config.json):
+-- Equipped Sword (mainSkill=3) must NOT grant Sword WS eligibility!
+assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('META|COR|75|5|0|5|3|26|Flintlock')))
 local cor_rows = act.filtered()
-assert(#cor_rows == 1 and cor_rows[1].id == 212, 'COR Flintlock should restrict to Marksmanship WS only')
+assert(#cor_rows == 1 and cor_rows[1].id == 212 and not cor_rows[1].refundOnly,
+    'COR Flintlock must restrict to Marksmanship WS even with Sword equipped')
+assert(act.isWsEligible(212) == true and act.isWsEligible(42) == false, 'Flintlock Sword WS must be ineligible')
+
+-- Previously invested but ineligible WS (Savage Blade id=42 with 2 pts spent) must appear as refundOnly=true,
+-- block further investNode, and allow refundNode!
+assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('SPENT_BEGIN')))
+assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('SPENT|42:2:1')))
+assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('SPENT_END')))
+local cor_rows_with_refund = act.filtered()
+assert(#cor_rows_with_refund == 2, 'Previously invested ineligible WS must remain visible for refunds')
+local found_refund_only = false
+for _, r in ipairs(cor_rows_with_refund) do
+    if r.id == 42 then found_refund_only = (r.refundOnly == true) end
+end
+assert(found_refund_only == true, 'Ineligible invested WS must be marked refundOnly=true')
+assert(act.isWsRefundOnly(42) == true, 'isWsRefundOnly(42) must be true')
+assert(act.investNode(42, { key = 't1_dmg', idx = 1, name = 'Power' }) == false, 'investNode must block refund-only WS')
+local prev_sent = #sent2
+assert(act.refundNode(42, { key = 't1_dmg', idx = 1, name = 'Power' }) == true, 'refundNode must remain allowed on refund-only WS')
+assert(#sent2 == prev_sent + 1 and sent2[#sent2].op == sf_state_mod.OP_REFUND)
+-- Clear pendingOp via ERR| and verify no optimistic corruption
+assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('ERR|Refund test error')))
+assert(st.pendingOp == nil and st.rejectedMsg == 'Refund test error')
+-- Clear spent before next checks
+assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('SPENT_BEGIN')))
+assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('SPENT_END')))
 
 -- BLM Necromancer must add Scythe (7) to BLM weapons
-assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('META|BLM|75|5|0|5|7|0|Necromancer')))
+assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('META|BLM|75|5|0|5|0|0|Necromancer')))
 local blm_rows = act.filtered()
 assert(#blm_rows == 1 and blm_rows[1].id == 96, 'BLM Necromancer must include Scythe WS')
 
--- Back to NIN Shinobi -> load WS detail via 0x1FD and verify investNode + refundNode
+-- Validate ALL 66 canonical Souls from authoritative soul-identities.json
+local id_f = assert(io.open('addons/vanacore/soulspire_core/data/soul-identities.json', 'rb'))
+local id_data = json_mod.decode(id_f:read('*a'))
+id_f:close()
+local JOB_ID_TO_KEY = {
+    [1]='WAR',[2]='MNK',[3]='WHM',[4]='BLM',[5]='RDM',[6]='THF',[7]='PLD',[8]='DRK',[9]='BST',[10]='BRD',[11]='RNG',
+    [12]='SAM',[13]='NIN',[14]='DRG',[15]='SMN',[16]='BLU',[17]='COR',[18]='PUP',[19]='DNC',[20]='SCH',[21]='GEO',[22]='RUN',
+}
+local checked_souls = 0
+for _, entry in ipairs(id_data.souls or {}) do
+    local jkey = entry.jobKey or JOB_ID_TO_KEY[tonumber(entry.jobId)]
+    local skey = entry.internalKey or entry.canonicalKey or entry.name or entry.displayName
+    assert(act.handlePacketIn(0x1FD, make_oxtl_1fd(string.format('META|%s|75|5|0|5|0|0|%s', jkey, skey))))
+    local elig = act.getEligibleSkillSet()
+    assert(type(elig) == 'table', 'Eligible skill set must exist for ' .. tostring(jkey) .. ':' .. tostring(skey))
+    local cnt = 0
+    for _, v in pairs(elig) do if v then cnt = cnt + 1 end end
+    assert(cnt >= 1, 'Every canonical Soul must have >=1 eligible weapon family: ' .. tostring(skey))
+    if string.lower(skey) == 'flintlock' then
+        assert(cnt == 1 and elig[26] == true, 'Flintlock must be strictly Marksmanship (26)')
+    elseif string.lower(skey) == 'necromancer' then
+        assert(elig[7] == true and elig[11] == true and elig[12] == true, 'Necromancer must include Scythe/Club/Staff')
+    elseif string.lower(skey) == 'berserker' then
+        assert(elig[6] == true, 'Berserker must include Great Axe (6)')
+    end
+    checked_souls = checked_souls + 1
+end
+assert(checked_souls == 66, 'Expected 66 canonical Souls validated, got ' .. tostring(checked_souls))
+
+-- Back to NIN Shinobi -> load WS detail via 0x1FD and verify investNode + duplicate prevention + refundNode + zone invalidation
 assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('META|NIN|75|5|0|5|9|0|Shinobi')))
 assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('WS|135|Blade: Ten|Katana|physical|0|LOCKED')))
 assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('NODE|135|t1_dmg|1|1|0|5|1|0||0|Edge Mastery|+5% dmg|1|0|0||1')))
@@ -113,6 +171,7 @@ assert(st.wsDetail and st.wsDetail.authoritative == true and st.wsDetail.id == 1
 
 local ok_inv = act.investNode(135, st.wsDetail.byKey['t1_dmg'])
 assert(ok_inv == true, 'investNode must succeed on authoritative WS detail')
+assert(act.investNode(135, st.wsDetail.byKey['t1_dmg']) == false, 'Duplicate investNode while pending must be blocked')
 assert(sent2[#sent2].id == 0x11F and sent2[#sent2].op == sf_state_mod.OP_INVEST and sent2[#sent2].wsId == 135 and sent2[#sent2].a1 == 1)
 
 assert(act.handlePacketIn(0x1FD, make_oxtl_1fd('META|NIN|75|4|1|5|9|0|Shinobi')))
@@ -124,4 +183,6 @@ assert(st.pendingOp == nil and st.avail == 4 and st.wsDetail.byKey['t1_dmg'].ran
 local ok_ref = act.refundNode(135, st.wsDetail.byKey['t1_dmg'])
 assert(ok_ref == true, 'refundNode must succeed')
 assert(sent2[#sent2].op == sf_state_mod.OP_REFUND and sent2[#sent2].wsId == 135 and sent2[#sent2].a1 == 1)
-print('PASS: real soulforge_state 0x1FD packet_in, invest/refund, and Job+Soul weapon filtering verified')
+act.onZone()
+assert(st.pendingOp == nil and st.wsDetail == nil and st.needsRefresh == true, 'onZone/invalidate must clear transient WS state')
+print('PASS: real soulforge_state 0x1FD packet_in, invest/refund, 66-Soul eligibility parity & refund-only verified')
