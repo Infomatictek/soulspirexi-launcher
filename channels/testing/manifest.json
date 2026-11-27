@@ -12,7 +12,7 @@
     "notes": "Testing channel build pairing verified 27-hook Soulspire Native (soulspire_native.dll) with server."
   },
   "serverName": "SoulspireXI",
-  "tagline": "Faerie Companions (Eos & Titania) • Job Specs • 4-Tier Weaponskill Talent Trees",
+  "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
   "defaultHost": "play.soulspirexi.com",
   "useHairpin": false,
   "ports": {
@@ -11940,12 +11940,12 @@
     "baseline": {
       "profile": "baseline",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-native.13",
-      "commitSha": "18cb68d647",
+      "tag": "v0.9.9-soulspire-native.14",
+      "commitSha": "c622ab5d96",
       "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.13/soulspirexi-client-experimental-0.9.9-18cb68d647-win32.zip",
-      "packageSha256": "87c58934ebe4b80f934e984682ffa44378e7adcff6e645948e797c9ad082375c",
-      "packageSize": 99046126,
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.14/soulspirexi-client-experimental-0.9.9-c622ab5d96-win32.zip",
+      "packageSha256": "d97abf472ce20adbb267d5d01c86b1ab3eb326cfbf4c21cfacf237e694aebf21",
+      "packageSize": 99063321,
       "experimentalEligible": true,
       "clientVerified": false,
       "notes": "VanaCore Baseline profile on v0.9.9-soulspire-native.9 (d42f2646d8): combines Phase D native weapon/model hooks (#22, #25-#27, #32-#35), C++ 0x1FC/0x1FF decoders, and PLAYER-CMD-001 fail-closed defaults ([mcp] available=0, [developer] enabled=0, /vana2 disabled); launcher disables all addons/hooks for clean baseline certification."
@@ -11953,12 +11953,12 @@
     "compat": {
       "profile": "compat",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-native.13",
-      "commitSha": "18cb68d647",
+      "tag": "v0.9.9-soulspire-native.14",
+      "commitSha": "c622ab5d96",
       "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.13/soulspirexi-client-experimental-0.9.9-18cb68d647-win32.zip",
-      "packageSha256": "87c58934ebe4b80f934e984682ffa44378e7adcff6e645948e797c9ad082375c",
-      "packageSize": 99046126,
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.14/soulspirexi-client-experimental-0.9.9-c622ab5d96-win32.zip",
+      "packageSha256": "d97abf472ce20adbb267d5d01c86b1ab3eb326cfbf4c21cfacf237e694aebf21",
+      "packageSize": 99063321,
       "experimentalEligible": true,
       "clientVerified": false,
       "notes": "VanaCore-Native Soulspire v0.9.9-soulspire-native.9 (d42f2646d8, Compatibility Recovery profile): combines Phase D native weapon/model hooks (#22, #25-#27, #32-#35) and PLAYER-CMD-001 fail-closed defaults ([mcp] available=0, [developer] enabled=0, /vana2 disabled)."
@@ -11966,17 +11966,17 @@
     "native": {
       "profile": "native",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-native.13",
-      "commitSha": "18cb68d647",
+      "tag": "v0.9.9-soulspire-native.14",
+      "commitSha": "c622ab5d96",
       "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.13/soulspirexi-client-experimental-0.9.9-18cb68d647-win32.zip",
-      "packageSha256": "87c58934ebe4b80f934e984682ffa44378e7adcff6e645948e797c9ad082375c",
-      "packageSize": 99046126,
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.14/soulspirexi-client-experimental-0.9.9-c622ab5d96-win32.zip",
+      "packageSha256": "d97abf472ce20adbb267d5d01c86b1ab3eb326cfbf4c21cfacf237e694aebf21",
+      "packageSize": 99063321,
       "experimentalEligible": true,
       "clientVerified": false,
-      "notes": "Full VanaCore-Native Soulspire v0.9.9-soulspire-native.13 (18cb68d647, DEC-028 API v2, QA-SOUL-COMPANIONS-001): adds tester-exclusive 66-Soul Companion Magic menu integration (reusing existing Soul Action renaming/visibility hooks, fail-closed on [SSCMP]), protected soulspire_core & 278 COR DATs, Phase D weapon hooks, and PLAYER-CMD-001 fail-closed defaults."
+      "notes": "Full VanaCore-Native Soulspire v0.9.9-soulspire-native.14 (c622ab5d96, DEC-028 API v2, DEC-038 Soul Echoes rebranding, QA-SOUL-COMPANIONS-001): adds runtime Soul Echoes native UI/button/filter/system-chat rebranding (reusing existing buttons/labeltext/chat hooks, width-checked 'Echoes' button, zero player-chat rewriting), tester-exclusive 66-Soul Echoes Magic menu integration, protected soulspire_core & 278 COR DATs, Phase D weapon hooks, and PLAYER-CMD-001 fail-closed defaults."
     }
   },
   "version": "2.2.3-testing.26",
-  "notes": "SoulspireXI Testing v2.2.3-testing.18 — fixes Soulforge 0x1FD packet_in dispatch (WS talent point allocation/refunds), adds authoritative registry-driven Job+Soul weapon filtering with refund-only protection across all 66 Souls, and preserves VanaCore v0.9.9-soulspire-native.7 retail startup fix."
+  "notes": "SoulspireXI Testing v2.2.3-testing.18 \u2014 fixes Soulforge 0x1FD packet_in dispatch (WS talent point allocation/refunds), adds authoritative registry-driven Job+Soul weapon filtering with refund-only protection across all 66 Souls, and preserves VanaCore v0.9.9-soulspire-native.7 retail startup fix."
 }
