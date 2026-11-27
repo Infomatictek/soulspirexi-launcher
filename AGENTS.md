@@ -20,8 +20,9 @@ Before making changes, recover full cross-repository project context from the Pr
   - Never promote unverified changes (`clientVerified: false` / `nativeDllClientVerified: false`) to `Stable`.
   - Keep `channels/testing/modern-client.json` strictly synchronized with `channels/testing/manifest.json["modernClient"]` across `baseline`, `compat`, and `native`.
   - Preserve `ECDSA-P256-SHA256` release signing (`keys/soulspire-launcher-release-v1.pub.pem`), SHA-256 verification, and `--password-stdin` credential handling (never pass plaintext passwords on CLI).
-- **Zero-Ashita Native Direction (`DEC-028`):**
+- **Zero-Ashita Native Direction & Canonical Namespace (`DEC-028`, `DEC-033` / `BRAND-001`):**
   - `addons/vanacore/soulspire_core/` must have zero `AshitaCore`, `ashita.*`, `d3d8`, `soulspire_native.dll`, or `crystaljobs.dll` references, enforced by `tests/test_vanacore_compat.py` and `[addons] ashita.enabled=0`.
+  - SoulspireXI (`SOULSPIRE_*`, `soulspire_*`, `SS*` wire headers) is the sole permanent project namespace (`DEC-033`). Never introduce new `OverlordsXI`, `Overlords`, `OVERLORDS_*`, or project-specific `OX_*` identifiers in active VanaCore/launcher code. Do not invest effort migrating retired Ashita v4 addons.
 - **Mandatory Local Checks Before Push:**
   - `python3 -m unittest discover -s tests -p "test_*.py" -v`
   - `python3 scripts/verify-launcher-manifest.py`

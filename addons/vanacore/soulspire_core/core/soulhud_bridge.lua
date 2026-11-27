@@ -51,7 +51,8 @@ end
 local function decode_oxhd_0x1fc(data, size)
     if type(data) ~= 'string' then return nil end
     local len = (type(size) == 'number' and size > 0 and size <= #data) and size or #data
-    if len < 16 or data:sub(5, 8) ~= 'OXHD' then return nil end
+    local magic = len >= 8 and data:sub(5, 8) or ''
+    if len < 16 or (magic ~= 'SSHD' and magic ~= 'OXHD') then return nil end
     local ver      = data:byte(9) or 0
     local unlocked = (data:byte(10) or 0) == 1
     local job_id   = data:byte(11) or 0
@@ -264,14 +265,14 @@ function M:handle_packet_in(id, data, now, size)
     if id == 0x017 then
         local msg = extract_0x017_message(data, size)
         if type(msg) ~= 'string' or msg == '' then return false end
-        if msg:sub(1, 8) == '[OXHUD]|' then
+        if msg:sub(1, 8) == '[SSHUD]|' or msg:sub(1, 8) == '[OXHUD]|' then
             local parts = split_char(msg, '|')
             local job_id   = tonumber(parts[2]) or 0
             local soul_key = trim(parts[3] or '')
             local unlocked = (trim(parts[4] or '') == '1')
             local kv_raw   = parts[5] or ''
             return self:_apply_hud_payload(soul_key, job_id, unlocked, parse_kv(kv_raw), ts)
-        elseif msg:sub(1, 8) == '[OXBST]|' then
+        elseif msg:sub(1, 8) == '[SSBST]|' or msg:sub(1, 8) == '[OXBST]|' then
             local parts = split_char(msg, '|')
             local active = (trim(parts[2] or '') == '1')
             local stacks = tonumber(parts[3]) or 0

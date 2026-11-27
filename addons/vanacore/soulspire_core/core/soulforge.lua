@@ -7,9 +7,10 @@
 
 local M = {}
 
-M.PROTO_TAG     = '[OXTAL]|'
-M.PACKET_C2S_ID = 0x11F
-M.PACKET_S2C_ID = 0x1FD
+M.PROTO_TAG        = '[SSTAL]|'
+M.LEGACY_PROTO_TAG = '[OXTAL]|'
+M.PACKET_C2S_ID    = 0x11F
+M.PACKET_S2C_ID    = 0x1FD
 M.OP_SYNC       = 1
 M.OP_STATE      = 2
 M.OP_WS         = 3
@@ -386,7 +387,8 @@ function M.new(opts)
 
     function self:handle_packet_in(id, data)
         if type(data) ~= 'string' then return false end
-        if id == M.PACKET_S2C_ID and #data >= 12 and data:sub(5, 8) == 'OXTL' then
+        local magic = (#data >= 8) and data:sub(5, 8) or ''
+        if id == M.PACKET_S2C_ID and #data >= 12 and (magic == 'SSTL' or magic == 'OXTL') then
             self.packets_in = self.packets_in + 1
             local b11, b12 = data:byte(11, 12)
             local pay_len = (b11 or 0) + (b12 or 0) * 256
@@ -394,6 +396,8 @@ function M.new(opts)
                 local line = data:sub(13, 12 + pay_len)
                 if line:sub(1, #M.PROTO_TAG) == M.PROTO_TAG then
                     line = line:sub(#M.PROTO_TAG + 1)
+                elseif line:sub(1, #M.LEGACY_PROTO_TAG) == M.LEGACY_PROTO_TAG then
+                    line = line:sub(#M.LEGACY_PROTO_TAG + 1)
                 end
                 return self:handle_proto_line(line)
             end
@@ -403,6 +407,9 @@ function M.new(opts)
             if msg and string.sub(msg, 1, #M.PROTO_TAG) == M.PROTO_TAG then
                 self.packets_in = self.packets_in + 1
                 return self:handle_proto_line(string.sub(msg, #M.PROTO_TAG + 1))
+            elseif msg and string.sub(msg, 1, #M.LEGACY_PROTO_TAG) == M.LEGACY_PROTO_TAG then
+                self.packets_in = self.packets_in + 1
+                return self:handle_proto_line(string.sub(msg, #M.LEGACY_PROTO_TAG + 1))
             end
         end
         return false

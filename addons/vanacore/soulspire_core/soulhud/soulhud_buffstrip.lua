@@ -51,7 +51,7 @@ function M.parse(raw, now)
 end
 
 function M.applyKv(kvMap, now)
-    M.parse(kvMap and kvMap.ox_buffs or '', now)
+    M.parse((kvMap and (kvMap.ss_buffs or kvMap.ox_buffs)) or '', now)
 end
 
 -- Rendering lives in soulhud_gauge.lua (status sub-strip of the Crystal Job Gauge).

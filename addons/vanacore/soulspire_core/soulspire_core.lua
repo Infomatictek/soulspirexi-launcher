@@ -638,7 +638,8 @@ if type(vana) == 'table' and vana.events then
         -- even on VanaCore builds where C++ 0x1FC byte offsets differed.
         if id == 0x1FC and type(data) == 'string' then
             local len = (type(size) == 'number' and size > 0 and size <= #data) and size or #data
-            if len >= 16 and data:sub(5, 8) == 'OXHD' and data:byte(9) == 1 then
+            local magic = len >= 8 and data:sub(5, 8) or ''
+            if len >= 16 and (magic == 'SSHD' or magic == 'OXHD') and data:byte(9) == 1 then
                 runtime_diag.oxhd_rx = runtime_diag.oxhd_rx + 1
                 local unlocked = (data:byte(10) or 0) == 1
                 local job_id   = data:byte(11) or 0

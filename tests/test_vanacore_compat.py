@@ -270,6 +270,37 @@ class VanaCoreCompatibilityTests(unittest.TestCase):
             self.assertIn(prof["tag"], prof["packageUrl"])
             self.assertIn(prof["commitSha"], prof["packageUrl"])
 
+    def test_brand_001_vanacore_canonical_protocol_and_hygiene(self):
+        """BRAND-001 / DEC-033: VanaCore soulspire_core supports canonical SS* protocols and has zero Overlords branding."""
+        import re
+
+        vc_root = REPO_ROOT / "addons" / "vanacore" / "soulspire_core"
+        legacy_brand_re = re.compile(r"\b(overlords?xi|overlords|overlords_[a-z0-9_]+|ox_combat_session)\b", re.IGNORECASE)
+        for p in sorted(vc_root.rglob("*.lua")):
+            if "tests" in p.parts:
+                continue
+            txt = p.read_text(encoding="utf-8", errors="replace")
+            hits = sorted({m.group(0) for m in legacy_brand_re.finditer(txt)})
+            self.assertEqual(hits, [], f"Legacy Overlords branding found in {p.relative_to(REPO_ROOT)}: {hits}")
+
+        sf = (vc_root / "core" / "soulforge.lua").read_text(encoding="utf-8")
+        self.assertIn("'[SSTAL]|'", sf)
+        self.assertIn("'SSTL'", sf)
+        sf_state = (vc_root / "soulforge" / "soulforge_state.lua").read_text(encoding="utf-8")
+        self.assertIn("'[SSTAL]|'", sf_state)
+        self.assertIn("'SSTL'", sf_state)
+        hud = (vc_root / "core" / "soulhud_bridge.lua").read_text(encoding="utf-8")
+        self.assertIn("'SSHD'", hud)
+        self.assertIn("'[SSHUD]|'", hud)
+        self.assertIn("'[SSBST]|'", hud)
+        core = (vc_root / "soulspire_core.lua").read_text(encoding="utf-8")
+        self.assertIn("'SSHD'", core)
+        bs = (vc_root / "soulhud" / "soulhud_buffstrip.lua").read_text(encoding="utf-8")
+        self.assertIn("ss_buffs", bs)
+        cat = (vc_root / "soulhud" / "status_catalog.lua").read_text(encoding="utf-8")
+        self.assertIn("Soulspire Chain", cat)
+        self.assertIn("Soulspire Ward", cat)
+
 
 if __name__ == "__main__":
     unittest.main()

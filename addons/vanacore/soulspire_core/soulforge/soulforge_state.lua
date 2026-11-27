@@ -16,7 +16,8 @@
 
 local M = {}
 
-M.PROTO_TAG     = '[OXTAL]|'
+M.PROTO_TAG        = '[SSTAL]|'
+M.LEGACY_PROTO_TAG = '[OXTAL]|'
 M.PACKET_C2S_ID = 0x11F
 M.PACKET_S2C_ID = 0x1FD
 M.OP_SYNC       = 1
@@ -1638,7 +1639,8 @@ function M.new(opts)
     local function handlePacketIn(id, data, size)
         if id == M.PACKET_S2C_ID then
             local sz = size or (type(data) == 'string' and #data or 0)
-            if type(data) == 'string' and sz >= 12 and data:sub(5, 8) == 'OXTL' then
+            local magic = (type(data) == 'string' and sz >= 8) and data:sub(5, 8) or ''
+            if type(data) == 'string' and sz >= 12 and (magic == 'SSTL' or magic == 'OXTL') then
                 local b11, b12 = data:byte(11, 12)
                 local payLen = (b11 or 0) + (b12 or 0) * 256
                 if dataService then
@@ -1657,6 +1659,8 @@ function M.new(opts)
                     local line = data:sub(13, 12 + payLen)
                     if line:sub(1, #M.PROTO_TAG) == M.PROTO_TAG then
                         line = line:sub(#M.PROTO_TAG + 1)
+                    elseif line:sub(1, #M.LEGACY_PROTO_TAG) == M.LEGACY_PROTO_TAG then
+                        line = line:sub(#M.LEGACY_PROTO_TAG + 1)
                     end
                     handleProtoLine(line)
                 end
@@ -1665,14 +1669,20 @@ function M.new(opts)
         elseif id == 0x017 then
             if type(data) ~= 'string' or #data < 25 then return false end
             local msg = string.sub(data, 24):match('^([^%z]*)')
-            if msg == nil or string.sub(msg, 1, #M.PROTO_TAG) ~= M.PROTO_TAG then
+            local tag = nil
+            if msg and string.sub(msg, 1, #M.PROTO_TAG) == M.PROTO_TAG then
+                tag = M.PROTO_TAG
+            elseif msg and string.sub(msg, 1, #M.LEGACY_PROTO_TAG) == M.LEGACY_PROTO_TAG then
+                tag = M.LEGACY_PROTO_TAG
+            end
+            if not tag then
                 return false
             end
             if dataService then
                 dataService:record_metric('packets_in_oxtl', 1)
                 dataService:record_metric('bytes_in_oxtl', #msg)
             end
-            handleProtoLine(string.sub(msg, #M.PROTO_TAG + 1))
+            handleProtoLine(string.sub(msg, #tag + 1))
             return true
         end
         return false
