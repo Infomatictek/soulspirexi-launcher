@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "channel": "testing",
-  "manifestVersion": "2.2.3-testing.17",
+  "manifestVersion": "2.2.3-testing.24",
   "minLauncherVersion": "2.1.0",
   "serverCompatibility": {
     "version": "main (Soulspire Native 27-hook)",
@@ -6122,7 +6122,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/weapon_render_probe.lua",
       "targetPath": "soulspire_core/core/weapon_render_probe.lua",
-      "sha256": "f37ce3050a4bf74cc5b3a64bcf3ba153c25f6c3c7cb51306d1928aa1a6565112",
+      "sha256": "d58765fb2c09b45140f1262108ada8ab0366bb23d1d4e5aa722908709dd6b77c",
       "size": 61093
     },
     {
@@ -11932,41 +11932,41 @@
     "baseline": {
       "profile": "baseline",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-native.8",
-      "commitSha": "9ef2894c04",
+      "tag": "v0.9.9-soulspire-native.9",
+      "commitSha": "d42f2646d8",
       "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.8/soulspirexi-client-experimental-0.9.9-9ef2894c04-win32.zip",
-      "packageSha256": "f2587719503b286d1d0fa2b32b915747cb41136d5a62b207dea00e2e30e1bb4b",
-      "packageSize": 99042123,
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.9/soulspirexi-client-experimental-0.9.9-d42f2646d8-win32.zip",
+      "packageSha256": "d8a0f0622513dcf871aaffaa64382bbc96e0db3645379aa2306e8f92a63fbefd",
+      "packageSize": 99042619,
       "experimentalEligible": true,
       "clientVerified": false,
-      "notes": "VanaCore Baseline profile on v0.9.9-soulspire-native.8 (9ef2894c04): includes Phase D native weapon/model hooks (#22, #25-#27, #32-#35) + permanent C++ 0x1FC/0x1FF decoders + background acquire guard + texture negative cache; launcher sets [soulspire] enabled=0 and disables all addons/hooks for clean baseline certification."
+      "notes": "VanaCore Baseline profile on v0.9.9-soulspire-native.9 (d42f2646d8): combines Phase D native weapon/model hooks (#22, #25-#27, #32-#35), C++ 0x1FC/0x1FF decoders, and PLAYER-CMD-001 fail-closed defaults ([mcp] available=0, [developer] enabled=0, /vana2 disabled); launcher disables all addons/hooks for clean baseline certification."
     },
     "compat": {
       "profile": "compat",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-native.8",
-      "commitSha": "9ef2894c04",
+      "tag": "v0.9.9-soulspire-native.9",
+      "commitSha": "d42f2646d8",
       "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.8/soulspirexi-client-experimental-0.9.9-9ef2894c04-win32.zip",
-      "packageSha256": "f2587719503b286d1d0fa2b32b915747cb41136d5a62b207dea00e2e30e1bb4b",
-      "packageSize": 99042123,
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.9/soulspirexi-client-experimental-0.9.9-d42f2646d8-win32.zip",
+      "packageSha256": "d8a0f0622513dcf871aaffaa64382bbc96e0db3645379aa2306e8f92a63fbefd",
+      "packageSize": 99042619,
       "experimentalEligible": true,
       "clientVerified": false,
-      "notes": "VanaCore-Native Soulspire v0.9.9-soulspire-native.8 (9ef2894c04, Compatibility Recovery profile): includes Phase D native weapon/model hooks (#22, #25-#27, #32-#35) for Berserker dual Great Axes and Flintlock dual pistols/appearanceMasks, permanent C++ 0x1FC/0x1FF decoders, background acquire guard, and texture negative cache."
+      "notes": "VanaCore-Native Soulspire v0.9.9-soulspire-native.9 (d42f2646d8, Compatibility Recovery profile): combines Phase D native weapon/model hooks (#22, #25-#27, #32-#35) and PLAYER-CMD-001 fail-closed defaults ([mcp] available=0, [developer] enabled=0, /vana2 disabled)."
     },
     "native": {
       "profile": "native",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-native.8",
-      "commitSha": "9ef2894c04",
+      "tag": "v0.9.9-soulspire-native.9",
+      "commitSha": "d42f2646d8",
       "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.8/soulspirexi-client-experimental-0.9.9-9ef2894c04-win32.zip",
-      "packageSha256": "f2587719503b286d1d0fa2b32b915747cb41136d5a62b207dea00e2e30e1bb4b",
-      "packageSize": 99042123,
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.9/soulspirexi-client-experimental-0.9.9-d42f2646d8-win32.zip",
+      "packageSha256": "d8a0f0622513dcf871aaffaa64382bbc96e0db3645379aa2306e8f92a63fbefd",
+      "packageSize": 99042619,
       "experimentalEligible": true,
       "clientVerified": false,
-      "notes": "Full VanaCore-Native Soulspire v0.9.9-soulspire-native.8 (9ef2894c04, DEC-028 API v2): adds Phase D native weapon/model hooks (#22, #25-#27, #32-#35) for Berserker dual Great Axes and Flintlock dual pistols/appearanceMasks, permanent C++ 0x1FC/0x1FF decoders, background acquire guard, and texture negative cache, paired with shared 66-Soul Weapon Mastery eligibility filtering."
+      "notes": "Full VanaCore-Native Soulspire v0.9.9-soulspire-native.9 (d42f2646d8, DEC-028 API v2): combines Phase D native weapon/model hooks (#22, #25-#27, #32-#35), PLAYER-CMD-001 fail-closed defaults ([mcp] available=0, [developer] enabled=0, /vana2 disabled), cleaned 4-tab production Soulspire Core UI, and shared 66-Soul Weapon Mastery eligibility filtering across VanaCore and Ashita v4."
     }
   },
   "version": "2.2.3-testing.23",
