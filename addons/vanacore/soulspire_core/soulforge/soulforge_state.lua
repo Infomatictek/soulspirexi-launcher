@@ -63,6 +63,44 @@ for _, sk in ipairs(M.SKILL_LIST) do
     M.SKILL_NAMES[sk.id] = sk.name
 end
 
+-- Canonical per-job weapon skill IDs (aligned with server soulspire_test_gear.JOB_WEAPONS)
+-- Skill IDs: 1=H2H, 2=Dagger, 3=Sword, 4=GSword, 5=Axe, 6=GAxe, 7=Scythe,
+--            8=Polearm, 9=Katana, 10=GKatana, 11=Club, 12=Staff, 25=Archery, 26=Marksmanship, 27=Throwing
+M.JOB_WEAPON_SKILLS = {
+    WAR = { 6, 5, 4, 3, 7, 8, 11, 2, 1, 12, 25, 26, 27 },
+    MNK = { 1, 12, 11, 27 },
+    WHM = { 11, 12 },
+    BLM = { 12, 11 },
+    RDM = { 3, 2, 11, 12, 25 },
+    THF = { 2, 3, 1, 11, 25, 26, 27 },
+    PLD = { 3, 11, 4, 8, 12, 2 },
+    DRK = { 7, 4, 3, 6, 5, 11, 2, 26 },
+    BST = { 5, 7, 3, 2, 11 },
+    BRD = { 2, 3, 11, 12 },
+    RNG = { 25, 26, 5, 2, 3, 11, 27 },
+    SAM = { 10, 8, 3, 11, 25, 27 },
+    NIN = { 9, 2, 3, 10, 1, 11, 27, 25 },
+    DRG = { 8, 12, 3, 11, 2 },
+    SMN = { 12, 11 },
+    BLU = { 3, 11 },
+    COR = { 2, 3, 26, 27 },
+    PUP = { 1, 2, 11, 27 },
+    DNC = { 2, 3, 1, 27 },
+    SCH = { 12, 11 },
+    GEO = { 11, 12, 2 },
+    RUN = { 4, 3, 6, 5, 11 },
+}
+
+-- Soul-specific weapon eligibility overrides (aligned with registry/weapon_configs.json)
+M.SOUL_WEAPON_OVERRIDES = {
+    flintlock   = { only = { 26 } },        -- Ranged-only firearm Soul (Marksmanship)
+    necromancer = { add  = { 7 } },         -- BLM Necromancer unlocks Scythe
+    berserker   = { add  = { 6 } },         -- WAR Berserker dual Great Axe
+    spartan     = { add  = { 8 } },         -- WAR Spartan Polearm + Buckler
+    gladiator   = { add  = { 8 } },         -- Legacy alias for Spartan
+    adventurer  = { add  = { 2, 3 } },      -- BRD Adventurer dual 1H Dagger/Sword
+}
+
 local SC_SHORT_FALLBACK = {
     [1] = 'Trn', [2] = 'Cmp', [3] = 'Liq', [4] = 'Sci',
     [5] = 'Rev', [6] = 'Det', [7] = 'Ind', [8] = 'Imp',
@@ -835,16 +873,73 @@ function M.new(opts)
         end
     end
 
+    local function getEligibleSkillSet()
+        local jobKey = string.upper(tostring(state.jobKey or ''))
+        local baseList = M.JOB_WEAPON_SKILLS[jobKey]
+        if not baseList then
+            return nil -- Job not synced yet; do not prematurely hide skills
+        end
+        local set = {}
+        local specKey = string.lower(tostring(state.specKey or ''))
+        local ov = M.SOUL_WEAPON_OVERRIDES[specKey]
+        if ov and type(ov.only) == 'table' then
+            for _, sid in ipairs(ov.only) do
+                set[sid] = true
+            end
+        else
+            for _, sid in ipairs(baseList) do
+                set[sid] = true
+            end
+            if ov and type(ov.add) == 'table' then
+                for _, sid in ipairs(ov.add) do
+                    set[sid] = true
+                end
+            end
+        end
+        -- Always keep currently equipped weapon skills & any already-invested WS families accessible
+        if (tonumber(state.mainSkill) or 0) > 0 then
+            set[tonumber(state.mainSkill)] = true
+        end
+        if (tonumber(state.rangedSkill) or 0) > 0 then
+            set[tonumber(state.rangedSkill)] = true
+        end
+        for wsId, pts in pairs(state.spentByWs or {}) do
+            if (tonumber(pts) or 0) > 0 then
+                local ws = state.catalogById and state.catalogById[wsId]
+                if ws and ws.skill then
+                    set[ws.skill] = true
+                end
+            end
+        end
+        return set
+    end
+
+    local function getAvailableSkills()
+        local eligible = getEligibleSkillSet()
+        if not eligible then
+            return M.SKILL_LIST
+        end
+        local out = {}
+        for _, sk in ipairs(M.SKILL_LIST) do
+            if sk.id <= 0 or eligible[sk.id] then
+                out[#out + 1] = sk
+            end
+        end
+        return out
+    end
+
     local function getFilteredCatalog()
         local list = {}
         local rawQuery = (state.searchBuf[1] or ''):gsub('%z.*$', '')
         local query = string.lower(rawQuery)
         local sk = state.selectedSkill
+        local eligible = getEligibleSkillSet()
 
         for _, ws in ipairs(state.catalog) do
+            local spent = state.spentByWs[ws.id] or 0
             local matchSkill = false
             if sk == 0 then
-                matchSkill = true
+                matchSkill = (eligible == nil) or (eligible[ws.skill] == true) or (spent > 0)
             elseif sk == -1 then
                 matchSkill = (state.mainSkill ~= 0 and ws.skill == state.mainSkill)
                     or (state.rangedSkill ~= 0 and ws.skill == state.rangedSkill)
@@ -853,7 +948,6 @@ function M.new(opts)
             end
 
             if matchSkill then
-                local spent = state.spentByWs[ws.id] or 0
                 local matchInvested = (not state.investedOnly[1]) or (spent > 0)
                 local matchQuery = (query == '') or (string.find(string.lower(ws.name), query, 1, true) ~= nil)
                 if matchInvested and matchQuery then
@@ -1223,6 +1317,10 @@ function M.new(opts)
                 state.wsDetail         = nil
                 state.wsRequest        = nil
                 state.wsError          = nil
+                local elig = getEligibleSkillSet()
+                if elig and (tonumber(state.selectedSkill) or 0) > 0 and not elig[state.selectedSkill] then
+                    state.selectedSkill = 0
+                end
                 if dataService then
                     dataService:invalidate_dynamic_state('job_or_soul_change:' .. tostring(state.jobKey) .. ':' .. tostring(state.specKey))
                 end
@@ -1592,17 +1690,18 @@ function M.new(opts)
     end
 
     local function cycleSkillFilter(dir)
+        local skills = getAvailableSkills()
         local curIdx = 1
-        for i, sk in ipairs(M.SKILL_LIST) do
+        for i, sk in ipairs(skills) do
             if sk.id == state.selectedSkill then
                 curIdx = i
                 break
             end
         end
         local step = (dir and dir < 0) and -1 or 1
-        local nextIdx = ((curIdx - 1 + step) % #M.SKILL_LIST) + 1
-        state.selectedSkill = M.SKILL_LIST[nextIdx].id
-        return M.SKILL_LIST[nextIdx]
+        local nextIdx = ((curIdx - 1 + step) % #skills) + 1
+        state.selectedSkill = skills[nextIdx].id
+        return skills[nextIdx]
     end
 
     local function getEquippedSummary()
@@ -1701,6 +1800,8 @@ function M.new(opts)
         seedFromCache      = seedCatalogFromCache,
         filtered           = getFilteredCatalog,
         skills             = M.SKILL_LIST,
+        getAvailableSkills = getAvailableSkills,
+        getEligibleSkillSet = getEligibleSkillSet,
         cycleSkillFilter   = cycleSkillFilter,
         getEquippedSummary = getEquippedSummary,
         getArsenalStatus   = getArsenalStatus,
@@ -1714,6 +1815,8 @@ function M.new(opts)
         isPendingActive    = isPendingActive,
         handleProtoLine    = handleProtoLine,
         handlePacketIn     = handlePacketIn,
+        handlePacket       = handlePacketIn,
+        onZone             = function() invalidateForLifecycle('zone_change') end,
         resetTransient     = resetTransient,
         savePrefs          = onSavePrefs,
         dataService        = dataService,

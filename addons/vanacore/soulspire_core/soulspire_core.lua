@@ -496,8 +496,12 @@ if type(vana) == 'table' and vana.events then
         if type(e) ~= 'table' then return end
         local id, data, size = e.id, e.data, e.size
         local now = (vana.time and vana.time.clock and vana.time.clock()) or os.clock()
-        if sf_actions and type(sf_actions.handlePacket) == 'function' then
-            sf_actions.handlePacket(id, data)
+        if sf_actions then
+            if type(sf_actions.handlePacketIn) == 'function' then
+                sf_actions.handlePacketIn(id, data, size)
+            elseif type(sf_actions.handlePacket) == 'function' then
+                sf_actions.handlePacket(id, data, size)
+            end
         end
         if character_mod and type(character_mod.handle_packet_in) == 'function' then
             character_mod:handle_packet_in(id, data, now, size)
@@ -507,8 +511,12 @@ if type(vana) == 'table' and vana.events then
         end
         if id == 0x00A or id == 0x00B then
             close_hub(id == 0x00A and 'zone_in' or 'zone_out')
-            if sf_actions and type(sf_actions.onZone) == 'function' then
-                sf_actions.onZone()
+            if sf_actions then
+                if type(sf_actions.invalidate) == 'function' then
+                    sf_actions.invalidate(id == 0x00A and 'zone_in' or 'zone_out')
+                elseif type(sf_actions.onZone) == 'function' then
+                    sf_actions.onZone()
+                end
             end
             if id == 0x00A and character_mod and type(character_mod.sync) == 'function' then
                 character_mod:sync(false)
