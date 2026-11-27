@@ -145,6 +145,11 @@ function StatusDiagMod:draw(imgui, dl, F_arg, L, x, y, w, h, _ctx)
                 imgui.Text(string.format('Protected Core: addon=soulspire_core (locked) | DAT soulspirexi=%s | COR DAT flintlock-akimbo-compact=%s',
                     (ok_b and p_base == true) and 'OK' or 'MISSING', (ok_c and p_cor == true) and 'OK' or 'MISSING'))
             end
+            imgui.Text(string.format('%s: enabled=%s | Spells=%d | Menu Label=%s',
+                tostring((d.companion_system_name and d.companion_system_name ~= '') and d.companion_system_name or 'Soul Echoes'),
+                tostring(d.companions_enabled == true),
+                tonumber(d.companion_spell_count) or 0,
+                tostring((d.companion_category_label and d.companion_category_label ~= '') and d.companion_category_label or 'Echoes')))
             if self.identity and self.identity.registry_source then
                 imgui.Text('  souls.json: ' .. tostring(self.identity.registry_source))
             end

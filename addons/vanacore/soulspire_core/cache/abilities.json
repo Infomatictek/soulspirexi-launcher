@@ -1511,7 +1511,7 @@
       "unlockLevel": 10
     },
     {
-      "description": "12y party, Trust, and pet AoE heal (30s recast) scaled with Max HP and MND that applies a 15s Sanctuary granting Regen, Cure Potency Received, and lowered Enmity.",
+      "description": "12y party, Soul Echo, and pet AoE heal (30s recast) scaled with Max HP and MND that applies a 15s Sanctuary granting Regen, Cure Potency Received, and lowered Enmity.",
       "id": "mnk_healer_ability_tranquil-lotus",
       "jobKey": "MNK",
       "kind": "ability",
