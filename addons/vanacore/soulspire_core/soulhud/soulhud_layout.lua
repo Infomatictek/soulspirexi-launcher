@@ -300,32 +300,51 @@ BESPOKE.channeler = function(kv)
 end
 
 BESPOKE.necromancer = function(kv)
-    local mode = str(kv, 'thrall_mode')
-    local role = str(kv, 'thrall_role')
-    local hpp  = num(kv, 'thrall_hpp')
-    local pact = num(kv, 'dark_pact') > 0
+    local mode   = str(kv, 'thrall_mode')
+    local role   = str(kv, 'thrall_role')
+    local hpp    = num(kv, 'thrall_hpp')
+    local mpp    = num(kv, 'thrall_mpp')
+    local pact   = num(kv, 'dark_pact') > 0
+    local reanim = num(kv, 'reanimate_ready') > 0
+    local reRem  = num(kv, 'reanimate_rem')
+    local ceCd   = num(kv, 'ce_cd')
+    local capCd  = num(kv, 'cap_cd')
+    local buffs  = str(kv, 'active_buffs')
+
     local title, rText
-    if mode == 'dullahan' then
-        title, rText = 'DULLAHAN [TANK]', pact and 'DARK PACT' or 'TANK'
-    elseif mode == 'warrior' then
-        title, rText = 'WARRIOR [TANK]', pact and 'DARK PACT' or 'TANK'
-    elseif mode == 'corse' then
-        title, rText = 'CORSE [CASTER]', pact and 'DARK PACT' or 'CASTER'
-    elseif mode == 'mage' then
-        title, rText = 'MAGE [CASTER]', pact and 'DARK PACT' or 'CASTER'
+    if mode == 'dullahan' or mode == 'warrior' then
+        title = 'DULLAHAN [WARRIOR]'
+        rText = buffs ~= '' and buffs or (pact and 'DARK PACT' or 'ACTIVE')
+    elseif mode == 'corse' or mode == 'mage' then
+        title = string.format('CORSE [MAGE] MP %d%%', mpp)
+        rText = buffs ~= '' and buffs or (pact and 'DARK PACT' or 'ACTIVE')
+    elseif reanim then
+        title = string.format('REANIMATE READY (%ds)', reRem)
+        rText = 'CAST REANIMATE'
     else
-        title, rText = 'NO THRALL', 'SUMMON'
+        title = 'NO UNDEAD'
+        rText = ceCd > 0 and string.format('CE %ds', ceCd) or 'RAISE WARRIOR/MAGE'
     end
+
+    local barLabel = 'Undead HP'
+    if mode == 'dullahan' or mode == 'warrior' then
+        barLabel = capCd > 0 and string.format('Dullahan HP · DM %ds', capCd) or 'Dullahan HP'
+    elseif mode == 'corse' or mode == 'mage' then
+        barLabel = capCd > 0 and string.format('Corse HP · AA %ds', capCd) or 'Corse HP'
+    elseif reanim then
+        barLabel = string.format('Reanimate Window (%ds)', reRem)
+    end
+
     return {
-        pips = badge(title, rText, role == 'tank' or pact),
+        pips = badge(title, rText, role == 'warrior' or role == 'mage' or pact or reanim),
         bar  = {
             key   = 'thrall',
-            label = role == 'tank' and 'Tank Thrall HP' or (role == 'caster' and 'Caster Thrall HP' or 'Undead Thrall'),
-            cur   = hpp,
+            label = barLabel,
+            cur   = reanim and math.min(100, math.floor((reRem / 120) * 100)) or hpp,
             max   = 100,
             fmt   = 'pct',
             idle  = 'Offline',
-            warn  = hpp > 0 and hpp < 25,
+            warn  = (hpp > 0 and hpp < 25) or reanim,
         },
     }
 end
