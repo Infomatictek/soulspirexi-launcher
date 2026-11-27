@@ -9349,8 +9349,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/cache/abilities.json",
       "targetPath": "vanacore/soulspire_core/cache/abilities.json",
-      "sha256": "bf42e6da64afd73d7ea89e0617b281fe66172fcf8870002d98a9396b5621a483",
-      "size": 194798
+      "sha256": "429adba5c1eb377afeadc8b7b72e5ec35c8f54c14ee7b73f5823537f970c8f2c",
+      "size": 194802
     },
     {
       "category": "addon",
@@ -9580,8 +9580,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/data/soul-companions.json",
       "targetPath": "vanacore/soulspire_core/data/soul-companions.json",
-      "sha256": "a52bef69b0e68dd3572042776aaf058b0dd3f937bc497f78773bcd7309d4dd87",
-      "size": 21172
+      "sha256": "31110da9c5380253612612b99bfccfa54bc68269e8ce851d4084e119a19fe650",
+      "size": 21194
     },
     {
       "category": "addon",
@@ -9636,8 +9636,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/modules/status_and_diag.lua",
       "targetPath": "vanacore/soulspire_core/modules/status_and_diag.lua",
-      "sha256": "c7acfda35ee6f21031af29b53c61b40eb9d7da9107b7edc620ca98554384be76",
-      "size": 12501
+      "sha256": "10370754f6e8739fb5e0adae215adaf995d7b4f938bbed874002379786eac182",
+      "size": 12965
     },
     {
       "category": "addon",
@@ -11947,12 +11947,12 @@
     "baseline": {
       "profile": "baseline",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-native.13",
-      "commitSha": "18cb68d647",
+      "tag": "v0.9.9-soulspire-native.14",
+      "commitSha": "c622ab5d96",
       "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.13/soulspirexi-client-experimental-0.9.9-18cb68d647-win32.zip",
-      "packageSha256": "87c58934ebe4b80f934e984682ffa44378e7adcff6e645948e797c9ad082375c",
-      "packageSize": 99046126,
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.14/soulspirexi-client-experimental-0.9.9-c622ab5d96-win32.zip",
+      "packageSha256": "d97abf472ce20adbb267d5d01c86b1ab3eb326cfbf4c21cfacf237e694aebf21",
+      "packageSize": 99063321,
       "experimentalEligible": true,
       "clientVerified": false,
       "notes": "VanaCore Baseline profile on v0.9.9-soulspire-native.9 (d42f2646d8): combines Phase D native weapon/model hooks (#22, #25-#27, #32-#35), C++ 0x1FC/0x1FF decoders, and PLAYER-CMD-001 fail-closed defaults ([mcp] available=0, [developer] enabled=0, /vana2 disabled); launcher disables all addons/hooks for clean baseline certification."
@@ -11960,12 +11960,12 @@
     "compat": {
       "profile": "compat",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-native.13",
-      "commitSha": "18cb68d647",
+      "tag": "v0.9.9-soulspire-native.14",
+      "commitSha": "c622ab5d96",
       "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.13/soulspirexi-client-experimental-0.9.9-18cb68d647-win32.zip",
-      "packageSha256": "87c58934ebe4b80f934e984682ffa44378e7adcff6e645948e797c9ad082375c",
-      "packageSize": 99046126,
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.14/soulspirexi-client-experimental-0.9.9-c622ab5d96-win32.zip",
+      "packageSha256": "d97abf472ce20adbb267d5d01c86b1ab3eb326cfbf4c21cfacf237e694aebf21",
+      "packageSize": 99063321,
       "experimentalEligible": true,
       "clientVerified": false,
       "notes": "VanaCore-Native Soulspire v0.9.9-soulspire-native.9 (d42f2646d8, Compatibility Recovery profile): combines Phase D native weapon/model hooks (#22, #25-#27, #32-#35) and PLAYER-CMD-001 fail-closed defaults ([mcp] available=0, [developer] enabled=0, /vana2 disabled)."
@@ -11973,15 +11973,15 @@
     "native": {
       "profile": "native",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-native.13",
-      "commitSha": "18cb68d647",
+      "tag": "v0.9.9-soulspire-native.14",
+      "commitSha": "c622ab5d96",
       "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.13/soulspirexi-client-experimental-0.9.9-18cb68d647-win32.zip",
-      "packageSha256": "87c58934ebe4b80f934e984682ffa44378e7adcff6e645948e797c9ad082375c",
-      "packageSize": 99046126,
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.14/soulspirexi-client-experimental-0.9.9-c622ab5d96-win32.zip",
+      "packageSha256": "d97abf472ce20adbb267d5d01c86b1ab3eb326cfbf4c21cfacf237e694aebf21",
+      "packageSize": 99063321,
       "experimentalEligible": true,
       "clientVerified": false,
-      "notes": "Full VanaCore-Native Soulspire v0.9.9-soulspire-native.13 (18cb68d647, DEC-028 API v2, QA-SOUL-COMPANIONS-001): adds tester-exclusive 66-Soul Companion Magic menu integration (reusing existing Soul Action renaming/visibility hooks, fail-closed on [SSCMP]), protected soulspire_core & 278 COR DATs, Phase D weapon hooks, and PLAYER-CMD-001 fail-closed defaults."
+      "notes": "Full VanaCore-Native Soulspire v0.9.9-soulspire-native.14 (c622ab5d96, DEC-028 API v2, DEC-038 Soul Echoes rebranding, QA-SOUL-COMPANIONS-001): adds runtime Soul Echoes native UI/button/filter/system-chat rebranding (reusing existing buttons/labeltext/chat hooks, width-checked 'Echoes' button, zero player-chat rewriting), tester-exclusive 66-Soul Echoes Magic menu integration, protected soulspire_core & 278 COR DATs, Phase D weapon hooks, and PLAYER-CMD-001 fail-closed defaults."
     }
   },
   "version": "2.2.3-testing.26",

@@ -12,7 +12,7 @@
     "notes": "Testing channel build pairing verified 27-hook Soulspire Native (soulspire_native.dll) with server."
   },
   "serverName": "SoulspireXI",
-  "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
+  "tagline": "Faerie Companions (Eos & Titania) • Job Specs • 4-Tier Weaponskill Talent Trees",
   "defaultHost": "play.soulspirexi.com",
   "useHairpin": false,
   "ports": {
@@ -8222,8 +8222,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/cache/abilities.json",
       "targetPath": "vanacore/soulspire_core/cache/abilities.json",
-      "sha256": "bf42e6da64afd73d7ea89e0617b281fe66172fcf8870002d98a9396b5621a483",
-      "size": 194798
+      "sha256": "429adba5c1eb377afeadc8b7b72e5ec35c8f54c14ee7b73f5823537f970c8f2c",
+      "size": 194802
     },
     {
       "category": "addon",
@@ -8460,8 +8460,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/modules/status_and_diag.lua",
       "targetPath": "vanacore/soulspire_core/modules/status_and_diag.lua",
-      "sha256": "c7acfda35ee6f21031af29b53c61b40eb9d7da9107b7edc620ca98554384be76",
-      "size": 12501
+      "sha256": "10370754f6e8739fb5e0adae215adaf995d7b4f938bbed874002379786eac182",
+      "size": 12965
     },
     {
       "category": "addon",

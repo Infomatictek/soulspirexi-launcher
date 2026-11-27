@@ -5,7 +5,8 @@
   "trustSpellBaseId": 896,
   "trustSpellLastSoulId": 961,
   "trustSpellMaxId": 1017,
-  "categoryLabel": "Soul Companions",
+  "systemName": "Soul Echoes",
+  "categoryLabel": "Echoes",
   "companions": [
     {
       "spellId": 896,
