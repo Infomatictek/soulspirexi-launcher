@@ -11969,6 +11969,6 @@
       "notes": "Full VanaCore-Native Soulspire v0.9.9-soulspire-native.7 (b4ec4d1710, DEC-028 API v2): hardens real HKLM PlayOnline Interface read-only passthrough (direct, stand-in-relative, and RegCreateKeyExA) for retail patch.ver decryption, explicit pre-D3D failure exit, opt-in startup.trace diagnostics, and SettingsTest startup regressions, preserving zero-Ashita Soulspire Core 4.0.0-vanacore."
     }
   },
-  "version": "2.2.3-testing.21",
+  "version": "2.2.3-testing.22",
   "notes": "SoulspireXI Testing v2.2.3-testing.18 \u2014 fixes Soulforge 0x1FD packet_in dispatch (WS talent point allocation/refunds), adds authoritative registry-driven Job+Soul weapon filtering with refund-only protection across all 66 Souls, and preserves VanaCore v0.9.9-soulspire-native.7 retail startup fix."
 }

@@ -11,13 +11,40 @@ public sealed class SettingsImportResult
     public string SourceSummary { get; init; } = string.Empty;
 }
 
+public sealed record FfxiGamepadConfig(
+    string? PadMode,
+    string? PadSin,
+    string? PadExSin,
+    string? PadGuid,
+    string Source)
+{
+    public bool HasAny =>
+        !string.IsNullOrWhiteSpace(PadMode) ||
+        !string.IsNullOrWhiteSpace(PadSin) ||
+        !string.IsNullOrWhiteSpace(PadExSin) ||
+        !string.IsNullOrWhiteSpace(PadGuid);
+}
+
 public sealed class SettingsImportService
 {
     private static readonly (string SubKeyPath, string Region)[] FfxiConfigRegistryKeys =
     [
         (@"SOFTWARE\PlayOnlineUS\SquareEnix\FinalFantasyXI", "US"),
         (@"SOFTWARE\PlayOnlineEU\SquareEnix\FinalFantasyXI", "EU"),
+        (@"SOFTWARE\PlayOnline\SQUARE\FinalFantasyXI", "JP"),
         (@"SOFTWARE\PlayOnline\SquareEnix\FinalFantasyXI", "JP")
+    ];
+
+    private static readonly (string SubKeyPath, string Region)[] FfxiVirtualStoreRegistryKeys =
+    [
+        (@"Software\Classes\VirtualStore\MACHINE\SOFTWARE\WOW6432Node\PlayOnlineUS\SquareEnix\FinalFantasyXI", "US"),
+        (@"Software\Classes\VirtualStore\MACHINE\SOFTWARE\WOW6432Node\PlayOnlineEU\SquareEnix\FinalFantasyXI", "EU"),
+        (@"Software\Classes\VirtualStore\MACHINE\SOFTWARE\WOW6432Node\PlayOnline\SQUARE\FinalFantasyXI", "JP"),
+        (@"Software\Classes\VirtualStore\MACHINE\SOFTWARE\WOW6432Node\PlayOnline\SquareEnix\FinalFantasyXI", "JP"),
+        (@"Software\Classes\VirtualStore\MACHINE\SOFTWARE\PlayOnlineUS\SquareEnix\FinalFantasyXI", "US"),
+        (@"Software\Classes\VirtualStore\MACHINE\SOFTWARE\PlayOnlineEU\SquareEnix\FinalFantasyXI", "EU"),
+        (@"Software\Classes\VirtualStore\MACHINE\SOFTWARE\PlayOnline\SQUARE\FinalFantasyXI", "JP"),
+        (@"Software\Classes\VirtualStore\MACHINE\SOFTWARE\PlayOnline\SquareEnix\FinalFantasyXI", "JP")
     ];
 
     public SettingsImportResult ImportBestAvailable(LauncherSettings settings, bool gamepadOnly = false)
@@ -133,36 +160,38 @@ public sealed class SettingsImportService
     {
         sourceLabel = string.Empty;
 
+        // 1. Check UAC VirtualStore first (non-elevated FFXiPadConfig.exe writes here on Windows 10/11,
+        //    and 32-bit retail FFXI / Classic Ashita transparently reads VirtualStore before HKLM).
+        foreach (var (keyPath, region) in FfxiVirtualStoreRegistryKeys)
+        {
+            if (TryReadRegistryDict(RegistryHive.CurrentUser, RegistryView.Default, keyPath, out var dict))
+            {
+                var changed = false;
+                if (!gamepadOnly)
+                {
+                    changed |= ApplyFfxiRegistryValues(dict, settings);
+                    if (settings.Language is not ("US" or "EU" or "JP"))
+                    {
+                        settings.Language = region;
+                    }
+                }
+
+                changed |= ApplyGamepadRegistryValues(dict, settings);
+                if (changed)
+                {
+                    sourceLabel = $"FFXI Registry ({region}, VirtualStore)";
+                    return true;
+                }
+            }
+        }
+
+        // 2. Check real HKLM (WOW6432Node first, then 64-bit view), strictly read-only.
         foreach (var view in new[] { RegistryView.Registry32, RegistryView.Registry64 })
         {
             foreach (var (keyPath, region) in FfxiConfigRegistryKeys)
             {
-                try
+                if (TryReadRegistryDict(RegistryHive.LocalMachine, view, keyPath, out var dict))
                 {
-                    using var baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, view);
-                    using var subKey = baseKey.OpenSubKey(keyPath);
-                    if (subKey is null)
-                    {
-                        continue;
-                    }
-
-                    var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                    foreach (var valueName in subKey.GetValueNames())
-                    {
-                        var val = subKey.GetValue(valueName);
-                        if (val is null or byte[])
-                        {
-                            continue;
-                        }
-
-                        dict[valueName] = Convert.ToString(val, CultureInfo.InvariantCulture) ?? string.Empty;
-                    }
-
-                    if (dict.Count == 0)
-                    {
-                        continue;
-                    }
-
                     var changed = false;
                     if (!gamepadOnly)
                     {
@@ -176,18 +205,180 @@ public sealed class SettingsImportService
                     changed |= ApplyGamepadRegistryValues(dict, settings);
                     if (changed)
                     {
-                        sourceLabel = $"FFXI Registry ({region})";
+                        var viewLabel = view == RegistryView.Registry32 ? "HKLM WOW6432Node" : "HKLM 64-bit";
+                        sourceLabel = $"FFXI Registry ({region}, {viewLabel})";
                         return true;
                     }
-                }
-                catch
-                {
-                    // Ignore inaccessible registry hives/keys.
                 }
             }
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Non-destructively reads the player's existing FFXI gamepad settings (padmode000, padsin000,
+    /// padexsin000, padguid000) without mutating any Windows registry key or resetting user settings.
+    /// </summary>
+    public FfxiGamepadConfig ReadBestExistingGamepadConfig(LauncherSettings settings)
+    {
+        string? padMode = null;
+        string? padSin = null;
+        string? padExSin = null;
+        string? padGuid = null;
+        var sources = new List<string>();
+
+        void MergeFromDict(IReadOnlyDictionary<string, string> dict, string label)
+        {
+            var hit = false;
+            if (string.IsNullOrWhiteSpace(padMode) && TryGetNonPassthroughValue(dict, "padmode000", out var m))
+            {
+                padMode = m;
+                hit = true;
+            }
+            if (string.IsNullOrWhiteSpace(padSin) && TryGetNonPassthroughValue(dict, "padsin000", out var s))
+            {
+                padSin = s;
+                hit = true;
+            }
+            if (string.IsNullOrWhiteSpace(padExSin) && TryGetNonPassthroughValue(dict, "padexsin000", out var ex))
+            {
+                padExSin = ex;
+                hit = true;
+            }
+            if (string.IsNullOrWhiteSpace(padGuid) && TryGetNonPassthroughValue(dict, "padguid000", out var g))
+            {
+                padGuid = g;
+                hit = true;
+            }
+            if (hit && !sources.Contains(label, StringComparer.OrdinalIgnoreCase))
+            {
+                sources.Add(label);
+            }
+        }
+
+        // 1. Real Windows Registry: UAC VirtualStore first, then HKLM WOW6432Node, then HKLM 64-bit (read-only).
+        foreach (var (keyPath, region) in FfxiVirtualStoreRegistryKeys)
+        {
+            if (TryReadRegistryDict(RegistryHive.CurrentUser, RegistryView.Default, keyPath, out var dict))
+            {
+                MergeFromDict(dict, $"FFXI Registry ({region}, VirtualStore)");
+            }
+        }
+
+        foreach (var view in new[] { RegistryView.Registry32, RegistryView.Registry64 })
+        {
+            var viewLabel = view == RegistryView.Registry32 ? "HKLM WOW6432Node" : "HKLM 64-bit";
+            foreach (var (keyPath, region) in FfxiConfigRegistryKeys)
+            {
+                if (TryReadRegistryDict(RegistryHive.LocalMachine, view, keyPath, out var dict))
+                {
+                    MergeFromDict(dict, $"FFXI Registry ({region}, {viewLabel})");
+                }
+            }
+        }
+
+        // 2. Existing Ashita boot INI ([ffxi.registry]) for any remaining fields.
+        var iniPath = FindBestAshitaIniPath(settings);
+        if (!string.IsNullOrEmpty(iniPath) && File.Exists(iniPath))
+        {
+            try
+            {
+                var sections = ParseIni(File.ReadAllText(iniPath));
+                if (sections.TryGetValue("ffxi.registry", out var regSec))
+                {
+                    MergeFromDict(regSec, $"Ashita config ({Path.GetFileName(iniPath)})");
+                }
+            }
+            catch
+            {
+                // Ignore unreadable Ashita config files.
+            }
+        }
+
+        // 3. Previously imported LauncherSettings fields as fallback.
+        var settingsDict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(settings.PadMode)) settingsDict["padmode000"] = settings.PadMode;
+        if (!string.IsNullOrWhiteSpace(settings.PadSin)) settingsDict["padsin000"] = settings.PadSin;
+        if (!string.IsNullOrWhiteSpace(settings.PadExSin)) settingsDict["padexsin000"] = settings.PadExSin;
+        if (!string.IsNullOrWhiteSpace(settings.PadGuid)) settingsDict["padguid000"] = settings.PadGuid;
+        if (settingsDict.Count > 0)
+        {
+            MergeFromDict(settingsDict, "LauncherSettings");
+        }
+
+        var sourceSummary = sources.Count > 0
+            ? string.Join(" + ", sources)
+            : "Not found in Windows Registry, Ashita config, or LauncherSettings";
+
+        return new FfxiGamepadConfig(padMode, padSin, padExSin, padGuid, sourceSummary);
+    }
+
+    /// <summary>
+    /// Extracts existing [ffxi] gamepad.* values from a VanaCore INI file so in-game /vana
+    /// customizations are preserved across launcher updates and relaunches.
+    /// </summary>
+    public static FfxiGamepadConfig? ParseVanaCoreIniGamepadConfig(string? rawIniContent)
+    {
+        if (string.IsNullOrWhiteSpace(rawIniContent))
+        {
+            return null;
+        }
+
+        var sections = ParseIni(rawIniContent);
+        if (!sections.TryGetValue("ffxi", out var ffxiSec))
+        {
+            return null;
+        }
+
+        TryGetNonPassthroughValue(ffxiSec, "gamepad.mode", out var mode);
+        TryGetNonPassthroughValue(ffxiSec, "gamepad.buttons", out var buttons);
+        TryGetNonPassthroughValue(ffxiSec, "gamepad.buttons_ex", out var buttonsEx);
+        TryGetNonPassthroughValue(ffxiSec, "gamepad.guid", out var guid);
+
+        var cfg = new FfxiGamepadConfig(
+            string.IsNullOrWhiteSpace(mode) ? null : mode,
+            string.IsNullOrWhiteSpace(buttons) ? null : buttons,
+            string.IsNullOrWhiteSpace(buttonsEx) ? null : buttonsEx,
+            string.IsNullOrWhiteSpace(guid) ? null : guid,
+            "Preserved from existing vanacore.ini");
+
+        return cfg.HasAny ? cfg : null;
+    }
+
+    private static bool TryReadRegistryDict(
+        RegistryHive hive,
+        RegistryView view,
+        string subKeyPath,
+        out Dictionary<string, string> dict)
+    {
+        dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            using var baseKey = RegistryKey.OpenBaseKey(hive, view);
+            using var subKey = baseKey.OpenSubKey(subKeyPath, writable: false);
+            if (subKey is null)
+            {
+                return false;
+            }
+
+            foreach (var valueName in subKey.GetValueNames())
+            {
+                var val = subKey.GetValue(valueName);
+                if (val is null or byte[])
+                {
+                    continue;
+                }
+
+                dict[valueName] = Convert.ToString(val, CultureInfo.InvariantCulture) ?? string.Empty;
+            }
+
+            return dict.Count > 0;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public static bool ApplyFfxiRegistryValues(IReadOnlyDictionary<string, string> values, LauncherSettings settings)

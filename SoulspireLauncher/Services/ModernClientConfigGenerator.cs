@@ -75,12 +75,16 @@ public sealed class ModernClientConfigGenerator
         return $"vanacore.{prefix}.ini";
     }
 
+    public bool LastGamepadImportSucceeded { get; private set; }
+    public string LastGamepadImportDiagnostic { get; private set; } = string.Empty;
+
     public static string BuildIniContent(
         LauncherSettings settings,
         ClientEngineMode mode,
         string serverHost,
         string? polFolder,
-        string? ffxiFolder)
+        string? ffxiFolder,
+        FfxiGamepadConfig? gamepadConfig = null)
     {
         var isBaseline = mode == ClientEngineMode.ModernBaseline;
         var isNative = mode == ClientEngineMode.ModernNative;
@@ -169,7 +173,42 @@ public sealed class ModernClientConfigGenerator
         sb.AppendLine($"resolution.game={Math.Max(640, settings.WindowWidth)}x{Math.Max(480, settings.WindowHeight)}");
         sb.AppendLine($"resolution.ui={Math.Max(640, settings.MenuWidth)}x{Math.Max(480, settings.MenuHeight)}");
         sb.AppendLine($"hardwaremouse={(settings.HardwareMouse ? 1 : 0)}");
+
+        var effectivePadMode = NormalizeGamepadValue(gamepadConfig?.PadMode) ?? NormalizeGamepadValue(settings.PadMode);
+        var effectivePadSin = NormalizeGamepadValue(gamepadConfig?.PadSin) ?? NormalizeGamepadValue(settings.PadSin);
+        var effectivePadExSin = NormalizeGamepadValue(gamepadConfig?.PadExSin) ?? NormalizeGamepadValue(settings.PadExSin);
+        var effectivePadGuid = NormalizeGamepadValue(gamepadConfig?.PadGuid) ?? NormalizeGamepadValue(settings.PadGuid);
+        var padSource = !string.IsNullOrWhiteSpace(gamepadConfig?.Source)
+            ? gamepadConfig!.Source
+            : (effectivePadMode is not null || effectivePadSin is not null || effectivePadExSin is not null || effectivePadGuid is not null
+                ? "LauncherSettings"
+                : "Not found — VanaCore defaults");
+
+        sb.AppendLine($"; gamepad.source={padSource}");
+        if (effectivePadMode is not null)
+        {
+            sb.AppendLine($"gamepad.mode={effectivePadMode}");
+        }
+        if (effectivePadSin is not null)
+        {
+            sb.AppendLine($"gamepad.buttons={effectivePadSin}");
+        }
+        if (effectivePadExSin is not null)
+        {
+            sb.AppendLine($"gamepad.buttons_ex={effectivePadExSin}");
+        }
+        if (effectivePadGuid is not null)
+        {
+            sb.AppendLine($"gamepad.guid={effectivePadGuid}");
+        }
         sb.AppendLine();
+
+        if (settings.GamepadDisableEnumeration)
+        {
+            sb.AppendLine("[input]");
+            sb.AppendLine("gamepad.disableenumeration=1");
+            sb.AppendLine();
+        }
 
         sb.AppendLine("[discord]");
         sb.AppendLine("enabled=0");
@@ -233,13 +272,25 @@ public sealed class ModernClientConfigGenerator
         return sb.ToString();
     }
 
+    private static string? NormalizeGamepadValue(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        var trimmed = raw.Trim();
+        return trimmed == "-1" ? null : trimmed;
+    }
+
     public string WriteAllConfigs(
         string modernProfileDir,
         LauncherSettings settings,
         ClientEngineMode mode,
         string serverHost,
         string? polFolder,
-        string? ffxiFolder)
+        string? ffxiFolder,
+        FfxiGamepadConfig? explicitGamepadConfig = null)
     {
         Directory.CreateDirectory(modernProfileDir);
         Directory.CreateDirectory(Path.Combine(modernProfileDir, "scripts"));
@@ -250,7 +301,33 @@ public sealed class ModernClientConfigGenerator
         var iniPath = Path.Combine(modernProfileDir, iniFileName);
         var bootPath = Path.Combine(modernProfileDir, BootScriptRelativePath);
 
-        File.WriteAllText(iniPath, BuildIniContent(settings, mode, serverHost, polFolder, ffxiFolder), new UTF8Encoding(false));
+        // Preserve existing customized [ffxi] gamepad.* bindings in vanacore.ini across updates/relaunches;
+        // otherwise non-destructively import the player's real FFXI controller config (Registry / Ashita).
+        FfxiGamepadConfig? resolvedGamepad = explicitGamepadConfig;
+        if (resolvedGamepad is null && File.Exists(iniPath))
+        {
+            try
+            {
+                resolvedGamepad = SettingsImportService.ParseVanaCoreIniGamepadConfig(File.ReadAllText(iniPath, Encoding.UTF8));
+            }
+            catch
+            {
+                // Fall back to fresh non-destructive import below.
+            }
+        }
+
+        if (resolvedGamepad is null)
+        {
+            var importer = new SettingsImportService();
+            resolvedGamepad = importer.ReadBestExistingGamepadConfig(settings);
+        }
+
+        LastGamepadImportSucceeded = resolvedGamepad.HasAny;
+        LastGamepadImportDiagnostic = resolvedGamepad.HasAny
+            ? $"FFXI controller config inherited ({resolvedGamepad.Source}): mode={(resolvedGamepad.PadMode is not null ? "set" : "unset")}, buttons={(resolvedGamepad.PadSin is not null ? "set" : "unset")}, guid={(resolvedGamepad.PadGuid is not null ? "set" : "unset")}."
+            : $"FFXI controller config not found ({resolvedGamepad.Source}); VanaCore will use default gamepad settings until configured.";
+
+        File.WriteAllText(iniPath, BuildIniContent(settings, mode, serverHost, polFolder, ffxiFolder, resolvedGamepad), new UTF8Encoding(false));
         File.WriteAllText(bootPath, BuildBootScriptContent(settings, mode), new UTF8Encoding(false));
         return iniFileName;
     }

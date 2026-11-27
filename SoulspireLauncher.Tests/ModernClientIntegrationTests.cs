@@ -466,6 +466,82 @@ public sealed class ModernClientIntegrationTests
         }
     }
 
+    [Fact]
+    public void ModernClientConfigGenerator_InheritsAndPreservesCustomFfxiGamepadBindingsAcrossRelaunches()
+    {
+        var settings = new LauncherSettings
+        {
+            Username = "Rin",
+            ClientEngine = ClientEngineMode.ModernNative,
+            WindowWidth = 1920,
+            WindowHeight = 1080
+        };
+
+        // 1. Nonstandard XInput config (swapped Confirm=0(B) / Cancel=3(A), custom axes & gameplay buttons)
+        var customXInput = new FfxiGamepadConfig(
+            PadMode: "1,1,1,1,1,1",
+            PadSin: "8,9,13,12,10,3,2,0,1,15,-1,-1,14,-33,-33,32,32,-36,-36,35,35,6,7,5,4,11,-1,-1,-1,-1,-1,-1",
+            PadExSin: "1,2,3,4",
+            PadGuid: "{11111111-2222-3333-4444-555555555555}",
+            Source: "FFXI Registry (US, HKLM WOW6432Node)");
+
+        var xinputIni = ModernClientConfigGenerator.BuildIniContent(
+            settings, ClientEngineMode.ModernNative, "play.soulspirexi.com", null, null, customXInput);
+        Assert.Contains("gamepad.mode=1,1,1,1,1,1", xinputIni);
+        Assert.Contains("gamepad.buttons=8,9,13,12,10,3,2,0,1,15,-1,-1,14,-33,-33,32,32,-36,-36,35,35,6,7,5,4,11,-1,-1,-1,-1,-1,-1", xinputIni);
+        Assert.Contains("gamepad.buttons_ex=1,2,3,4", xinputIni);
+        Assert.Contains("gamepad.guid={11111111-2222-3333-4444-555555555555}", xinputIni);
+
+        // 2. DirectInput profile (6th field of padmode000 == 0) preserved verbatim
+        var customDInput = new FfxiGamepadConfig(
+            PadMode: "1,1,1,1,0,0",
+            PadSin: "4,5,11,10,9,1,3,2,0,8,-1,-1,12,-33,-33,32,32,-36,-36,35,35,6,7,5,4,11,-1,-1,-1,-1,-1,-1",
+            PadExSin: null,
+            PadGuid: "{AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}",
+            Source: "FFXI Registry (US, VirtualStore)");
+        var dinputIni = ModernClientConfigGenerator.BuildIniContent(
+            settings, ClientEngineMode.ModernNative, "play.soulspirexi.com", null, null, customDInput);
+        Assert.Contains("gamepad.mode=1,1,1,1,0,0", dinputIni);
+        Assert.Contains("gamepad.buttons=4,5,11,10,9,1,3,2,0,8,", dinputIni);
+        Assert.DoesNotContain("gamepad.buttons_ex=", dinputIni);
+        Assert.Contains("gamepad.guid={AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}", dinputIni);
+
+        // 3. Missing / "-1" gamepad config does NOT write fake defaults
+        var missingCfg = new FfxiGamepadConfig("-1", null, "", "-1", "Not found");
+        var missingIni = ModernClientConfigGenerator.BuildIniContent(
+            settings, ClientEngineMode.ModernNative, "play.soulspirexi.com", null, null, missingCfg);
+        Assert.DoesNotContain("gamepad.mode=", missingIni);
+        Assert.DoesNotContain("gamepad.buttons=", missingIni);
+        Assert.DoesNotContain("gamepad.guid=", missingIni);
+
+        // 4. WriteAllConfigs preserves existing customized vanacore.ini gamepad settings across subsequent relaunches
+        var profileDir = Path.Combine(Path.GetTempPath(), $"sxi-gamepad-persist-{Guid.NewGuid():N}");
+        try
+        {
+            var gen = new ModernClientConfigGenerator();
+            var iniName = gen.WriteAllConfigs(profileDir, settings, ClientEngineMode.ModernNative, "play.soulspirexi.com", null, null, customXInput);
+            Assert.True(gen.LastGamepadImportSucceeded);
+
+            // Simulate user relaunching after a launcher update (no explicitGamepadConfig passed)
+            var iniName2 = gen.WriteAllConfigs(profileDir, settings, ClientEngineMode.ModernNative, "play.soulspirexi.com", null, null);
+            Assert.Equal(iniName, iniName2);
+            Assert.True(gen.LastGamepadImportSucceeded);
+            Assert.Contains("Preserved from existing vanacore.ini", gen.LastGamepadImportDiagnostic);
+
+            var persisted = File.ReadAllText(Path.Combine(profileDir, iniName2), Encoding.UTF8);
+            Assert.Contains("gamepad.mode=1,1,1,1,1,1", persisted);
+            Assert.Contains("gamepad.buttons=8,9,13,12,10,3,2,0,1,15,", persisted);
+            Assert.Contains("gamepad.guid={11111111-2222-3333-4444-555555555555}", persisted);
+        }
+        finally
+        {
+            if (Directory.Exists(profileDir))
+            {
+                Directory.Delete(profileDir, recursive: true);
+            }
+        }
+    }
+
     private static byte[] BuildStubModernZipBytes(string exeBody, string coreBody)
     {
         using var ms = new MemoryStream();

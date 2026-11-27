@@ -2304,6 +2304,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                     plan.BootServerHost,
                     polDir,
                     string.IsNullOrWhiteSpace(ffxiDir) ? null : ffxiDir);
+                if (!string.IsNullOrWhiteSpace(_modernConfigGenerator.LastGamepadImportDiagnostic))
+                {
+                    Log(_modernConfigGenerator.LastGamepadImportDiagnostic);
+                }
                 _perfDiag.RecordSpan(IsPerfDiagActive, "config_write", cfgSwModern, true, "complete", "client_only");
 
                 var engineLabel = effectiveEngine switch
