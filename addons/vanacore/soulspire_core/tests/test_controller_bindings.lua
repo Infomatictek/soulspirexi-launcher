@@ -213,9 +213,8 @@ do
     local sd = StatusDiag.new(nil, nil, {}, nil, nil, {})
     local ab_pills = ab:get_prompt_pills('gamepad', label_fn)
     local sd_pills = sd:get_prompt_pills('gamepad', label_fn)
-    check(ab_pills[2][1] == 'Y', 'T8: AbilitiesMod context pill reflects FFXI options=Y')
-    check(ab_pills[3][1] == 'LT/RT', 'T8: AbilitiesMod modules pill reflects LT/RT override')
-    check(ab_pills[4][1] == 'A', 'T8: AbilitiesMod close pill reflects swapped cancel=A')
+    check(ab_pills[2][1] == 'LT/RT', 'T8: AbilitiesMod modules pill reflects LT/RT override')
+    check(ab_pills[3][1] == 'A', 'T8: AbilitiesMod close pill reflects swapped cancel=A')
     check(sd_pills[3][1] == 'LT/RT' and sd_pills[4][1] == 'A', 'T8: StatusDiag pills dynamically updated')
 end
 
