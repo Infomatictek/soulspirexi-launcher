@@ -1113,7 +1113,7 @@
                                         <TextBlock Text="!eos dismiss — Release Scholar's Eos or Titania faerie companion" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource CyanAccent}" Margin="0,0,0,4" />
                                         <TextBlock Text="!buckler — Equip a Size-1 Buckler in Sub slot (WAR Spartan fallback)" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4" />
                                         <TextBlock Text="!spec resetspells — Restore BLU Magus baseline Blue Magic spells" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4" />
-                                        <TextBlock Text="!trustengage 0|1 — Choose Trust engagement behavior" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource TextPrimary}" />
+                                        <TextBlock Text="!trustengage 0|1 — Choose Soul Echo engagement behavior (authorized testers)" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource TextPrimary}" />
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
