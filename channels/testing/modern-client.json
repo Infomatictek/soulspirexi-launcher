@@ -8,12 +8,12 @@
   "baseline": {
     "profile": "baseline",
     "version": "0.9.9",
-    "tag": "v0.9.9-soulspire-native.12",
-    "commitSha": "2135246395",
+    "tag": "v0.9.9-soulspire-native.13",
+    "commitSha": "18cb68d647",
     "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-    "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.12/soulspirexi-client-experimental-0.9.9-2135246395-win32.zip",
-    "packageSha256": "e17f4510d79040113c27b73a203453ca1118e1f0224d058b6c68b523479da9d8",
-    "packageSize": 99045775,
+    "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.13/soulspirexi-client-experimental-0.9.9-18cb68d647-win32.zip",
+    "packageSha256": "87c58934ebe4b80f934e984682ffa44378e7adcff6e645948e797c9ad082375c",
+    "packageSize": 99046126,
     "experimentalEligible": true,
     "clientVerified": false,
     "notes": "VanaCore Baseline profile on v0.9.9-soulspire-native.9 (d42f2646d8): combines Phase D native weapon/model hooks (#22, #25-#27, #32-#35), C++ 0x1FC/0x1FF decoders, and PLAYER-CMD-001 fail-closed defaults ([mcp] available=0, [developer] enabled=0, /vana2 disabled); launcher disables all addons/hooks for clean baseline certification."
@@ -21,12 +21,12 @@
   "compat": {
     "profile": "compat",
     "version": "0.9.9",
-    "tag": "v0.9.9-soulspire-native.12",
-    "commitSha": "2135246395",
+    "tag": "v0.9.9-soulspire-native.13",
+    "commitSha": "18cb68d647",
     "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-    "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.12/soulspirexi-client-experimental-0.9.9-2135246395-win32.zip",
-    "packageSha256": "e17f4510d79040113c27b73a203453ca1118e1f0224d058b6c68b523479da9d8",
-    "packageSize": 99045775,
+    "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.13/soulspirexi-client-experimental-0.9.9-18cb68d647-win32.zip",
+    "packageSha256": "87c58934ebe4b80f934e984682ffa44378e7adcff6e645948e797c9ad082375c",
+    "packageSize": 99046126,
     "experimentalEligible": true,
     "clientVerified": false,
     "notes": "VanaCore-Native Soulspire v0.9.9-soulspire-native.9 (d42f2646d8, Compatibility Recovery profile): combines Phase D native weapon/model hooks (#22, #25-#27, #32-#35) and PLAYER-CMD-001 fail-closed defaults ([mcp] available=0, [developer] enabled=0, /vana2 disabled)."
@@ -34,14 +34,14 @@
   "native": {
     "profile": "native",
     "version": "0.9.9",
-    "tag": "v0.9.9-soulspire-native.12",
-    "commitSha": "2135246395",
+    "tag": "v0.9.9-soulspire-native.13",
+    "commitSha": "18cb68d647",
     "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-    "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.12/soulspirexi-client-experimental-0.9.9-2135246395-win32.zip",
-    "packageSha256": "e17f4510d79040113c27b73a203453ca1118e1f0224d058b6c68b523479da9d8",
-    "packageSize": 99045775,
+    "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.13/soulspirexi-client-experimental-0.9.9-18cb68d647-win32.zip",
+    "packageSha256": "87c58934ebe4b80f934e984682ffa44378e7adcff6e645948e797c9ad082375c",
+    "packageSize": 99046126,
     "experimentalEligible": true,
     "clientVerified": false,
-    "notes": "Full VanaCore-Native Soulspire v0.9.9-soulspire-native.9 (d42f2646d8, DEC-028 API v2): combines Phase D native weapon/model hooks (#22, #25-#27, #32-#35), PLAYER-CMD-001 fail-closed defaults ([mcp] available=0, [developer] enabled=0, /vana2 disabled), cleaned 4-tab production Soulspire Core UI, and shared 66-Soul Weapon Mastery eligibility filtering across VanaCore and Ashita v4."
+    "notes": "Full VanaCore-Native Soulspire v0.9.9-soulspire-native.13 (18cb68d647, DEC-028 API v2, QA-SOUL-COMPANIONS-001): adds tester-exclusive 66-Soul Companion Magic menu integration (reusing existing Soul Action renaming/visibility hooks, fail-closed on [SSCMP]), protected soulspire_core & 278 COR DATs, Phase D weapon hooks, and PLAYER-CMD-001 fail-closed defaults."
   }
 }
