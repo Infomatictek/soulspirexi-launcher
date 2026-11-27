@@ -9661,6 +9661,13 @@
     },
     {
       "category": "addon",
+      "sourcePath": "addons/vanacore/soulspire_core/data/soul-companions.json",
+      "targetPath": "vanacore/soulspire_core/data/soul-companions.json",
+      "sha256": "a52bef69b0e68dd3572042776aaf058b0dd3f937bc497f78773bcd7309d4dd87",
+      "size": 21172
+    },
+    {
+      "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/data/soul-identities.json",
       "targetPath": "vanacore/soulspire_core/data/soul-identities.json",
       "sha256": "f9cf9895360c269624ca5116dc8700e35089406406b348740eb6f919cee75628",
