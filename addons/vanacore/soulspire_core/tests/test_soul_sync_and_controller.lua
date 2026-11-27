@@ -288,15 +288,27 @@ fire('packet_in', { id = 0x1FF, data = reply_sel, size = #reply_sel })
 local _, _, activeAfter = st.character_mod:get_entries()
 assert(activeAfter == 3, 'Spartan (branch 3) must become active after server 0x1FF reply')
 
--- 6. Switch across ALL modules via RB (9) and verify Soul Actions & Diagnostics controller navigation
+-- 6. Switch across player modules via RB (9): default mode hides Diagnostics/Equipment; /soulspire devmode on reveals them
 local visited = { [st.focus:active_module().id] = true }
 for _ = 1, 6 do
     fire('xinput_button', { button = 9, state = 1 })
     fire('xinput_button', { button = 9, state = 0 })
     visited[st.focus:active_module().id] = true
 end
-assert(visited.character and visited.weapon_mastery and visited.soul_talents and visited.abilities and visited.journal,
-    'RB must cycle across Character, Weapon Mastery, Soul Talents, Soul Actions, and Diagnostics')
+assert(visited.character and visited.weapon_mastery and visited.soul_talents and visited.abilities,
+    'RB must cycle across all 4 production player modules: Character, Weapon Mastery, Soul Talents, Soul Actions')
+assert(not visited.journal and not visited.equipment,
+    'Default player RB cycle must hide Diagnostics and Phase D Equipment tabs')
+
+-- Enabling local devmode reveals Diagnostics in RB cycle (does not grant server privileges)
+fire('command', { command = '/soulspire devmode on' })
+local dev_visited = { [st.focus:active_module().id] = true }
+for _ = 1, 7 do
+    fire('xinput_button', { button = 9, state = 1 })
+    fire('xinput_button', { button = 9, state = 0 })
+    dev_visited[st.focus:active_module().id] = true
+end
+assert(dev_visited.journal, 'Developer mode RB cycle must reach Diagnostics')
 
 -- Select Diagnostics and test DirectInput POV (offset 32, angle 9000 = Right) subtab switching
 st.focus:select_module('journal')

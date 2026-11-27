@@ -63,8 +63,8 @@ local DEFAULT_MODULES = {
         available      = true,
         badge          = 'LIVE',
         accent         = 'cyan',
-        summary        = 'Unified Soul Actions, spells, visibility rules, and native hook diagnostics.',
-        details        = 'Powered natively by VanaCore src/core/soulspire/ action & visibility hooks (#11-#24).',
+        summary        = 'Browse your active Soul spells, job abilities, and weapon skills.',
+        details        = 'Displays your active Soul actions and unlocked techniques.',
         existing_addon = 'soulspire_core',
     },
     {
@@ -75,6 +75,7 @@ local DEFAULT_MODULES = {
         icon           = 'equipment',
         order          = 50,
         available      = false,
+        dev_only       = true,
         badge          = 'PHASE D',
         accent         = 'gold',
         summary        = 'Unified Soul-aware equipment sets and weapon presentation (Phase D).',
@@ -89,9 +90,10 @@ local DEFAULT_MODULES = {
         icon           = 'journal',
         order          = 60,
         available      = true,
-        badge          = 'LIVE',
+        dev_only       = true,
+        badge          = 'DEV',
         accent         = 'cyan',
-        summary        = 'Live VanaCore-native diagnostics, Mob Status (0x1FE/[OXMOB]), and Flintlock state.',
+        summary        = 'Developer diagnostics, Mob Status (0x1FE/[OXMOB]), and Flintlock state (opt-in devmode).',
         details        = 'Exposes real-time vana.soulspire hook matrix, texture cache, UI input ownership, and packet telemetry.',
         existing_addon = 'soulspire_core',
     },
@@ -214,12 +216,22 @@ function Registry:sections()
     return self._ordered
 end
 
-Registry.modules = Registry.sections
-
-function Registry:available_modules()
+function Registry:visible_sections(dev_mode)
     local out = {}
     for _, entry in ipairs(self._ordered) do
-        if entry.available then
+        if entry.available and (dev_mode == true or not entry.dev_only) then
+            out[#out + 1] = entry
+        end
+    end
+    return out
+end
+
+Registry.modules = Registry.sections
+
+function Registry:available_modules(dev_mode)
+    local out = {}
+    for _, entry in ipairs(self._ordered) do
+        if entry.available and (dev_mode == true or not entry.dev_only) then
             out[#out + 1] = entry
         end
     end
@@ -243,8 +255,8 @@ function Registry:index_of(id)
     return self._by_id[id]
 end
 
--- Step module index forward/backward with wrap-around; optionally skip unavailable modules.
-function Registry:step_index(current_idx, delta, skip_unavailable)
+-- Step module index forward/backward with wrap-around; optionally skip unavailable/dev_only modules.
+function Registry:step_index(current_idx, delta, skip_unavailable, dev_mode)
     local n = #self._ordered
     if n == 0 then return nil end
     local cur = tonumber(current_idx) or 1
@@ -253,7 +265,9 @@ function Registry:step_index(current_idx, delta, skip_unavailable)
 
     for _ = 1, n do
         cur = ((cur - 1 + step) % n) + 1
-        if not skip_unavailable or self._ordered[cur].available then
+        local entry = self._ordered[cur]
+        local allowed = (not skip_unavailable or entry.available) and (dev_mode == true or not entry.dev_only)
+        if allowed then
             return cur
         end
     end

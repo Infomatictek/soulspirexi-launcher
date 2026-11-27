@@ -425,6 +425,9 @@ function M:handle_command(args)
         self:save()
         return 'Soul HUD position and scale reset.'
     elseif low == 'status' then
+        if not self.dev_mode then
+            return 'Soul HUD diagnostics require developer mode (/soulspire devmode on).'
+        end
         local kv_n = 0
         for _ in pairs(self.state.kv or {}) do kv_n = kv_n + 1 end
         return string.format('Soul HUD: visible=%s mode=%s layout=%s soul=%s job=%d br=%d kv=%d pkts=%d frames=%d pos=(%d,%d)',
@@ -450,6 +453,9 @@ function M:handle_command(args)
         end
         return 'Usage: /soulhud opacity <0.2..1.0>'
     elseif low:sub(1, 4) == 'demo' then
+        if not self.dev_mode then
+            return 'Soul HUD demo preview requires developer mode (/soulspire devmode on).'
+        end
         local target = trim(a:sub(5))
         if target == '' or string.lower(target) == 'off' then
             self.demo_key = nil
@@ -458,7 +464,7 @@ function M:handle_command(args)
         self.demo_key = target
         return 'Soul HUD demo preview set to ' .. target .. '.'
     end
-    return 'Soul HUD commands: /soulhud [config|status|lock|unlock|minimal|standard|expanded|scale <n>|opacity <n>|reset|demo <key|off>]'
+    return 'Soul HUD commands: /soulhud [config|lock|unlock|minimal|standard|expanded|auto|show|hide|scale <n>|opacity <n>|reset]'
 end
 
 function M:render(imgui, hub_open)

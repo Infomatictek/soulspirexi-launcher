@@ -239,4 +239,54 @@ assert(ok_ref == true, 'refundNode must succeed')
 assert(sent2[#sent2].op == sf_state_mod.OP_REFUND and sent2[#sent2].wsId == 135 and sent2[#sent2].a1 == 1)
 act.onZone()
 assert(st.pendingOp == nil and st.wsDetail == nil and st.needsRefresh == true, 'onZone/invalidate must clear transient WS state')
-print('PASS: real soulforge_state 0x1FD packet_in, invest/refund, 66-Soul eligibility parity & refund-only verified')
+
+-- 5i. Verify ALL 66 Souls resolve by displayName too (server META sends displayName + canonical specKey)
+local checked_display = 0
+for _, entry in ipairs(id_data.souls or {}) do
+    local jkey = entry.jobKey or JOB_ID_TO_KEY[tonumber(entry.jobId)]
+    local dname = entry.displayName or entry.name or entry.internalKey
+    local skey = entry.internalKey or entry.canonicalKey or dname
+    assert(act.handlePacketIn(0x1FD, make_oxtl_1fd(string.format('META|%s|75|5|0|5|0|0|%s|%s', jkey, dname, skey))))
+    local elig = act.getEligibleSkillSet()
+    assert(type(elig) == 'table', 'DisplayName+specKey META must resolve eligible skills for ' .. tostring(dname))
+    checked_display = checked_display + 1
+end
+assert(checked_display == 66, 'Expected 66 Souls resolved by displayName+specKey, got ' .. tostring(checked_display))
+
+-- 6. Verify Classic Ashita v4 soulspire_talents/soulforge_state.lua ALSO enforces strict 66-Soul weapon eligibility
+local ashita_sf_mod = dofile('addons/ashita4/soulspire_talents/soulforge_state.lua')
+local sent_ashita = {}
+local ast, aact = ashita_sf_mod.new({
+    clock = function() return 30.0 end,
+    sendPacket = function(id, bytes, op, wsId, a1, a2)
+        sent_ashita[#sent_ashita + 1] = { id = id, op = op, wsId = wsId, a1 = a1 }
+        return true
+    end,
+})
+assert(aact.handlePacketIn(0x1FD, make_oxtl_1fd('CAT_BEGIN')))
+assert(aact.handlePacketIn(0x1FD, make_oxtl_1fd('CAT|135:9:Blade: Ten:physical,80:6:Upheaval:physical,212:26:Leaden Salute:magical,42:3:Savage Blade:physical,112:8:Stardiver:physical')))
+assert(aact.handlePacketIn(0x1FD, make_oxtl_1fd('CAT_END')))
+ast.selectedSkill = 0
+assert(#aact.filtered() == 0, 'Ashita v4 Weapon Mastery must fail-closed when identity is unavailable')
+assert(aact.handlePacketIn(0x1FD, make_oxtl_1fd('META|COR|75|5|0|5|3|26|Flintlock|flintlock')))
+local a_cor_rows = aact.filtered()
+assert(#a_cor_rows == 1 and a_cor_rows[1].id == 212, 'Ashita v4 Flintlock must restrict strictly to Marksmanship')
+assert(aact.investNode(42, { key = 't1_dmg', idx = 1, name = 'Power' }) == false, 'Ashita v4 must block investNode on ineligible Sword WS')
+assert(aact.handlePacketIn(0x1FD, make_oxtl_1fd('SPENT_BEGIN')))
+assert(aact.handlePacketIn(0x1FD, make_oxtl_1fd('SPENT|42:2:1')))
+assert(aact.handlePacketIn(0x1FD, make_oxtl_1fd('SPENT_END')))
+assert(aact.isWsRefundOnly(42) == true, 'Ashita v4 must preserve ineligible invested WS as refundOnly')
+assert(aact.investNode(42, { key = 't1_dmg', idx = 1, name = 'Power' }) == false, 'Ashita v4 must block investNode on refundOnly WS')
+assert(aact.refundNode(42, { key = 't1_dmg', idx = 1, name = 'Power' }) == true, 'Ashita v4 must allow refundNode on refundOnly WS')
+assert(aact.handlePacketIn(0x1FD, make_oxtl_1fd('SPENT_BEGIN')))
+assert(aact.handlePacketIn(0x1FD, make_oxtl_1fd('SPENT_END')))
+assert(aact.handlePacketIn(0x1FD, make_oxtl_1fd('META|NIN|75|5|0|5|3|0|Shinobi|shinobi')))
+local a_nin_skills = aact.getAvailableSkills()
+local a_has_katana, a_has_sword = false, false
+for _, s in ipairs(a_nin_skills) do
+    if s.id == 9 then a_has_katana = true end
+    if s.id == 3 then a_has_sword = true end
+end
+assert(a_has_katana and not a_has_sword, 'Ashita v4 Shinobi getAvailableSkills must show Katana only')
+
+print('PASS: real soulforge_state 0x1FD packet_in, invest/refund, 66-Soul eligibility parity (VanaCore + Ashita v4) & refund-only verified')

@@ -21,7 +21,8 @@ function Focus.new(registry)
         selected_index       = 1,
         active_index         = 1,
         active_module_id     = nil,
-        skip_unavailable_nav = false,
+        skip_unavailable_nav = true,
+        dev_mode             = false,
         focus_window         = nil,
         focus_cursor         = nil,
         last_action          = 'idle',
@@ -190,7 +191,7 @@ function Focus:select_module(id_or_query)
 end
 
 function Focus:switch_module(delta)
-    local next_idx = self.registry:step_index(self.active_index, delta, self.skip_unavailable_nav)
+    local next_idx = self.registry:step_index(self.active_index, delta, self.skip_unavailable_nav, self.dev_mode == true)
     if not next_idx then return false end
     local ok = self:select_index(next_idx)
     if ok then
