@@ -365,8 +365,6 @@ local hudCallbacks = {
 ashita.events.register('load', 'ox_soulhud_load', function()
     settingsMod.load(cfg)
     if menu then pcall(menu.init) end
-    -- overlords_boost was retired into this addon: make sure a stale copy is not still loaded.
-    pcall(function() AshitaCore:GetChatManager():QueueCommand(1, '/addon unload overlords_boost') end)
     local inGame = isPlayerInGame()
     if inGame then
         requestServerSync(true)

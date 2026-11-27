@@ -138,6 +138,13 @@ function StatusDiagMod:draw(imgui, dl, F_arg, L, x, y, w, h, _ctx)
                 self.identity and #(self.identity.souls or {}) or 0,
                 self.actions and (self.actions.parsed_actions or #(self.actions.actions or {})) or 0,
                 self.actions and (self.actions.parsed_visibility or #(self.actions.visibility or {})) or 0))
+            if type(vana) == 'table' and type(vana.fs) == 'table' and type(vana.fs.is_dir) == 'function'
+                and type(vana.paths) == 'table' and type(vana.paths.install) == 'string' then
+                local ok_b, p_base = pcall(vana.fs.is_dir, vana.paths.install .. '\\pivot\\soulspirexi\\ROM')
+                local ok_c, p_cor = pcall(vana.fs.is_dir, vana.paths.install .. '\\pivot\\flintlock-akimbo-compact\\ROM')
+                imgui.Text(string.format('Protected Core: addon=soulspire_core (locked) | DAT soulspirexi=%s | COR DAT flintlock-akimbo-compact=%s',
+                    (ok_b and p_base == true) and 'OK' or 'MISSING', (ok_c and p_cor == true) and 'OK' or 'MISSING'))
+            end
             if self.identity and self.identity.registry_source then
                 imgui.Text('  souls.json: ' .. tostring(self.identity.registry_source))
             end

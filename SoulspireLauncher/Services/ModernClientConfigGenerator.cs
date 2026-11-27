@@ -143,7 +143,9 @@ public sealed class ModernClientConfigGenerator
         sb.AppendLine();
 
         sb.AppendLine("[pivot]");
-        var enablePivot = !isBaseline && settings.EnablePivotOverlay;
+        // Mandatory SoulspireXI DAT overlays (base soulspirexi + protected COR Flintlock dual pistols)
+        // are always enabled in non-baseline VanaCore profiles (CLIENT-ADDON-001).
+        var enablePivot = !isBaseline;
         sb.AppendLine($"enabled={(enablePivot ? 1 : 0)}");
         sb.AppendLine("rootfolder=pivot");
         if (enablePivot)
@@ -151,10 +153,7 @@ public sealed class ModernClientConfigGenerator
             sb.AppendLine();
             sb.AppendLine("[pivot.order]");
             sb.AppendLine("0=soulspirexi");
-            if (settings.EnableFlintlockDualPistolsOverlay)
-            {
-                sb.AppendLine($"1={AshitaConfigGenerator.FlintlockOverlayFolderName}");
-            }
+            sb.AppendLine($"1={AshitaConfigGenerator.FlintlockOverlayFolderName}");
         }
         sb.AppendLine();
 

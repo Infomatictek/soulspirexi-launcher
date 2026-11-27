@@ -738,6 +738,12 @@ public sealed class ManifestUpdateService
 
     public static bool IsOptionalOverlayEnabled(LauncherSettings settings, ManifestOptionalOverlay overlay)
     {
+        // Mandatory protected core DAT overlays (CLIENT-ADDON-001) are always synced, verified, and repaired.
+        if (overlay.Required)
+        {
+            return true;
+        }
+
         if (!settings.EnablePivotOverlay)
         {
             return false;
