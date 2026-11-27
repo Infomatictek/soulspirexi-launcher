@@ -7,12 +7,14 @@ Before making changes, recover full cross-repository project context from the Pr
 - Primary recovery doc: `docs/project/AI_CONTEXT_RECOVERY.md`
 - Active tasks & WIP cap (max 3): `docs/project/ACTIVE_TASKS.md`
 - Open blockers: `docs/project/BLOCKERS.md`
-- Architecture decisions (`DEC-001`–`DEC-028`): `docs/project/DECISIONS.md`
+- Architecture & governance decisions (`DEC-001`–`DEC-030`, including `DEC-030` GitHub synchronization & task completion contract): `docs/project/DECISIONS.md` and `Infomatictek/soulspirexi` `AGENTS.md` Section 5
+- System & deployment registry: `docs/project/SYSTEM_REGISTRY.md`
 - Native client migration architecture: `docs/architecture/CLIENT_MODERN_001_VANACORE_NATIVE_ARCHITECTURE.md`
 
 ## Repository Role & Canonical Rules
 
 - **Purpose:** Official `SoulspireLauncher` (`.NET` / WinForms + `SoulspireUpdater`), client manifests (`Stable` & `Testing`), Ashita v4 addons, VanaCore-native unified `addons/vanacore/soulspire_core/` (`4.0.0-vanacore`), and canonical `soulspire_native/` (`soulspire_native.dll`).
+- **Canonical Branch & Sync Contract (`DEC-030`):** Authoritative branch is `main`. All tasks must satisfy the 9-point GitHub synchronization and completion contract (`DEC-030`) in `Infomatictek/soulspirexi` `AGENTS.md`. When coordinating with `Infomatictek/soulspirexi-client`, target its canonical development branch `feat/vanacore-native-soulspire` (not upstream `main`).
 - **Canonical Channels (`DEC-019`, `DEC-024`, `DEC-027`):**
   - `Stable` (`manifest.json`, `v2.1.8`) and `Testing` (`channels/testing/manifest.json` on `main`, `v2.2.3-testing.*`) are the only user-facing channels.
   - Never promote unverified changes (`clientVerified: false` / `nativeDllClientVerified: false`) to `Stable`.
