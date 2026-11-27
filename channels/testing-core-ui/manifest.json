@@ -6122,7 +6122,7 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_core/core/weapon_render_probe.lua",
       "targetPath": "soulspire_core/core/weapon_render_probe.lua",
-      "sha256": "d58765fb2c09b45140f1262108ada8ab0366bb23d1d4e5aa722908709dd6b77c",
+      "sha256": "196106a55186f7ffd175b62b8994d2386e154e6e9e6c5b9f456769f33c49ad0e",
       "size": 61093
     },
     {
@@ -7830,8 +7830,8 @@
       "category": "addon",
       "sourcePath": "addons/ashita4/soulspire_soulhud/soulspire_soulhud.lua",
       "targetPath": "soulspire_soulhud/soulspire_soulhud.lua",
-      "sha256": "524d93483da2cec89e09be039f0d889c58f668ccd9c5295f68c12e19e4ebf795",
-      "size": 24406
+      "sha256": "fc7e7a2b703ff0d2711bf4dd718c789ea5df5d4dc854fab58301a28ef2d8da4e",
+      "size": 24207
     },
     {
       "category": "addon",
@@ -8299,8 +8299,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/core/flintlock.lua",
       "targetPath": "vanacore/soulspire_core/core/flintlock.lua",
-      "sha256": "f4601f1f67e80d1ef2104a98cae0468d3de11bf4d97d55c55ab038b94398bf47",
-      "size": 1457
+      "sha256": "04698cbe28683b746089ac493629a1e82a70c83a954233bb72ec1d8ce4cf0feb",
+      "size": 1475
     },
     {
       "category": "addon",
@@ -8460,8 +8460,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/modules/status_and_diag.lua",
       "targetPath": "vanacore/soulspire_core/modules/status_and_diag.lua",
-      "sha256": "0b5660d63d89618ddf7dd388f0d4ce3c086b326a8d90b07b2ded15add1b96c42",
-      "size": 11787
+      "sha256": "c7acfda35ee6f21031af29b53c61b40eb9d7da9107b7edc620ca98554384be76",
+      "size": 12501
     },
     {
       "category": "addon",
