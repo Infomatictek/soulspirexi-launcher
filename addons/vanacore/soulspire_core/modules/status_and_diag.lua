@@ -46,11 +46,23 @@ function StatusDiagMod:handle_action(action)
     return self:on_action(action)
 end
 
-function StatusDiagMod:get_hints()
-    return '[D-Pad Left/Right] Switch Subtab   [X] Reload Native   [LB/RB] Switch Module   [B] Close'
+local function resolve_lbl(label_fn, action, dev, fallback)
+    if type(label_fn) == 'function' then
+        local ok, v = pcall(label_fn, action, dev)
+        if ok and type(v) == 'string' and v ~= '' then return v end
+    end
+    return fallback
 end
 
-function StatusDiagMod:get_prompt_pills(last_device)
+function StatusDiagMod:get_hints(label_fn)
+    local nav = resolve_lbl(label_fn, 'nav', 'gamepad', 'D-Pad')
+    local ctx = resolve_lbl(label_fn, 'context', 'gamepad', 'X')
+    local mod = resolve_lbl(label_fn, 'modules', 'gamepad', 'LB/RB')
+    local bak = resolve_lbl(label_fn, 'cancel', 'gamepad', 'B')
+    return string.format('[%s] Switch Subtab   [%s] Reload Native   [%s] Switch Module   [%s] Close', nav, ctx, mod, bak)
+end
+
+function StatusDiagMod:get_prompt_pills(last_device, label_fn)
     if last_device == 'keyboard' or last_device == 'mouse' then
         return {
             { 'Left/Right', 'Subtab' },
@@ -60,10 +72,10 @@ function StatusDiagMod:get_prompt_pills(last_device)
         }
     end
     return {
-        { 'D-Pad', 'Subtab' },
-        { 'X',     'Reload' },
-        { 'LB/RB', 'Modules' },
-        { 'B',     'Close' },
+        { resolve_lbl(label_fn, 'nav',     last_device, 'D-Pad'), 'Subtab' },
+        { resolve_lbl(label_fn, 'context', last_device, 'X'),     'Reload' },
+        { resolve_lbl(label_fn, 'modules', last_device, 'LB/RB'), 'Modules' },
+        { resolve_lbl(label_fn, 'cancel',  last_device, 'B'),     'Close' },
     }
 end
 
@@ -167,11 +179,24 @@ function StatusDiagMod:draw(imgui, dl, F_arg, L, x, y, w, h, _ctx)
                     tonumber(rd.actions_dispatched) or 0))
                 local idg = (type(rd.input_diag_fn) == 'function') and rd.input_diag_fn() or nil
                 if type(idg) == 'table' then
-                    imgui.Text(string.format('Controller Diag: raw_mask=0x%04X | last_btn=%s (%s) | action=%s (reached_ui=%s) | stick=%s | mode=%s',
+                    imgui.Text(string.format('Controller Bindings: backend=%s (detected=%s) | source=%s | ffxi_import=%s (%s) | present=%s | conflicts=%d (%s)',
+                        tostring(idg.active_backend or 'xinput'),
+                        tostring(idg.detected_backend or 'xinput'),
+                        tostring(idg.config_source or 'defaults'),
+                        tostring(idg.ffxi_imported == true),
+                        tostring(idg.ffxi_import_detail or 'none'),
+                        tostring(idg.controller_present ~= false),
+                        tonumber(idg.conflict_count) or 0,
+                        tostring(idg.conflict_summary or 'none')))
+                    if type(idg.binding_status) == 'string' and idg.binding_status ~= '' then
+                        imgui.Text('  Active Map: ' .. idg.binding_status)
+                    end
+                    imgui.Text(string.format('Controller Diag: raw_mask=0x%04X | last_btn=%s (%s) | action=%s [%s] (reached_ui=%s) | stick=%s | mode=%s',
                         tonumber(idg.raw_button_mask) or 0,
                         tostring(idg.last_physical_button or 'none'),
                         tostring(idg.last_button_state or 'idle'),
                         tostring(idg.last_action or rd.last_action or 'none'),
+                        tostring(idg.last_action_provenance or 'default'),
                         tostring(idg.last_action_reached == true or rd.last_action_reached == true),
                         tostring(idg.stick_dir or 'neutral'),
                         tostring(idg.active_mode or rd.last_device or 'gamepad')))

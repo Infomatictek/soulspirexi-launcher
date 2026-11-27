@@ -205,7 +205,10 @@ end
 local function save_core_settings()
     if settings_store and type(settings_store.save) == 'function' then
         if ui then settings_store.data.ui_scale = ui.ui_scale end
-        if input then settings_store.data.bindings = input:get_bindings() end
+        if input and type(input.get_persisted_config) == 'function' then
+            settings_store.data.controller_config = input:get_persisted_config()
+            settings_store.data.bindings = nil
+        end
         pcall(function() settings_store:save() end)
     end
 end
@@ -319,21 +322,22 @@ local function init_all()
         local ok, store = pcall(vana.settings.register, {
             name     = 'soulspire_core',
             scope    = 'global',
-            defaults = { ui_scale = 1.0, bindings = {} },
+            defaults = { ui_scale = 1.0, controller_config = { use_ffxi_bindings = true, overrides = {} } },
         })
         if ok and store then settings_store = store end
     end
 
     local saved_scale = (settings_store and settings_store.data and tonumber(settings_store.data.ui_scale)) or 1.0
-    local saved_binds = (settings_store and settings_store.data and type(settings_store.data.bindings) == 'table')
-        and settings_store.data.bindings or nil
+    local saved_ctrl  = (settings_store and settings_store.data and type(settings_store.data.controller_config) == 'table')
+        and settings_store.data.controller_config or nil
 
     assets   = AssetsMod and AssetsMod.new(addon_dir, install_dir) or nil
     registry = RegistryMod and RegistryMod.new() or nil
     focus    = (FocusMod and registry) and FocusMod.new(registry) or nil
     input    = InputMod and InputMod.new({
-        bindings = saved_binds,
-        clock    = native_clock,
+        persisted_config   = saved_ctrl,
+        on_bindings_change = function() save_core_settings() end,
+        clock              = native_clock,
     }) or nil
     runtime_diag.input_diag_fn = function()
         return (input and type(input.get_diagnostics) == 'function') and input:get_diagnostics() or nil
@@ -445,6 +449,7 @@ local function init_all()
             on_scale_change = function() save_core_settings() end,
             get_identity    = function() return identity and identity:active() or nil end,
             get_last_device = function() return input and input.last_device or 'gamepad' end,
+            input           = input,
         })
     end
 

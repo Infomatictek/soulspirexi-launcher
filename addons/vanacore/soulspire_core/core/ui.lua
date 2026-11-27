@@ -113,6 +113,7 @@ function UI.new(imgui, registry, focus, assets, opts)
         on_scale_change  = opts.on_scale_change,
         get_identity     = opts.get_identity,
         get_last_device  = opts.get_last_device,
+        input            = opts.input,
         scale_panel_open = false,
         last_viewport_w   = 0,
         last_viewport_h   = 0,
@@ -131,6 +132,23 @@ function UI:set_scale(scale)
     if type(self.on_scale_change) == 'function' then
         self.on_scale_change(self.ui_scale)
     end
+end
+
+function UI:label_for(action, device)
+    if self.input and type(self.input.label_for) == 'function' then
+        local ok, lbl = pcall(self.input.label_for, self.input, action, device)
+        if ok and type(lbl) == 'string' and lbl ~= '' then
+            return lbl
+        end
+    end
+    local fallback = (device == 'keyboard' or device == 'mouse') and {
+        confirm = 'Enter', cancel = 'Esc', context = 'X', details = 'Y',
+        module_prev = 'Q', module_next = 'E', modules = 'Q/E', nav = 'Arrows',
+    } or {
+        confirm = 'A', cancel = 'B', context = 'X', details = 'Y',
+        module_prev = 'LB', module_next = 'RB', modules = 'LB/RB', nav = 'D-Pad',
+    }
+    return fallback[action] or tostring(action)
 end
 
 function UI:ensure_assets()
@@ -235,11 +253,140 @@ function UI:_draw_unavailable_module(dl, L, x, y, w, h, mod, mode_label)
     F.drawShadowText(imgui, dl, cx + pad, cy + cardH - pad - 40 * s,
         'Companion System: ' .. companion, F.u32.text_muted, 0.82 * s, 'l')
     F.drawShadowText(imgui, dl, cx + pad, cy + cardH - pad - 18 * s,
-        'Integration: ' .. tostring(mode_label) .. '  |  Use LB / RB to return to live modules.',
+        'Integration: ' .. tostring(mode_label) .. '  |  Use ' .. self:label_for('modules', 'gamepad') .. ' to return to live modules.',
         F.u32.aether_cyan, 0.82 * s, 'l')
 end
 
--- Render the [Y] Details & Controls Help Overlay modal.
+-- Render the compact Settings & Controller Bindings Overlay modal (* utility button).
+function UI:_draw_settings_overlay(dl, L, wx, wy, ww, wh)
+    local imgui = self.imgui
+    local s = L.uiScale or 1.0
+    local inp = self.input
+
+    dl:AddRectFilled({ wx, wy }, { wx + ww, wy + wh }, F.abgr(F.rgba.black, 0.72), 8)
+
+    local mw = math.min(ww - math.floor(36 * s), math.floor(720 * s))
+    local mh = math.min(wh - math.floor(36 * s), math.floor(520 * s))
+    local mx = wx + math.floor((ww - mw) * 0.5)
+    local my = wy + math.floor((wh - mh) * 0.5)
+
+    F.drawOrnatePanel(dl, mx, my, mw, mh, {
+        fillTop  = F.abgr(F.hex('#151C30', 0.98)),
+        fillBot  = F.abgr(F.hex('#080C15', 0.99)),
+        border   = F.u32.soul_gold,
+        accent   = F.u32.aether_cyan,
+        rounding = 7,
+        corners  = true,
+        shadow   = true,
+    })
+
+    local pad = math.floor(20 * s)
+    local cy = my + math.floor(14 * s)
+    F.drawShadowText(imgui, dl, mx + pad, cy, 'SOULSPIREXI CORE — SETTINGS & CONTROLLER BINDINGS', F.u32.soul_gold_bright, 1.02 * s, 'l')
+    cy = cy + math.floor(26 * s)
+    F.drawDivider(dl, mx + pad, cy, mw - pad * 2, F.u32.soul_gold_dim)
+    cy = cy + math.floor(10 * s)
+
+    -- Row 1: UI Scale
+    local btnH = math.floor(24 * s)
+    F.drawShadowText(imgui, dl, mx + pad, cy + 4 * s, 'UI Scale:', F.u32.text_primary, 0.86 * s, 'l')
+    local sx = mx + pad + math.floor(92 * s)
+    if F.drawActionButton(imgui, dl, '##set_sc_dn', sx, cy, math.floor(28 * s), btnH, '-', 'neutral', { fontScale = 0.84 * s }) then
+        self:set_scale(math.floor((self.ui_scale - 0.10) * 100 + 0.5) / 100)
+    end
+    F.drawShadowText(imgui, dl, sx + math.floor(54 * s), cy + 4 * s,
+        string.format('%d%%', math.floor(self.ui_scale * 100 + 0.5)), F.u32.soul_gold_bright, 0.84 * s, 'c')
+    if F.drawActionButton(imgui, dl, '##set_sc_up', sx + math.floor(80 * s), cy, math.floor(28 * s), btnH, '+', 'neutral', { fontScale = 0.84 * s }) then
+        self:set_scale(math.floor((self.ui_scale + 0.10) * 100 + 0.5) / 100)
+    end
+
+    if inp then
+        local diag = inp:get_diagnostics()
+        local backend = diag.active_backend or 'xinput'
+        local src_text = string.format('Backend: %s  |  Source: %s',
+            string.upper(backend), tostring(diag.config_source or 'defaults'))
+        F.drawShadowText(imgui, dl, mx + mw - pad, cy + 4 * s, src_text, F.u32.aether_cyan, 0.80 * s, 'r')
+    end
+
+    cy = cy + math.floor(32 * s)
+    F.drawDivider(dl, mx + pad, cy, mw - pad * 2, F.u32.border_strong)
+    cy = cy + math.floor(10 * s)
+
+    if inp then
+        -- Row 2: Use FFXI Bindings toggle + Refresh Existing Bindings
+        local use_ffxi = (inp.use_ffxi_bindings == true)
+        local toggleLbl = use_ffxi and '[ON] Use FFXI Bindings' or '[OFF] Use FFXI Bindings'
+        if F.drawActionButton(imgui, dl, '##set_use_ffxi', mx + pad, cy, math.floor(196 * s), btnH,
+            toggleLbl, use_ffxi and 'cyan' or 'neutral', { fontScale = 0.80 * s }) then
+            inp:set_use_ffxi_bindings(not use_ffxi)
+        end
+        if F.drawActionButton(imgui, dl, '##set_refresh_ffxi', mx + pad + math.floor(206 * s), cy, math.floor(196 * s), btnH,
+            'Refresh Existing Bindings', 'neutral', { fontScale = 0.80 * s }) then
+            inp:import_ffxi_bindings()
+        end
+        cy = cy + math.floor(30 * s)
+
+        -- Conflict banner if any binding conflict exists
+        local conflicts = inp:get_conflicts()
+        if #conflicts > 0 then
+            local diag = inp:get_diagnostics()
+            F.drawShadowText(imgui, dl, mx + pad, cy,
+                'Conflict Detected: ' .. tostring(diag.conflict_summary), F.u32.danger, 0.80 * s, 'l')
+            cy = cy + math.floor(20 * s)
+        end
+
+        -- Per-action binding rows
+        local backend = inp.active_backend or inp.detected_backend or 'xinput'
+        local actions = inp.CONFIGURABLE_ACTIONS or {}
+        local rowH = math.floor(26 * s)
+        for _, item in ipairs(actions) do
+            local info = inp:get_action_info(item.id, backend)
+            F.drawShadowText(imgui, dl, mx + pad, cy + 4 * s, item.label, F.u32.text_primary, 0.82 * s, 'l')
+
+            local provTag = (info.provenance == 'inherited' and '[Inherited]')
+                or (info.provenance == 'overridden' and '[Override]')
+                or '[Default]'
+            local provCol = (info.provenance == 'inherited' and F.u32.aether_cyan)
+                or (info.provenance == 'overridden' and F.u32.soul_gold_bright)
+                or F.u32.text_muted
+            F.drawShadowText(imgui, dl, mx + pad + math.floor(200 * s), cy + 4 * s, provTag, provCol, 0.78 * s, 'l')
+
+            local ctrlX = mx + mw - pad - math.floor(240 * s)
+            if F.drawActionButton(imgui, dl, '##bind_prev_' .. item.id, ctrlX, cy, math.floor(26 * s), math.floor(22 * s), '<', 'neutral', { fontScale = 0.78 * s }) then
+                inp:cycle_action_override(backend, item.id, -1)
+            end
+            F.drawShadowText(imgui, dl, ctrlX + math.floor(72 * s), cy + 3 * s, info.label, F.u32.white, 0.82 * s, 'c')
+            if F.drawActionButton(imgui, dl, '##bind_next_' .. item.id, ctrlX + math.floor(118 * s), cy, math.floor(26 * s), math.floor(22 * s), '>', 'neutral', { fontScale = 0.78 * s }) then
+                inp:cycle_action_override(backend, item.id, 1)
+            end
+            if info.provenance == 'overridden' then
+                if F.drawActionButton(imgui, dl, '##bind_clr_' .. item.id, ctrlX + math.floor(154 * s), cy, math.floor(82 * s), math.floor(22 * s), 'Clear', 'neutral', { fontScale = 0.74 * s }) then
+                    inp:clear_action_override(backend, item.id)
+                end
+            end
+            cy = cy + rowH
+        end
+
+        -- Bottom utility buttons
+        local footY = my + mh - pad - math.floor(32 * s)
+        if F.drawActionButton(imgui, dl, '##set_restore_inh', mx + pad, footY, math.floor(210 * s), math.floor(30 * s),
+            'Restore Inherited Bindings', 'cyan', { fontScale = 0.78 * s }) then
+            inp:restore_inherited_bindings()
+        end
+        if F.drawActionButton(imgui, dl, '##set_restore_def', mx + pad + math.floor(220 * s), footY, math.floor(196 * s), math.floor(30 * s),
+            'Restore Standard Defaults', 'neutral', { fontScale = 0.78 * s }) then
+            inp:restore_standard_defaults()
+        end
+    end
+
+    local closeW, closeH = math.floor(110 * s), math.floor(30 * s)
+    if F.drawBeveledCtaButton(imgui, dl, '##set_close', mx + mw - pad - closeW, my + mh - pad - closeH, closeW, closeH,
+        'CLOSE', 'gold', { fontScale = 0.82 * s }) then
+        self.scale_panel_open = false
+    end
+end
+
+-- Render the Details & Controls Help Overlay modal with dynamic active button labels.
 function UI:_draw_help_overlay(dl, L, wx, wy, ww, wh, active)
     local imgui = self.imgui
     local s = L.uiScale or 1.0
@@ -265,14 +412,21 @@ function UI:_draw_help_overlay(dl, L, wx, wy, ww, wh, active)
     F.drawShadowText(imgui, dl, mx + pad, my + 16 * s, 'SOULSPIREXI CORE — CONTROLS & DETAILS', F.u32.soul_gold_bright, 1.08 * s, 'l')
     F.drawDivider(dl, mx + pad, my + 44 * s, mw - pad * 2, F.u32.soul_gold_dim)
 
+    local lbl_mod  = self:label_for('modules', 'gamepad')
+    local lbl_nav  = self:label_for('nav', 'gamepad')
+    local lbl_ok   = self:label_for('confirm', 'gamepad')
+    local lbl_back = self:label_for('cancel', 'gamepad')
+    local lbl_ctx  = self:label_for('context', 'gamepad')
+    local lbl_help = self:label_for('details', 'gamepad')
+
     local rows = {
-        { 'LB / RB  (Q / E)',            'Switch Core modules (Character, Weapon Mastery, Soul Talents...)' },
-        { 'D-Pad / Left Stick / Arrows', 'Navigate arsenal, weapon filters, skillchains & orbital talent tree' },
-        { 'A  (Enter / Space)',          'Select / Inspect / Open Forge Confirmation' },
-        { 'B  (Escape / Backspace)',     'Back one level / Cancel modal / Close SoulspireXI Core' },
-        { 'X  (X / F / Delete)',         'Context action (Cycle Weapon / Refund / Sync)' },
-        { 'R  /  T',                     'Respec active Weapon Skill  |  Toggle Path Spotlight' },
-        { 'Y  (Y / H / F1)',             'Toggle this Details & Controls overlay' },
+        { lbl_mod .. '  (Q / E)',                  'Switch Core modules (Character, Weapon Mastery, Soul Talents...)' },
+        { lbl_nav .. ' / Left Stick / Arrows',     'Navigate arsenal, weapon filters, skillchains & orbital talent tree' },
+        { lbl_ok .. '  (Enter / Space)',           'Select / Inspect / Open Forge Confirmation' },
+        { lbl_back .. '  (Escape / Backspace)',    'Back one level / Cancel modal / Close SoulspireXI Core' },
+        { lbl_ctx .. '  (X / F / Delete)',         'Context action (Cycle Weapon / Refund / Sync)' },
+        { 'R  /  T',                               'Respec active Weapon Skill  |  Toggle Path Spotlight' },
+        { lbl_help .. '  (Y / H / F1)',            'Toggle this Details & Controls overlay' },
     }
     local cy = my + 58 * s
     for _, r in ipairs(rows) do
@@ -296,9 +450,9 @@ function UI:_draw_help_overlay(dl, L, wx, wy, ww, wh, active)
         end
     end
 
-    local btnW, btnH = math.floor(144 * s), math.floor(34 * s)
+    local btnW, btnH = math.floor(164 * s), math.floor(34 * s)
     if F.drawBeveledCtaButton(imgui, dl, '##core_help_close', mx + mw - pad - btnW, my + mh - pad - btnH, btnW, btnH,
-        'CLOSE [B / Y]', 'gold', { fontScale = 0.86 * s }) then
+        'CLOSE [' .. lbl_back .. ' / ' .. lbl_help .. ']', 'gold', { fontScale = 0.86 * s }) then
         self.focus.help_open = false
     end
 end
@@ -485,14 +639,23 @@ function UI:draw_hub(native, bridge_mode)
             })
         end
 
-        -- LB / RB shoulder buttons flanking the dynamic tab strip
-        local bmpW = math.floor(32 * s)
+        -- Dynamic shoulder/module-switch buttons flanking the dynamic tab strip
+        local last_device = 'gamepad'
+        if type(self.get_last_device) == 'function' then
+            local okDev, devRes = pcall(self.get_last_device)
+            if okDev and type(devRes) == 'string' then last_device = devRes end
+        end
+        local label_fn = function(act, dev) return self:label_for(act, dev or last_device) end
+
+        local prevLbl = self:label_for('module_prev', last_device)
+        local nextLbl = self:label_for('module_next', last_device)
+        local bmpW = math.floor(math.max(32, math.max(#prevLbl, #nextLbl) * 8 + 14) * s)
         local bmpH = math.floor(24 * s)
         local bmpY = ribY + math.floor((ribH - bmpH) * 0.5)
-        if F.drawActionButton(imgui, dl, '##core_lb', ribX + math.floor(16 * s), bmpY, bmpW, bmpH, 'LB', 'neutral', { fontScale = 0.74 * s }) then
+        if F.drawActionButton(imgui, dl, '##core_lb', ribX + math.floor(16 * s), bmpY, bmpW, bmpH, prevLbl, 'neutral', { fontScale = 0.72 * s }) then
             self.focus:switch_module(-1)
         end
-        if F.drawActionButton(imgui, dl, '##core_rb', ribX + idealRibW - math.floor(16 * s) - bmpW, bmpY, bmpW, bmpH, 'RB', 'neutral', { fontScale = 0.74 * s }) then
+        if F.drawActionButton(imgui, dl, '##core_rb', ribX + idealRibW - math.floor(16 * s) - bmpW, bmpY, bmpW, bmpH, nextLbl, 'neutral', { fontScale = 0.72 * s }) then
             self.focus:switch_module(1)
         end
 
@@ -558,12 +721,6 @@ function UI:draw_hub(native, bridge_mode)
             local okId, idRes = pcall(self.get_identity)
             if okId and type(idRes) == 'table' then ident = idRes end
         end
-        local last_device = 'gamepad'
-        if type(self.get_last_device) == 'function' then
-            local okDev, devRes = pcall(self.get_last_device)
-            if okDev and type(devRes) == 'string' then last_device = devRes end
-        end
-
         if active and active.available and active.controller and type(active.controller.draw) == 'function' then
             local okDraw, errDraw = xpcall(function()
                 active.controller:draw(imgui, dl, F, L, innerX, bodyY, L.innerW, bodyH, {
@@ -572,6 +729,7 @@ function UI:draw_hub(native, bridge_mode)
                     identity    = ident,
                     assets      = self.assets,
                     last_device = last_device,
+                    label_for   = label_fn,
                 })
             end, debug.traceback)
             if not okDraw then
@@ -597,19 +755,19 @@ function UI:draw_hub(native, bridge_mode)
 
         local prompts = nil
         if active and active.controller and type(active.controller.get_prompt_pills) == 'function' then
-            local okP, resP = pcall(active.controller.get_prompt_pills, active.controller, last_device)
+            local okP, resP = pcall(active.controller.get_prompt_pills, active.controller, last_device, label_fn)
             if okP and type(resP) == 'table' and #resP > 0 then
                 prompts = resP
             end
         end
         if not prompts then
             prompts = {
-                { 'LB/RB', 'Modules' },
-                { 'D-Pad', 'Navigate' },
-                { 'A',     'Select' },
-                { 'X',     'Action' },
-                { 'Y',     'Help' },
-                { 'Esc/B', 'Close' },
+                { label_fn('modules', last_device), 'Modules' },
+                { label_fn('nav',     last_device), 'Navigate' },
+                { label_fn('confirm', last_device), 'Select' },
+                { label_fn('context', last_device), 'Action' },
+                { label_fn('details', last_device), 'Help' },
+                { label_fn('cancel',  last_device), 'Close' },
             }
         end
 
@@ -636,9 +794,11 @@ function UI:draw_hub(native, bridge_mode)
             end
         end
 
-        -- D. Optional Help / Controls Modal Overlay
+        -- D. Optional Help / Controls Modal Overlay or Settings & Controller Bindings Overlay
         if self.focus.help_open and dl then
             self:_draw_help_overlay(dl, L, wx, wy, L.winW, L.winH, active)
+        elseif self.scale_panel_open and dl then
+            self:_draw_settings_overlay(dl, L, wx, wy, L.winW, L.winH)
         end
     end
     imgui.End()

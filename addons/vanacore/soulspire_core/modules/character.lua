@@ -589,19 +589,34 @@ function Character:on_action(action)
     return false
 end
 
-function Character:get_hints()
-    if self:has_modal() then
-        return '[D-Pad] Confirm/Cancel   [A] Socket Soul Crystal   [B] Cancel'
+local function resolve_lbl(label_fn, action, dev, fallback)
+    if type(label_fn) == 'function' then
+        local ok, v = pcall(label_fn, action, dev)
+        if ok and type(v) == 'string' and v ~= '' then return v end
     end
-    return '[D-Pad/Stick] Browse Souls   [A] Socket Soul Crystal   [X] Refresh Sync   [LB/RB] Switch Module   [Y] Help   [B] Close'
+    return fallback
 end
 
-function Character:get_prompt_pills(last_device)
+function Character:get_hints(label_fn)
+    local nav = resolve_lbl(label_fn, 'nav', 'gamepad', 'D-Pad')
+    local ok  = resolve_lbl(label_fn, 'confirm', 'gamepad', 'A')
+    local bak = resolve_lbl(label_fn, 'cancel', 'gamepad', 'B')
+    local ctx = resolve_lbl(label_fn, 'context', 'gamepad', 'X')
+    local mod = resolve_lbl(label_fn, 'modules', 'gamepad', 'LB/RB')
+    local hlp = resolve_lbl(label_fn, 'details', 'gamepad', 'Y')
+    if self:has_modal() then
+        return string.format('[%s] Confirm/Cancel   [%s] Socket Soul Crystal   [%s] Cancel', nav, ok, bak)
+    end
+    return string.format('[%s/Stick] Browse Souls   [%s] Socket Soul Crystal   [%s] Refresh Sync   [%s] Switch Module   [%s] Help   [%s] Close',
+        nav, ok, ctx, mod, hlp, bak)
+end
+
+function Character:get_prompt_pills(last_device, label_fn)
     if self:has_modal() then
         return {
-            { 'D-Pad', 'Choose' },
-            { 'A',     'Confirm Socket' },
-            { 'B',     'Cancel' },
+            { resolve_lbl(label_fn, 'nav',     last_device, 'D-Pad'), 'Choose' },
+            { resolve_lbl(label_fn, 'confirm', last_device, 'A'),     'Confirm Socket' },
+            { resolve_lbl(label_fn, 'cancel',  last_device, 'B'),     'Cancel' },
         }
     end
     if last_device == 'keyboard' or last_device == 'mouse' then
@@ -614,11 +629,11 @@ function Character:get_prompt_pills(last_device)
         }
     end
     return {
-        { 'D-Pad', 'Browse Souls' },
-        { 'A',     'Socket Soul' },
-        { 'X',     'Sync Collection' },
-        { 'LB/RB', 'Modules' },
-        { 'B',     'Close' },
+        { resolve_lbl(label_fn, 'nav',     last_device, 'D-Pad'), 'Browse Souls' },
+        { resolve_lbl(label_fn, 'confirm', last_device, 'A'),     'Socket Soul' },
+        { resolve_lbl(label_fn, 'context', last_device, 'X'),     'Sync Collection' },
+        { resolve_lbl(label_fn, 'modules', last_device, 'LB/RB'), 'Modules' },
+        { resolve_lbl(label_fn, 'cancel',  last_device, 'B'),     'Close' },
     }
 end
 
@@ -691,10 +706,13 @@ function Character:draw(imgui, dl, F, L, x, y, w, h, ctx)
         F.drawShadowText(imgui, dl, midX, y + 48 * s, 'CHARACTER IDENTITY & SOUL CRYSTALS', F.u32.soul_gold, 0.80 * s, 'c')
     end
 
+    local lbl_fn = type(ctx) == 'table' and ctx.label_for or nil
+    local last_dev = (type(ctx) == 'table' and ctx.last_device) or 'gamepad'
+    local syncKeyLbl = resolve_lbl(lbl_fn, 'context', last_dev, 'X')
     local syncBtnW = math.floor(114 * s)
     local syncBtnH = math.floor(30 * s)
     if F.drawBeveledCtaButton(imgui, dl, '##ch_sync_btn', x + w - pad - syncBtnW, y + math.floor((bannerH - syncBtnH) * 0.5),
-        syncBtnW, syncBtnH, 'SYNC [X]', 'cyan', { fontScale = 0.78 * s }) then
+        syncBtnW, syncBtnH, 'SYNC [' .. syncKeyLbl .. ']', 'cyan', { fontScale = 0.78 * s }) then
         self.sync_retries = 0
         self:sync(not self:_cache_ready())
     end
@@ -1031,15 +1049,16 @@ function Character:draw(imgui, dl, F, L, x, y, w, h, ctx)
             F.drawBeveledCtaButton(imgui, dl, '##ch_actv', rx + pad, actY, innerW, actBtnH,
                 'Currently Socketed', 'gold', { disabled = true, fontScale = 0.90 * s })
         elseif focused.owned and self:_can_socket(snap) then
+            local okKeyLbl = resolve_lbl(lbl_fn, 'confirm', last_dev, 'A')
             if F.drawBeveledCtaButton(imgui, dl, '##ch_sock', rx + pad, actY, innerW, actBtnH,
-                'Socket Soul Crystal [A]', 'gold', { fontScale = 0.94 * s }) then
+                'Socket Soul Crystal [' .. okKeyLbl .. ']', 'gold', { fontScale = 0.94 * s }) then
                 self.confirm_entry = focused
                 self.region = 'confirm_socket'
                 self.confirm_btn = 1
             end
         else
             F.drawBeveledCtaButton(imgui, dl, '##ch_lock', rx + pad, actY, innerW, actBtnH,
-                snap.loaded and 'Locked by Progression' or (self.last_sync_err and 'Sync Failed - Press [X]' or 'Waiting for Server Sync'),
+                snap.loaded and 'Locked by Progression' or (self.last_sync_err and ('Sync Failed - Press [' .. syncKeyLbl .. ']') or 'Waiting for Server Sync'),
                 'gold', { disabled = true, fontScale = 0.86 * s })
         end
     end

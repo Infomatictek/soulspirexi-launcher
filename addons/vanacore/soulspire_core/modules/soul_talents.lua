@@ -232,22 +232,35 @@ function SoulTalents:on_action(action, ctx)
     return false
 end
 
-function SoulTalents:get_hints()
+local function resolve_lbl(label_fn, action, dev, fallback)
+    if type(label_fn) == 'function' then
+        local ok, v = pcall(label_fn, action, dev)
+        if ok and type(v) == 'string' and v ~= '' then return v end
+    end
+    return fallback
+end
+
+function SoulTalents:get_hints(label_fn)
+    local nav = resolve_lbl(label_fn, 'nav', 'gamepad', 'D-Pad')
+    local ok  = resolve_lbl(label_fn, 'confirm', 'gamepad', 'A')
+    local bak = resolve_lbl(label_fn, 'cancel', 'gamepad', 'B')
+    local ctx = resolve_lbl(label_fn, 'context', 'gamepad', 'X')
+    local mod = resolve_lbl(label_fn, 'modules', 'gamepad', 'LB/RB')
     if self.region == 'confirm_reset' then
-        return '[D-Pad] Confirm/Cancel   [A] Execute Reset Spec   [B] Cancel'
+        return string.format('[%s] Confirm/Cancel   [%s] Execute Reset Spec   [%s] Cancel', nav, ok, bak)
     elseif self.region == 'nodes' then
-        return '[D-Pad] Inspect Talent   [A] Open in Soulforge   [Left/B] Spec Slots   [X] Sync   [LB/RB] Modules'
+        return string.format('[%s] Inspect Talent   [%s] Open in Soulforge   [Left/%s] Spec Slots   [%s] Sync   [%s] Modules', nav, ok, bak, ctx, mod)
     else
-        return '[D-Pad] Select Slot   [A] Open in Soulforge   [Right] Invested Nodes   [X] Reset Spec / Sync   [LB/RB] Modules'
+        return string.format('[%s] Select Slot   [%s] Open in Soulforge   [Right] Invested Nodes   [%s] Reset Spec / Sync   [%s] Modules', nav, ok, ctx, mod)
     end
 end
 
-function SoulTalents:get_prompt_pills(last_device)
+function SoulTalents:get_prompt_pills(last_device, label_fn)
     if self.region == 'confirm_reset' then
         return {
-            { 'D-Pad', 'Confirm / Cancel' },
-            { 'A',     'Reset Spec' },
-            { 'B',     'Cancel' },
+            { resolve_lbl(label_fn, 'nav',     last_device, 'D-Pad'), 'Confirm / Cancel' },
+            { resolve_lbl(label_fn, 'confirm', last_device, 'A'),     'Reset Spec' },
+            { resolve_lbl(label_fn, 'cancel',  last_device, 'B'),     'Cancel' },
         }
     end
     if last_device == 'keyboard' or last_device == 'mouse' then
@@ -260,11 +273,11 @@ function SoulTalents:get_prompt_pills(last_device)
         }
     end
     return {
-        { 'D-Pad', 'Select Slot / Node' },
-        { 'A',     'Open in Soulforge' },
-        { 'X',     'Reset Spec / Sync' },
-        { 'LB/RB', 'Modules' },
-        { 'B',     'Close' },
+        { resolve_lbl(label_fn, 'nav',     last_device, 'D-Pad'), 'Select Slot / Node' },
+        { resolve_lbl(label_fn, 'confirm', last_device, 'A'),     'Open in Soulforge' },
+        { resolve_lbl(label_fn, 'context', last_device, 'X'),     'Reset Spec / Sync' },
+        { resolve_lbl(label_fn, 'modules', last_device, 'LB/RB'), 'Modules' },
+        { resolve_lbl(label_fn, 'cancel',  last_device, 'B'),     'Close' },
     }
 end
 
@@ -430,8 +443,9 @@ function SoulTalents:draw(imgui, dl, F, L, x, y, w, h, ctx)
         else
             F.drawShadowText(imgui, dl, tx, sy + 12 * s,
                 string.format('SLOT %d  |  OPEN MASTERY SLOT', i), F.u32.text_secondary, 0.88 * s, 'l')
+            local okLbl = resolve_lbl(type(ctx) == 'table' and ctx.label_for or nil, 'confirm', (type(ctx) == 'table' and ctx.last_device) or 'gamepad', 'A')
             F.drawShadowText(imgui, dl, tx, sy + 36 * s,
-                F.fitText(imgui, 'Press [A] or click to forge in The Soulforge.', tw, 0.76 * s), F.u32.text_muted, 0.76 * s, 'l')
+                F.fitText(imgui, 'Press [' .. okLbl .. '] or click to forge in The Soulforge.', tw, 0.76 * s), F.u32.text_muted, 0.76 * s, 'l')
         end
     end
 
@@ -461,8 +475,9 @@ function SoulTalents:draw(imgui, dl, F, L, x, y, w, h, ctx)
             self.region = 'slots'
         end
     else
+        local ctxLbl = resolve_lbl(type(ctx) == 'table' and ctx.label_for or nil, 'context', (type(ctx) == 'table' and ctx.last_device) or 'gamepad', 'X')
         if F.drawBeveledCtaButton(imgui, dl, '##st_rst_btn', x + pad, actY, slotW, actH,
-            spent > 0 and 'Reset Spec Talents [X]' or 'Sync Talents [X]',
+            spent > 0 and ('Reset Spec Talents [' .. ctxLbl .. ']') or ('Sync Talents [' .. ctxLbl .. ']'),
             spent > 0 and 'danger' or 'cyan', { fontScale = 0.88 * s }) then
             if spent > 0 then
                 self.region = 'confirm_reset'

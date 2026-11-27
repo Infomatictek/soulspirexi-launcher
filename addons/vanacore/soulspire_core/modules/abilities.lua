@@ -40,11 +40,23 @@ function AbilitiesMod:handle_action(action)
     return self:on_action(action)
 end
 
-function AbilitiesMod:get_hints()
-    return '[D-Pad] Browse Actions   [X] Reload Actions   [LB/RB] Switch Module   [B] Close'
+local function resolve_lbl(label_fn, action, dev, fallback)
+    if type(label_fn) == 'function' then
+        local ok, v = pcall(label_fn, action, dev)
+        if ok and type(v) == 'string' and v ~= '' then return v end
+    end
+    return fallback
 end
 
-function AbilitiesMod:get_prompt_pills(last_device)
+function AbilitiesMod:get_hints(label_fn)
+    return string.format('[%s] Browse Actions   [%s] Reload Actions   [%s] Switch Module   [%s] Close',
+        resolve_lbl(label_fn, 'nav', 'gamepad', 'D-Pad'),
+        resolve_lbl(label_fn, 'context', 'gamepad', 'X'),
+        resolve_lbl(label_fn, 'modules', 'gamepad', 'LB/RB'),
+        resolve_lbl(label_fn, 'cancel', 'gamepad', 'B'))
+end
+
+function AbilitiesMod:get_prompt_pills(last_device, label_fn)
     if last_device == 'keyboard' or last_device == 'mouse' then
         return {
             { 'Arrows', 'Browse' },
@@ -54,10 +66,10 @@ function AbilitiesMod:get_prompt_pills(last_device)
         }
     end
     return {
-        { 'D-Pad', 'Browse' },
-        { 'X',     'Reload' },
-        { 'LB/RB', 'Modules' },
-        { 'B',     'Close' },
+        { resolve_lbl(label_fn, 'nav',     last_device, 'D-Pad'), 'Browse' },
+        { resolve_lbl(label_fn, 'context', last_device, 'X'),     'Reload' },
+        { resolve_lbl(label_fn, 'modules', last_device, 'LB/RB'), 'Modules' },
+        { resolve_lbl(label_fn, 'cancel',  last_device, 'B'),     'Close' },
     }
 end
 

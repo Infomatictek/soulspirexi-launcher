@@ -544,29 +544,43 @@ function WeaponMastery:on_action(action)
     return false
 end
 
-function WeaponMastery:get_hints()
+local function resolve_lbl(label_fn, action, dev, fallback)
+    if type(label_fn) == 'function' then
+        local ok, v = pcall(label_fn, action, dev)
+        if ok and type(v) == 'string' and v ~= '' then return v end
+    end
+    return fallback
+end
+
+function WeaponMastery:get_hints(label_fn)
+    local nav = resolve_lbl(label_fn, 'nav', 'gamepad', 'D-Pad')
+    local ok  = resolve_lbl(label_fn, 'confirm', 'gamepad', 'A')
+    local bak = resolve_lbl(label_fn, 'cancel', 'gamepad', 'B')
+    local ctx = resolve_lbl(label_fn, 'context', 'gamepad', 'X')
+    local mod = resolve_lbl(label_fn, 'modules', 'gamepad', 'LB/RB')
+    local hlp = resolve_lbl(label_fn, 'details', 'gamepad', 'Y')
     if self:has_modal() then
-        return '[D-Pad] Confirm/Cancel   [A] Execute   [B] Cancel'
+        return string.format('[%s] Confirm/Cancel   [%s] Execute   [%s] Cancel', nav, ok, bak)
     elseif self.region == 'arsenal' then
         if self.arsenal_focus == 'filter' then
-            return '[D-Pad Left/Right] Weapon Filter   [Down] Arsenal List   [A] Apply/Browse   [X] Next Filter   [LB/RB] Modules   [B] Close'
+            return string.format('[%s] Weapon Filter   [Down] Arsenal List   [%s] Apply/Browse   [%s] Next Filter   [%s] Modules   [%s] Close', nav, ok, ctx, mod, bak)
         end
-        return '[D-Pad] Select WS / Up-Left Filter   [A] Open Tree   [X] Filter Weapon   [LB/RB] Switch Module   [Y] Help   [B] Close'
+        return string.format('[%s] Select WS / Filter   [%s] Open Tree   [%s] Filter Weapon   [%s] Switch Module   [%s] Help   [%s] Close', nav, ok, ctx, mod, hlp, bak)
     elseif self.region == 'skillchains' then
-        return '[D-Pad] Select Slot/Tree   [A] Next SC   [X] Prev SC   [B] Back to Tree   [LB/RB] Switch Module'
+        return string.format('[%s] Select Slot/Tree   [%s] Next SC   [%s] Prev SC   [%s] Back to Tree   [%s] Switch Module', nav, ok, ctx, bak, mod)
     elseif self.region == 'inspector' then
-        return '[A] Forge / Refund   [D-Pad] Select Action   [Left/B] Back to Tree   [X] Sync   [Y] Help'
+        return string.format('[%s] Forge / Refund   [%s] Select Action   [Left/%s] Back to Tree   [%s] Sync   [%s] Help', ok, nav, bak, ctx, hlp)
     else
-        return '[D-Pad/Stick] Navigate Tree   [A] Inspect/Upgrade   [X] Refund/Sync   [B] Arsenal   [LB/RB] Modules   [Y] Help'
+        return string.format('[%s/Stick] Navigate Tree   [%s] Inspect/Upgrade   [%s] Refund/Sync   [%s] Arsenal   [%s] Modules   [%s] Help', nav, ok, ctx, bak, mod, hlp)
     end
 end
 
-function WeaponMastery:get_prompt_pills(last_device)
+function WeaponMastery:get_prompt_pills(last_device, label_fn)
     if self:has_modal() then
         return {
-            { 'D-Pad', 'Confirm / Cancel' },
-            { 'A',     'Execute' },
-            { 'B',     'Cancel' },
+            { resolve_lbl(label_fn, 'nav',     last_device, 'D-Pad'), 'Confirm / Cancel' },
+            { resolve_lbl(label_fn, 'confirm', last_device, 'A'),     'Execute' },
+            { resolve_lbl(label_fn, 'cancel',  last_device, 'B'),     'Cancel' },
         }
     end
     if last_device == 'keyboard' or last_device == 'mouse' then
@@ -580,12 +594,12 @@ function WeaponMastery:get_prompt_pills(last_device)
         }
     end
     return {
-        { 'D-Pad', 'Select Node' },
-        { 'A',     'Upgrade (Hold)' },
-        { 'R/X',   'Respec / Filter' },
-        { 'LB/RB', 'Modules' },
-        { 'T',     'Toggle Paths' },
-        { 'B',     'Close' },
+        { resolve_lbl(label_fn, 'nav',     last_device, 'D-Pad'), 'Select Node' },
+        { resolve_lbl(label_fn, 'confirm', last_device, 'A'),     'Upgrade (Hold)' },
+        { resolve_lbl(label_fn, 'context', last_device, 'X'),     'Respec / Filter' },
+        { resolve_lbl(label_fn, 'modules', last_device, 'LB/RB'), 'Modules' },
+        { resolve_lbl(label_fn, 'details', last_device, 'Y'),     'Help' },
+        { resolve_lbl(label_fn, 'cancel',  last_device, 'B'),     'Close' },
     }
 end
 
