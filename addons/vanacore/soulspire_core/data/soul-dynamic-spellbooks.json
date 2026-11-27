@@ -1,0 +1,1663 @@
+{
+  "schemaVersion": "1.0.0",
+  "registryHash": "",
+  "spellbooks": [
+    {
+      "soulId": "blm_tank",
+      "canonicalKey": "necromancer",
+      "jobId": 4,
+      "jobKey": "BLM",
+      "branchId": 3,
+      "replaceBaseJobSpells": true,
+      "preserveLearnedSpells": true,
+      "allowTrustSpells": true,
+      "spells": [
+        {
+          "spellId": 715,
+          "slug": "raise_warrior",
+          "name": "Raise Warrior",
+          "description": "Summons the Dullahan, an armored undead warrior that holds focus and intercepts threats.",
+          "groupTag": "shared",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 24,
+          "castTimeMs": 3000,
+          "recastTimeMs": 30000,
+          "clientCastQuarterSec": 12,
+          "clientRecastQuarterSec": 120,
+          "recastGroup": "necro_summon",
+          "unlockLevel": 10,
+          "validTargets": "self",
+          "serverValidTargets": 1,
+          "clientValidTargets": 1,
+          "range": 0,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 245,
+          "animationTime": 2000,
+          "ce": 1,
+          "ve": 80,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 10
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 10
+              }
+            ]
+          },
+          "effectHandler": "necro.raise_warrior"
+        },
+        {
+          "spellId": 716,
+          "slug": "raise_mage",
+          "name": "Raise Mage",
+          "description": "Summons the Corse, an undead dark caster that channels ranged curses and arcane support.",
+          "groupTag": "shared",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 24,
+          "castTimeMs": 3000,
+          "recastTimeMs": 30000,
+          "clientCastQuarterSec": 12,
+          "clientRecastQuarterSec": 120,
+          "recastGroup": "necro_summon",
+          "unlockLevel": 10,
+          "validTargets": "self",
+          "serverValidTargets": 1,
+          "clientValidTargets": 1,
+          "range": 0,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 245,
+          "animationTime": 2000,
+          "ce": 1,
+          "ve": 80,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 10
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 10
+              }
+            ]
+          },
+          "effectHandler": "necro.raise_mage"
+        },
+        {
+          "spellId": 717,
+          "slug": "deathbolt",
+          "name": "Deathbolt",
+          "description": "Hurls a bolt of dark energy at a single enemy for dark magic damage.",
+          "groupTag": "shared",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 14,
+          "castTimeMs": 2000,
+          "recastTimeMs": 8000,
+          "clientCastQuarterSec": 8,
+          "clientRecastQuarterSec": 32,
+          "recastGroup": "necro_deathbolt",
+          "unlockLevel": 10,
+          "validTargets": "enemy",
+          "serverValidTargets": 4,
+          "clientValidTargets": 32,
+          "range": 200,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 230,
+          "animationTime": 1500,
+          "ce": 1,
+          "ve": 120,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 10
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 10
+              }
+            ]
+          },
+          "effectHandler": "necro.deathbolt"
+        },
+        {
+          "spellId": 718,
+          "slug": "life_funnel",
+          "name": "Life Funnel",
+          "description": "Sacrifices a portion of your own HP to restore health to your active undead.",
+          "groupTag": "shared",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 10,
+          "castTimeMs": 1500,
+          "recastTimeMs": 15000,
+          "clientCastQuarterSec": 6,
+          "clientRecastQuarterSec": 60,
+          "recastGroup": "necro_life_funnel",
+          "unlockLevel": 15,
+          "validTargets": "self",
+          "serverValidTargets": 1,
+          "clientValidTargets": 1,
+          "range": 0,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 245,
+          "animationTime": 1500,
+          "ce": 1,
+          "ve": 80,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 15
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": [
+                  "dullahan",
+                  "corse"
+                ]
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 15
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": [
+                  "dullahan",
+                  "corse"
+                ]
+              }
+            ]
+          },
+          "effectHandler": "necro.life_funnel"
+        },
+        {
+          "spellId": 719,
+          "slug": "drain_essence",
+          "name": "Drain Essence",
+          "description": "Drains life force from an enemy, dealing dark damage and restoring your HP.",
+          "groupTag": "shared",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 22,
+          "castTimeMs": 2500,
+          "recastTimeMs": 20000,
+          "clientCastQuarterSec": 10,
+          "clientRecastQuarterSec": 80,
+          "recastGroup": "necro_drain_essence",
+          "unlockLevel": 20,
+          "validTargets": "enemy",
+          "serverValidTargets": 4,
+          "clientValidTargets": 32,
+          "range": 200,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 245,
+          "animationTime": 1500,
+          "ce": 1,
+          "ve": 160,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 20
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 20
+              }
+            ]
+          },
+          "effectHandler": "necro.drain_essence"
+        },
+        {
+          "spellId": 720,
+          "slug": "recall_dead",
+          "name": "Recall Dead",
+          "description": "Disengages your active undead and recalls it immediately to your side.",
+          "groupTag": "shared",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 12,
+          "castTimeMs": 1000,
+          "recastTimeMs": 20000,
+          "clientCastQuarterSec": 4,
+          "clientRecastQuarterSec": 80,
+          "recastGroup": "necro_recall_dead",
+          "unlockLevel": 25,
+          "validTargets": "self",
+          "serverValidTargets": 1,
+          "clientValidTargets": 1,
+          "range": 0,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 245,
+          "animationTime": 1200,
+          "ce": 1,
+          "ve": 40,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 25
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": [
+                  "dullahan",
+                  "corse"
+                ]
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 25
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": [
+                  "dullahan",
+                  "corse"
+                ]
+              }
+            ]
+          },
+          "effectHandler": "necro.recall_dead"
+        },
+        {
+          "spellId": 721,
+          "slug": "corpse_explosion",
+          "name": "Corpse Explosion",
+          "description": "Sacrifices your active undead to unleash concentrated single-target dark burst damage and Bio.",
+          "groupTag": "shared",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 32,
+          "castTimeMs": 1500,
+          "recastTimeMs": 45000,
+          "clientCastQuarterSec": 6,
+          "clientRecastQuarterSec": 180,
+          "recastGroup": "necro_corpse_explosion",
+          "unlockLevel": 30,
+          "validTargets": "enemy",
+          "serverValidTargets": 4,
+          "clientValidTargets": 32,
+          "range": 200,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 231,
+          "animationTime": 1800,
+          "ce": 200,
+          "ve": 600,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 30
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": [
+                  "dullahan",
+                  "corse"
+                ]
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 30
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": [
+                  "dullahan",
+                  "corse"
+                ]
+              }
+            ]
+          },
+          "effectHandler": "necro.corpse_explosion"
+        },
+        {
+          "spellId": 722,
+          "slug": "reanimate",
+          "name": "Reanimate",
+          "description": "Restores a recently defeated undead to battle. Cannot restore sacrificed undead.",
+          "groupTag": "shared",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 48,
+          "castTimeMs": 3500,
+          "recastTimeMs": 90000,
+          "clientCastQuarterSec": 14,
+          "clientRecastQuarterSec": 255,
+          "recastGroup": "necro_reanimate",
+          "unlockLevel": 50,
+          "validTargets": "self",
+          "serverValidTargets": 1,
+          "clientValidTargets": 1,
+          "range": 0,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 245,
+          "animationTime": 2000,
+          "ce": 1,
+          "ve": 120,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 50
+              },
+              {
+                "petDefeated": true
+              },
+              {
+                "petAlive": false
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 50
+              },
+              {
+                "petDefeated": true
+              },
+              {
+                "petAlive": false
+              }
+            ]
+          },
+          "effectHandler": "necro.reanimate"
+        },
+        {
+          "spellId": 723,
+          "slug": "grave_cleaver",
+          "name": "Grave Cleaver",
+          "description": "Commands your Dullahan to deliver a heavy physical strike that sustains its vitality.",
+          "groupTag": "dullahan",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 16,
+          "castTimeMs": 1500,
+          "recastTimeMs": 18000,
+          "clientCastQuarterSec": 6,
+          "clientRecastQuarterSec": 72,
+          "recastGroup": "necro_dullahan_offense",
+          "unlockLevel": 10,
+          "validTargets": "enemy",
+          "serverValidTargets": 4,
+          "clientValidTargets": 32,
+          "range": 180,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 230,
+          "animationTime": 1500,
+          "ce": 1,
+          "ve": 120,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 10
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "dullahan"
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 10
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "dullahan"
+              }
+            ]
+          },
+          "effectHandler": "necro.grave_cleaver"
+        },
+        {
+          "spellId": 724,
+          "slug": "grave_challenge",
+          "name": "Grave Challenge",
+          "description": "Commands your Dullahan to provoke the target, generating focused pet enmity and weakening its attack.",
+          "groupTag": "dullahan",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 14,
+          "castTimeMs": 1000,
+          "recastTimeMs": 20000,
+          "clientCastQuarterSec": 4,
+          "clientRecastQuarterSec": 80,
+          "recastGroup": "necro_dullahan_enmity",
+          "unlockLevel": 10,
+          "validTargets": "enemy",
+          "serverValidTargets": 4,
+          "clientValidTargets": 32,
+          "range": 180,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 254,
+          "animationTime": 1200,
+          "ce": 1,
+          "ve": 80,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 10
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "dullahan"
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 10
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "dullahan"
+              }
+            ]
+          },
+          "effectHandler": "necro.grave_challenge"
+        },
+        {
+          "spellId": 725,
+          "slug": "gravebind",
+          "name": "Gravebind",
+          "description": "Commands your Dullahan to restrain an enemy with spectral chains, applying Bind.",
+          "groupTag": "dullahan",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 20,
+          "castTimeMs": 1500,
+          "recastTimeMs": 30000,
+          "clientCastQuarterSec": 6,
+          "clientRecastQuarterSec": 120,
+          "recastGroup": "necro_dullahan_control",
+          "unlockLevel": 20,
+          "validTargets": "enemy",
+          "serverValidTargets": 4,
+          "clientValidTargets": 32,
+          "range": 180,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 258,
+          "animationTime": 1500,
+          "ce": 1,
+          "ve": 120,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 20
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "dullahan"
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 20
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "dullahan"
+              }
+            ]
+          },
+          "effectHandler": "necro.gravebind"
+        },
+        {
+          "spellId": 726,
+          "slug": "ossify",
+          "name": "Ossify",
+          "description": "Reinforces your Dullahan's armor with a protective bone barrier and temporary defense boost.",
+          "groupTag": "dullahan",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 26,
+          "castTimeMs": 1500,
+          "recastTimeMs": 45000,
+          "clientCastQuarterSec": 6,
+          "clientRecastQuarterSec": 180,
+          "recastGroup": "necro_dullahan_defense",
+          "unlockLevel": 30,
+          "validTargets": "self",
+          "serverValidTargets": 1,
+          "clientValidTargets": 1,
+          "range": 0,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 245,
+          "animationTime": 1500,
+          "ce": 1,
+          "ve": 80,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 30
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "dullahan"
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 30
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "dullahan"
+              }
+            ]
+          },
+          "effectHandler": "necro.ossify"
+        },
+        {
+          "spellId": 727,
+          "slug": "soul_transfer",
+          "name": "Soul Transfer",
+          "description": "Transfers your accumulated enmity on the target directly to your Dullahan.",
+          "groupTag": "dullahan",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 24,
+          "castTimeMs": 1000,
+          "recastTimeMs": 30000,
+          "clientCastQuarterSec": 4,
+          "clientRecastQuarterSec": 120,
+          "recastGroup": "necro_dullahan_transfer",
+          "unlockLevel": 40,
+          "validTargets": "enemy",
+          "serverValidTargets": 4,
+          "clientValidTargets": 32,
+          "range": 200,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 245,
+          "animationTime": 1200,
+          "ce": 1,
+          "ve": 40,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 40
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "dullahan"
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 40
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "dullahan"
+              }
+            ]
+          },
+          "effectHandler": "necro.soul_transfer"
+        },
+        {
+          "spellId": 728,
+          "slug": "deathguard",
+          "name": "Deathguard",
+          "description": "Commands your Dullahan to temporarily intercept qualifying single-target damage aimed at an ally.",
+          "groupTag": "dullahan",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 34,
+          "castTimeMs": 1000,
+          "recastTimeMs": 60000,
+          "clientCastQuarterSec": 4,
+          "clientRecastQuarterSec": 240,
+          "recastGroup": "necro_dullahan_guard",
+          "unlockLevel": 50,
+          "validTargets": "self_party",
+          "serverValidTargets": 3,
+          "clientValidTargets": 5,
+          "range": 180,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 245,
+          "animationTime": 1200,
+          "ce": 1,
+          "ve": 120,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 50
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "dullahan"
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 50
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "dullahan"
+              }
+            ]
+          },
+          "effectHandler": "necro.deathguard"
+        },
+        {
+          "spellId": 729,
+          "slug": "relentless_dead",
+          "name": "Relentless Dead",
+          "description": "Empowers your Dullahan with rapid consecutive strikes and increased attack speed.",
+          "groupTag": "dullahan",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 38,
+          "castTimeMs": 1500,
+          "recastTimeMs": 60000,
+          "clientCastQuarterSec": 6,
+          "clientRecastQuarterSec": 240,
+          "recastGroup": "necro_dullahan_empower",
+          "unlockLevel": 60,
+          "validTargets": "self",
+          "serverValidTargets": 1,
+          "clientValidTargets": 1,
+          "range": 0,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 245,
+          "animationTime": 1500,
+          "ce": 1,
+          "ve": 100,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 60
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "dullahan"
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 60
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "dullahan"
+              }
+            ]
+          },
+          "effectHandler": "necro.relentless_dead"
+        },
+        {
+          "spellId": 730,
+          "slug": "death_march",
+          "name": "Death March",
+          "description": "Unleashes your Dullahan's offensive potential with surged attack, critical rate, and speed.",
+          "groupTag": "dullahan",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 54,
+          "castTimeMs": 2000,
+          "recastTimeMs": 120000,
+          "clientCastQuarterSec": 8,
+          "clientRecastQuarterSec": 255,
+          "recastGroup": "necro_capstone",
+          "unlockLevel": 75,
+          "validTargets": "self",
+          "serverValidTargets": 1,
+          "clientValidTargets": 1,
+          "range": 0,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 245,
+          "animationTime": 1800,
+          "ce": 1,
+          "ve": 180,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 75
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "dullahan"
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 75
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "dullahan"
+              }
+            ]
+          },
+          "effectHandler": "necro.death_march"
+        },
+        {
+          "spellId": 731,
+          "slug": "soul_rend",
+          "name": "Soul Rend",
+          "description": "Commands your Corse to unleash concentrated single-target dark magic damage.",
+          "groupTag": "corse",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 18,
+          "castTimeMs": 2000,
+          "recastTimeMs": 18000,
+          "clientCastQuarterSec": 8,
+          "clientRecastQuarterSec": 72,
+          "recastGroup": "necro_corse_offense",
+          "unlockLevel": 10,
+          "validTargets": "enemy",
+          "serverValidTargets": 4,
+          "clientValidTargets": 32,
+          "range": 200,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 230,
+          "animationTime": 1500,
+          "ce": 1,
+          "ve": 120,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 10
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "corse"
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 10
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "corse"
+              }
+            ]
+          },
+          "effectHandler": "necro.soul_rend"
+        },
+        {
+          "spellId": 732,
+          "slug": "wither",
+          "name": "Wither",
+          "description": "Commands your Corse to erode an enemy's magical resistance with a bounded debuff.",
+          "groupTag": "corse",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 16,
+          "castTimeMs": 1500,
+          "recastTimeMs": 25000,
+          "clientCastQuarterSec": 6,
+          "clientRecastQuarterSec": 100,
+          "recastGroup": "necro_corse_debuff",
+          "unlockLevel": 10,
+          "validTargets": "enemy",
+          "serverValidTargets": 4,
+          "clientValidTargets": 32,
+          "range": 200,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 254,
+          "animationTime": 1500,
+          "ce": 1,
+          "ve": 100,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 10
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "corse"
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 10
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "corse"
+              }
+            ]
+          },
+          "effectHandler": "necro.wither"
+        },
+        {
+          "spellId": 733,
+          "slug": "death_silence",
+          "name": "Death Silence",
+          "description": "Commands your Corse to disrupt qualifying enemy spellcasting with Silence.",
+          "groupTag": "corse",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 20,
+          "castTimeMs": 1000,
+          "recastTimeMs": 30000,
+          "clientCastQuarterSec": 4,
+          "clientRecastQuarterSec": 120,
+          "recastGroup": "necro_corse_silence",
+          "unlockLevel": 20,
+          "validTargets": "enemy",
+          "serverValidTargets": 4,
+          "clientValidTargets": 32,
+          "range": 200,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 59,
+          "animationTime": 1200,
+          "ce": 1,
+          "ve": 120,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 20
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "corse"
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 20
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "corse"
+              }
+            ]
+          },
+          "effectHandler": "necro.death_silence"
+        },
+        {
+          "spellId": 734,
+          "slug": "profane_wisdom",
+          "name": "Profane Wisdom",
+          "description": "Empowers your Corse's spellcasting potency and magic accuracy.",
+          "groupTag": "corse",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 28,
+          "castTimeMs": 1500,
+          "recastTimeMs": 45000,
+          "clientCastQuarterSec": 6,
+          "clientRecastQuarterSec": 180,
+          "recastGroup": "necro_corse_buff",
+          "unlockLevel": 30,
+          "validTargets": "self",
+          "serverValidTargets": 1,
+          "clientValidTargets": 1,
+          "range": 0,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 245,
+          "animationTime": 1500,
+          "ce": 1,
+          "ve": 80,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 30
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "corse"
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 30
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "corse"
+              }
+            ]
+          },
+          "effectHandler": "necro.profane_wisdom"
+        },
+        {
+          "spellId": 735,
+          "slug": "soul_siphon",
+          "name": "Soul Siphon",
+          "description": "Draws vitality from your Corse to restore a bounded portion of your MP.",
+          "groupTag": "corse",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 0,
+          "castTimeMs": 1500,
+          "recastTimeMs": 45000,
+          "clientCastQuarterSec": 6,
+          "clientRecastQuarterSec": 180,
+          "recastGroup": "necro_corse_siphon",
+          "unlockLevel": 40,
+          "validTargets": "self",
+          "serverValidTargets": 1,
+          "clientValidTargets": 1,
+          "range": 0,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 247,
+          "animationTime": 1500,
+          "ce": 1,
+          "ve": 80,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 40
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "corse"
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 40
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "corse"
+              }
+            ]
+          },
+          "effectHandler": "necro.soul_siphon"
+        },
+        {
+          "spellId": 747,
+          "slug": "spell_echo",
+          "name": "Spell Echo",
+          "description": "Primes your Corse to echo your next qualifying offensive Necromancy spell once.",
+          "groupTag": "corse",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 36,
+          "castTimeMs": 1000,
+          "recastTimeMs": 60000,
+          "clientCastQuarterSec": 4,
+          "clientRecastQuarterSec": 240,
+          "recastGroup": "necro_corse_echo",
+          "unlockLevel": 50,
+          "validTargets": "self",
+          "serverValidTargets": 1,
+          "clientValidTargets": 1,
+          "range": 0,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 245,
+          "animationTime": 1200,
+          "ce": 1,
+          "ve": 100,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 50
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "corse"
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 50
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "corse"
+              }
+            ]
+          },
+          "effectHandler": "necro.spell_echo"
+        },
+        {
+          "spellId": 748,
+          "slug": "lingering_curse",
+          "name": "Lingering Curse",
+          "description": "Afflicts an enemy with a persistent dark curse dealing periodic damage and reducing magic evasion.",
+          "groupTag": "corse",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 34,
+          "castTimeMs": 2000,
+          "recastTimeMs": 45000,
+          "clientCastQuarterSec": 8,
+          "clientRecastQuarterSec": 180,
+          "recastGroup": "necro_corse_curse",
+          "unlockLevel": 60,
+          "validTargets": "enemy",
+          "serverValidTargets": 4,
+          "clientValidTargets": 32,
+          "range": 200,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 231,
+          "animationTime": 1500,
+          "ce": 1,
+          "ve": 140,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 60
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "corse"
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 60
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "corse"
+              }
+            ]
+          },
+          "effectHandler": "necro.lingering_curse"
+        },
+        {
+          "spellId": 749,
+          "slug": "archlich_ascension",
+          "name": "Archlich Ascension",
+          "description": "Temporarily unleashes your Corse's dark arcane power for heightened spell damage and casting speed.",
+          "groupTag": "corse",
+          "magicCategory": "black",
+          "serverGroup": 2,
+          "clientMagicType": 2,
+          "element": "dark",
+          "serverElement": 8,
+          "clientElement": 7,
+          "skill": "dark",
+          "serverSkill": 37,
+          "mpCost": 56,
+          "castTimeMs": 2000,
+          "recastTimeMs": 120000,
+          "clientCastQuarterSec": 8,
+          "clientRecastQuarterSec": 255,
+          "recastGroup": "necro_capstone",
+          "unlockLevel": 75,
+          "validTargets": "self",
+          "serverValidTargets": 1,
+          "clientValidTargets": 1,
+          "range": 0,
+          "aoe": 0,
+          "radius": 0,
+          "animation": 245,
+          "animationTime": 1800,
+          "ce": 1,
+          "ve": 180,
+          "visibilityConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 75
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "corse"
+              }
+            ]
+          },
+          "castConditions": {
+            "all": [
+              {
+                "activeSoul": "necromancer"
+              },
+              {
+                "minLevel": 75
+              },
+              {
+                "petOwned": true
+              },
+              {
+                "petAlive": true
+              },
+              {
+                "petType": "corse"
+              }
+            ]
+          },
+          "effectHandler": "necro.archlich_ascension"
+        }
+      ]
+    }
+  ],
+  "spellbookHash": "2d9cf6283aab5d38"
+}
