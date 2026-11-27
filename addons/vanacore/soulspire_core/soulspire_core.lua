@@ -538,7 +538,7 @@ local function init_all()
     end
 
     log_msg(string.format(
-        'Initialized VanaCore-Native Core v%s (startup_ok=%s, souls=%d, actions=%d, visibility=%d, reg_src=%s). Commands: /soulspire, /talents, /soulhud, /soulactions.',
+        'Initialized VanaCore-Native Core v%s (startup_ok=%s, souls=%d, actions=%d, visibility=%d, reg_src=%s). Commands: /soulspire, /soulforge, /crystals, /soulhud.',
         addon.version, tostring(startup_report.ok), soul_cnt, a_cnt, v_cnt,
         tostring(identity and identity.registry_source or 'none')))
     if not startup_report.ok then
@@ -643,17 +643,27 @@ if type(vana) == 'table' and vana.events then
                 local unlocked = (data:byte(10) or 0) == 1
                 local job_id   = data:byte(11) or 0
                 local key_len  = data:byte(12) or 0
-                if key_len > 0 and 16 + key_len <= len and identity and type(identity.resolve_key) == 'function' then
+                local kv_len   = (data:byte(13) or 0) + (data:byte(14) or 0) * 256
+                if key_len > 0 and 16 + key_len <= len then
                     local soul_key = data:sub(17, 16 + key_len)
-                    local rec = identity:resolve_key(soul_key)
-                    if rec and rec.job_id == job_id and unlocked then
-                        if character_mod and type(character_mod.observe_hud_identity) == 'function' then
-                            character_mod:observe_hud_identity(rec.branch_id, rec.job_id)
+                    if soul_talents and type(soul_talents.observe_hud_line) == 'function' then
+                        local kv_raw = (kv_len > 0 and 16 + key_len + kv_len <= len)
+                            and data:sub(17 + key_len, 16 + key_len + kv_len) or ''
+                        local pipe_kv = kv_raw:gsub(';', '|')
+                        local line = (pipe_kv ~= '') and (soul_key .. '|' .. pipe_kv) or soul_key
+                        pcall(soul_talents.observe_hud_line, soul_talents, line, now)
+                    end
+                    if identity and type(identity.resolve_key) == 'function' then
+                        local rec = identity:resolve_key(soul_key)
+                        if rec and rec.job_id == job_id and unlocked then
+                            if character_mod and type(character_mod.observe_hud_identity) == 'function' then
+                                character_mod:observe_hud_identity(rec.branch_id, rec.job_id)
+                            end
+                            if type(vana) == 'table' and vana.soulspire and type(vana.soulspire.set_identity) == 'function' then
+                                pcall(vana.soulspire.set_identity, rec.job_id, rec.branch_id, 0, 0)
+                            end
+                            sync_soulforge_identity()
                         end
-                        if type(vana) == 'table' and vana.soulspire and type(vana.soulspire.set_identity) == 'function' then
-                            pcall(vana.soulspire.set_identity, rec.job_id, rec.branch_id, 0, 0)
-                        end
-                        sync_soulforge_identity()
                     end
                 end
             end
@@ -800,7 +810,34 @@ if type(vana) == 'table' and vana.events then
             toggle_hub('soul_talents')
             return true
         end
+        if low == '/soulspire devmode on' or low == '/ss devmode on' then
+            runtime_diag.dev_mode = true
+            if ui then ui.dev_mode = true end
+            if focus then focus.dev_mode = true end
+            if character_mod then character_mod.dev_mode = true end
+            if abilities_mod then abilities_mod.dev_mode = true end
+            if soulhud then soulhud.dev_mode = true end
+            log_msg('Local client developer diagnostics ENABLED (does not grant server privileges).')
+            return true
+        end
+        if low == '/soulspire devmode off' or low == '/ss devmode off' then
+            runtime_diag.dev_mode = false
+            if ui then ui.dev_mode = false end
+            if focus then focus.dev_mode = false end
+            if character_mod then character_mod.dev_mode = false end
+            if abilities_mod then abilities_mod.dev_mode = false end
+            if soulhud then soulhud.dev_mode = false; soulhud.demo_key = nil end
+            if focus and focus:active_module() and focus:active_module().dev_only then
+                focus:select_index(1)
+            end
+            log_msg('Local client developer diagnostics DISABLED.')
+            return true
+        end
         if low == '/flintlock' or low == '/mobstatus' or low == '/soulspire diag' or low == '/soulspire diagnostics' then
+            if not runtime_diag.dev_mode then
+                log_msg('Client diagnostic panels require local developer mode (/soulspire devmode on).')
+                return true
+            end
             if status_diag then
                 status_diag.subtab = (low == '/flintlock' and 'flintlock') or (low == '/mobstatus' and 'mobs') or 'diag'
             end
@@ -815,14 +852,26 @@ if type(vana) == 'table' and vana.events then
             return true
         end
         if low == '/soulactions status' or low == '/soulactions' then
+            if not runtime_diag.dev_mode then
+                toggle_hub('abilities')
+                return true
+            end
             print_soulactions_status(false)
             return true
         end
         if low == '/soulactions capabilities' or low == '/soulactions caps' then
+            if not runtime_diag.dev_mode then
+                log_msg('Soul Actions capability diagnostics require local developer mode (/soulspire devmode on).')
+                return true
+            end
             print_soulactions_status(true)
             return true
         end
         if low == '/soulactions reload' then
+            if not runtime_diag.dev_mode then
+                log_msg('Reloading Soul Actions requires local developer mode (/soulspire devmode on).')
+                return true
+            end
             if actions then
                 local a, v = actions:sync_to_native()
                 log_msg(string.format('[soulactions] Reloaded %d actions and %d visibility rules.', a, v))
@@ -830,10 +879,18 @@ if type(vana) == 'table' and vana.events then
             return true
         end
         if low == '/soulspire status' or low == '/ss status' then
+            if not runtime_diag.dev_mode then
+                log_msg('Client diagnostics require local developer mode (/soulspire devmode on).')
+                return true
+            end
             print_status()
             return true
         end
         if low == '/soulspire reload' or low == '/ss reload' then
+            if not runtime_diag.dev_mode then
+                log_msg('Reloading native registries requires local developer mode (/soulspire devmode on).')
+                return true
+            end
             if vana.soulspire and vana.soulspire.reload then vana.soulspire.reload() end
             local a, v = actions and actions:sync_to_native() or 0, 0
             log_msg(string.format('Reloaded native registries + %d actions + %d visibility rules.', a, v))

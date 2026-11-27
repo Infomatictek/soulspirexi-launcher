@@ -194,9 +194,10 @@ local function drawBrowser(state,action,w)
     imgui.SetCursorScreenPos({x+18,y+48})
     imgui.PushItemWidth(w-36)
     local skill='Equipped'
-    for _,sk in ipairs(action.skills) do if sk.id==state.selectedSkill then skill=sk.name end end
+    local availSkills=(action.getAvailableSkills and action.getAvailableSkills()) or action.skills or {}
+    for _,sk in ipairs(availSkills) do if sk.id==state.selectedSkill then skill=sk.name end end
     if imgui.BeginCombo('##wm_filter',skill) then
-        for _,sk in ipairs(action.skills) do
+        for _,sk in ipairs(availSkills) do
             if imgui.Selectable(sk.name,sk.id==state.selectedSkill) then
                 state.selectedSkill=sk.id
             end

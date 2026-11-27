@@ -63,6 +63,106 @@ for _, sk in ipairs(M.SKILL_LIST) do
     M.SKILL_NAMES[sk.id] = sk.name
 end
 
+local BASE_JOB_WEAPON_SKILLS = {
+    WAR = { 6, 5, 4, 3, 7, 8, 11, 2, 1, 12, 25, 26, 27 },
+    MNK = { 1, 12, 11, 27 },
+    WHM = { 11, 12 },
+    BLM = { 12, 11 },
+    RDM = { 3, 2, 11, 12, 25 },
+    THF = { 2, 3, 1, 11, 25, 26, 27 },
+    PLD = { 3, 11, 4, 8, 12, 2 },
+    DRK = { 7, 4, 3, 6, 5, 11, 2, 26 },
+    BST = { 5, 7, 3, 2, 11 },
+    BRD = { 2, 3, 11, 12 },
+    RNG = { 25, 26, 5, 2, 3, 11, 27 },
+    SAM = { 10, 8, 3, 11, 25, 27 },
+    NIN = { 9, 2, 3, 10, 1, 11, 27, 25 },
+    DRG = { 8, 12, 3, 11, 2 },
+    SMN = { 12, 11 },
+    BLU = { 3, 11 },
+    COR = { 2, 3, 26, 27 },
+    PUP = { 1, 2, 11, 27 },
+    DNC = { 2, 3, 1, 27 },
+    SCH = { 12, 11 },
+    GEO = { 11, 12, 2 },
+    RUN = { 4, 3, 6, 5, 11 },
+}
+
+local SOUL_ELIGIBLE_SKILLS = {
+    commander = { 6 }, berserker = { 6 }, spartan = { 8 }, gladiator = { 8 },
+    blackbelt = { 1 }, chiweaver = { 1 }, sensei = { 12 },
+    bishop = { 11, 12 }, zealot = { 12 }, valkyrie = { 8 },
+    astromancer = { 12 }, channeler = { 12 }, necromancer = { 7 },
+    crimsonduelist = { 3 }, royaltactician = { 3 }, scarletweaver = { 3 },
+    bandit = { 2, 3 }, trickster = { 2, 3 }, phantom = { 2, 9 },
+    defender = { 3, 11 }, templar = { 11 }, lightkeeper = { 11 }, aegistemplar = { 11 }, oathbreaker = { 4 },
+    reaper = { 7 }, scourge = { 7 }, dreadnought = { 7 },
+    alphawarden = { 5 }, untamed = { 5, 6 }, beastspeaker = { 5 },
+    adventurer = { 2, 3 }, musician = { 2, 3, 11, 12 }, minstrel = { 2, 11, 12 },
+    sniper = { 26 }, arcanearcher = { 25 }, huntsman = { 25, 26 },
+    ronin = { 10 }, warlord = { 10 }, imperialarcher = { 10, 25 },
+    shinobi = { 9 }, kagemusha = { 9 }, kurogane = { 9 }, nightblade = { 9 }, fuin = { 9 },
+    lancer = { 8 }, skyborn = { 8 }, wyvernheart = { 8 },
+    celestial = { 12, 11 }, caller = { 12, 11 }, primalist = { 11, 12 }, herald = { 11, 12 },
+    warmage = { 3, 11 }, magus = { 3, 11 }, azurebastion = { 3, 11 },
+    flintlock = { 26 }, buccaneer = { 3 }, gambler = { 26, 2 },
+    pugilist = { 1 }, vanguard = { 1 }, marionettist = { 1 }, animist = { 1 },
+    bladewheel = { 27, 2, 3 }, vampire = { 2, 27 }, miragesentinel = { 2 },
+    medic = { 2, 11, 12 }, archivist = { 11, 12 }, sage = { 2, 3, 11, 12 }, heliarch = { 2, 3, 11, 12 },
+    sharpshooter = { 25, 26 },
+    verdant = { 11, 12 }, terramancer = { 11, 12 }, diviner = { 11, 12 },
+    spellblade = { 4 }, inquisitor = { 4, 3, 5, 6, 11 }, lifebinder = { 4, 3, 5, 6, 11 },
+}
+
+local function normalizeSpecToken(raw)
+    return string.lower(tostring(raw or '')):gsub('[^a-z0-9]', '')
+end
+
+function M.resolveEligibleWeaponSkills(jobKey, specKey, dataService, soulRegistry)
+    local rawSpec = tostring(specKey or '')
+    local normSpec = normalizeSpecToken(rawSpec)
+    local jobU = string.upper(tostring(jobKey or ''))
+    if jobU == '---' then jobU = '' end
+
+    if normSpec ~= '' and normSpec ~= 'base' and normSpec ~= 'unspecced' and normSpec ~= 'none' then
+        local soul = (dataService and dataService.get_soul_by_key and dataService:get_soul_by_key(rawSpec))
+            or (soulRegistry and soulRegistry.resolve and soulRegistry.resolve(rawSpec))
+            or nil
+        if type(soul) == 'table' then
+            if type(soul.canonicalKey) == 'string' and soul.canonicalKey ~= '' then
+                normSpec = normalizeSpecToken(soul.canonicalKey)
+            elseif type(soul.internalKey) == 'string' and soul.internalKey ~= '' then
+                normSpec = normalizeSpecToken(soul.internalKey)
+            elseif type(soul.key) == 'string' and soul.key ~= '' then
+                normSpec = normalizeSpecToken(soul.key)
+            end
+            if jobU == '' and type(soul.jobKey) == 'string' then
+                jobU = string.upper(soul.jobKey)
+            end
+        end
+    end
+
+    if normSpec == '' or normSpec == 'base' or normSpec == 'unspecced' or normSpec == 'none' then
+        local baseList = BASE_JOB_WEAPON_SKILLS[jobU]
+        if not baseList then return nil end
+        local set = {}
+        for _, sid in ipairs(baseList) do set[sid] = true end
+        return set
+    end
+
+    if jobU == 'RDM' and normSpec == 'spellblade' then
+        return { [3] = true }
+    end
+
+    local soulList = SOUL_ELIGIBLE_SKILLS[normSpec]
+    if type(soulList) == 'table' then
+        local set = {}
+        for _, sid in ipairs(soulList) do set[sid] = true end
+        return set
+    end
+    return nil
+end
+
 local SC_SHORT_FALLBACK = {
     [1] = 'Trn', [2] = 'Cmp', [3] = 'Liq', [4] = 'Sci',
     [5] = 'Rev', [6] = 'Det', [7] = 'Ind', [8] = 'Imp',
@@ -731,8 +831,27 @@ function M.new(opts)
         return tonumber(node.slot) or 0
     end
 
+    local getEligibleSkillSet
+    local isSkillEligible
+    local isWsEligible
+    local isWsRefundOnly
+
     local function investNode(wsId, node)
         if not wsId or not node or isPendingActive() then return false end
+        if isWsRefundOnly and isWsRefundOnly(wsId) then
+            state.rejectedNodeKey = node.key
+            state.rejectedMsg = 'This weapon family is not permitted by your active Soul (refund-only).'
+            state.rejectedAt = clockFn()
+            setStatus(state.rejectedMsg)
+            return false
+        end
+        if isWsEligible and not isWsEligible(wsId) then
+            state.rejectedNodeKey = node.key
+            state.rejectedMsg = 'This weapon family is not permitted by your active Soul.'
+            state.rejectedAt = clockFn()
+            setStatus(state.rejectedMsg)
+            return false
+        end
         local nodeIdx = resolveServerNodeIndex(wsId, node)
         if nodeIdx < 1 then
             state.rejectedNodeKey = node.key
@@ -842,25 +961,80 @@ function M.new(opts)
         end
     end
 
+    getEligibleSkillSet = function()
+        if dataService and type(dataService.get_eligible_weapon_skills) == 'function' then
+            return dataService:get_eligible_weapon_skills(state.jobKey, state.specKey)
+        end
+        return M.resolveEligibleWeaponSkills(state.jobKey, state.specKey, dataService, soulRegistry)
+    end
+
+    isSkillEligible = function(skillId)
+        local elig = getEligibleSkillSet()
+        if elig == nil then return false end
+        return elig[tonumber(skillId) or 0] == true
+    end
+
+    isWsEligible = function(wsId)
+        local ws = state.catalogById and state.catalogById[wsId]
+        if not ws then return false end
+        return isSkillEligible(ws.skill)
+    end
+
+    isWsRefundOnly = function(wsId)
+        local spent = tonumber(state.spentByWs and state.spentByWs[wsId]) or 0
+        return spent > 0 and not isWsEligible(wsId)
+    end
+
+    local function getAvailableSkills()
+        local eligible = getEligibleSkillSet()
+        local visible = {}
+        if type(eligible) == 'table' then
+            for sid, ok in pairs(eligible) do
+                if ok then visible[sid] = true end
+            end
+        end
+        for wsId, pts in pairs(state.spentByWs or {}) do
+            if (tonumber(pts) or 0) > 0 then
+                local ws = state.catalogById and state.catalogById[wsId]
+                if ws and ws.skill then
+                    visible[ws.skill] = true
+                end
+            end
+        end
+        local out = {}
+        for _, sk in ipairs(M.SKILL_LIST) do
+            if sk.id <= 0 or visible[sk.id] then
+                out[#out + 1] = sk
+            end
+        end
+        return out
+    end
+
     local function getFilteredCatalog()
         local list = {}
         local rawQuery = (state.searchBuf[1] or ''):gsub('%z.*$', '')
         local query = string.lower(rawQuery)
         local sk = state.selectedSkill
+        local eligible = getEligibleSkillSet()
 
         for _, ws in ipairs(state.catalog) do
+            local spent = tonumber(state.spentByWs[ws.id]) or 0
+            local wsEligible = (eligible ~= nil) and (eligible[ws.skill] == true)
+            local refundOnly = (spent > 0) and (not wsEligible)
+            ws.refundOnly = refundOnly
+
             local matchSkill = false
             if sk == 0 then
-                matchSkill = true
+                matchSkill = wsEligible or refundOnly
             elseif sk == -1 then
-                matchSkill = (state.mainSkill ~= 0 and ws.skill == state.mainSkill)
+                local eqMatch = (state.mainSkill ~= 0 and ws.skill == state.mainSkill)
                     or (state.rangedSkill ~= 0 and ws.skill == state.rangedSkill)
+                matchSkill = eqMatch and (wsEligible or refundOnly)
             else
-                matchSkill = (ws.skill == sk)
+                matchSkill = (ws.skill == sk) and (wsEligible or refundOnly)
             end
 
             if matchSkill then
-                local spent = state.spentByWs[ws.id] or 0
                 local matchInvested = (not state.investedOnly[1]) or (spent > 0)
                 local matchQuery = (query == '') or (string.find(string.lower(ws.name), query, 1, true) ~= nil)
                 if matchInvested and matchQuery then
@@ -877,23 +1051,23 @@ function M.new(opts)
             return false
         end
         if state.selectedWsId ~= nil then
-            if (state.wsDetail == nil or state.wsDetail.id ~= state.selectedWsId) and state.wsRequest == nil then
-                requestWS(state.selectedWsId)
-                return true
+            local curWs = state.catalogById and state.catalogById[state.selectedWsId]
+            local curAllowed = curWs and (isWsEligible(state.selectedWsId) or isWsRefundOnly(state.selectedWsId))
+            if curAllowed then
+                if (state.wsDetail == nil or state.wsDetail.id ~= state.selectedWsId) and state.wsRequest == nil then
+                    requestWS(state.selectedWsId)
+                    return true
+                end
+                return false
+            else
+                state.selectedWsId = nil
+                state.wsDetail = nil
             end
-            return false
         end
         local rows = getFilteredCatalog()
         if #rows > 0 then
             requestWS(rows[1].id)
             return true
-        end
-        for _, ws in ipairs(state.catalog) do
-            if (state.mainSkill ~= 0 and ws.skill == state.mainSkill)
-                or (state.rangedSkill ~= 0 and ws.skill == state.rangedSkill) then
-                requestWS(ws.id)
-                return true
-            end
         end
         return false
     end
@@ -1230,6 +1404,13 @@ function M.new(opts)
                 state.wsDetail         = nil
                 state.wsRequest        = nil
                 state.wsError          = nil
+                local elig = getEligibleSkillSet()
+                if (tonumber(state.selectedSkill) or 0) > 0 and (not elig or not elig[state.selectedSkill]) then
+                    state.selectedSkill = 0
+                end
+                if state.selectedWsId ~= nil and not isWsEligible(state.selectedWsId) and not isWsRefundOnly(state.selectedWsId) then
+                    state.selectedWsId = nil
+                end
                 if dataService then
                     dataService:invalidate_dynamic_state('job_or_soul_change:' .. tostring(state.jobKey) .. ':' .. tostring(state.specKey))
                 end
@@ -1599,17 +1780,18 @@ function M.new(opts)
     end
 
     local function cycleSkillFilter(dir)
+        local skills = getAvailableSkills()
         local curIdx = 1
-        for i, sk in ipairs(M.SKILL_LIST) do
+        for i, sk in ipairs(skills) do
             if sk.id == state.selectedSkill then
                 curIdx = i
                 break
             end
         end
         local step = (dir and dir < 0) and -1 or 1
-        local nextIdx = ((curIdx - 1 + step) % #M.SKILL_LIST) + 1
-        state.selectedSkill = M.SKILL_LIST[nextIdx].id
-        return M.SKILL_LIST[nextIdx]
+        local nextIdx = ((curIdx - 1 + step) % #skills) + 1
+        state.selectedSkill = skills[nextIdx].id
+        return skills[nextIdx]
     end
 
     local function getEquippedSummary()
@@ -1708,6 +1890,10 @@ function M.new(opts)
         seedFromCache      = seedCatalogFromCache,
         filtered           = getFilteredCatalog,
         skills             = M.SKILL_LIST,
+        getAvailableSkills = getAvailableSkills,
+        getEligibleSkillSet = getEligibleSkillSet,
+        isWsEligible       = isWsEligible,
+        isWsRefundOnly     = isWsRefundOnly,
         cycleSkillFilter   = cycleSkillFilter,
         getEquippedSummary = getEquippedSummary,
         getArsenalStatus   = getArsenalStatus,

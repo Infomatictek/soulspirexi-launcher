@@ -335,19 +335,8 @@ ashita.events.register('command', 'osa_command', function(e)
         local entry = presentation.resolve(catalog, state.soul, kind, id)
         if entry then log(entry.name .. ': ' .. entry.description)
         else log('No client identity for the current Soul and action.') end
-    elseif op == 'demo' then
-        reset()
-        catalog.clear()
-        catalog.register('astromancer', 'spell', 1, {
-            name = 'Tsunami', description = 'Demonstration only: a deliberate water incantation.',
-            castTime = 12, mpCost = 100, effectProfile = 'tsunami' })
-        state.soul = 'astromancer'
-        state.preview = true
-        state.source = 'demo'
-        state.visible = true
-        log('Loaded demonstration data only; spell ID and values are not verified.')
     else
-        log('Commands: /soulactions show|hide|toggle|status|logstatus|chatnames on|off|capabilities|reload|clear|reset|load|inspect <kind> <id>|preview <soul>')
+        log('Commands: /soulactions show|hide|toggle|chatnames on|off')
     end
 end)
 
@@ -509,27 +498,6 @@ ashita.events.register('d3d_present', 'osa_render', function()
     local open = { true }
     if imgui.Begin('SoulspireXI Soul Actions', open) then
         imgui.Text('Soul: ' .. (soulBridge.displayName(state.soul) or 'Not synchronized'))
-        imgui.TextDisabled('Identity: ' .. state.source)
-        local ast = nativeActions.readStatus()
-        state.lastActionStatus = ast
-        if ast then
-            imgui.TextDisabled(('Native Hooks: %d/%d | Catalog: %d (gen %d)'):format(
-                ast.total_hooks, ast.expected_hooks, ast.catalog_count, ast.catalog_generation))
-        else
-            imgui.TextDisabled('Native Action API: unavailable')
-        end
-        if imgui.Button('Reload external definitions') then
-            loadExternalDefaults()
-        end
-        imgui.SameLine()
-        if resourceAudit.running() then
-            imgui.TextDisabled('Exporting...')
-        elseif imgui.Button('Export native spell/ability IDs') then
-            local ok, manager = pcall(function() return AshitaCore:GetResourceManager() end)
-            local started, why = resourceAudit.start(ok and manager or nil, addon.path)
-            if started then log('Started read-only native resource export.')
-            else log('Could not start export: ' .. tostring(why)) end
-        end
         imgui.Separator()
         local soul = catalog.souls[state.soul] or {}
         local count = 0

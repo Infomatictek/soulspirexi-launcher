@@ -690,7 +690,7 @@ local function drawArsenal(state, action, L, x, y, w, h, nav)
     end
 
     -- Build 5 visible weapon-category circles centered around the active filter
-    local allSkills = action.skills or { { id = -1, name = 'Equipped' }, { id = 0, name = 'All' } }
+    local allSkills = (action.getAvailableSkills and action.getAvailableSkills()) or action.skills or { { id = -1, name = 'Equipped' }, { id = 0, name = 'All' } }
     local activeSkillIdx = 1
     local activeSkillName = 'Equipped'
     for idx, sk in ipairs(allSkills) do

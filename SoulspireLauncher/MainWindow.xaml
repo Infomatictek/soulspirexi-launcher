@@ -163,14 +163,16 @@
                                 <StackPanel>
                                     <TextBlock Text="ACCOUNT &amp; LAUNCH" FontSize="13" FontWeight="Bold" Foreground="{StaticResource GoldAccent}" Margin="0,0,0,10" />
 
-                                    <TextBlock Text="Server Environment" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4" />
-                                    <ComboBox ItemsSource="{Binding ServerTargetOptions}" SelectedItem="{Binding SelectedServerTarget}" Margin="0,0,0,10">
-                                        <ComboBox.ItemTemplate>
-                                            <DataTemplate>
-                                                <TextBlock Text="{Binding Converter={StaticResource ServerTargetToLabel}}" />
-                                            </DataTemplate>
-                                        </ComboBox.ItemTemplate>
-                                    </ComboBox>
+                                    <StackPanel Visibility="{Binding IsTestingChannel, Converter={StaticResource BoolToVis}}">
+                                        <TextBlock Text="Server Environment" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4" />
+                                        <ComboBox ItemsSource="{Binding ServerTargetOptions}" SelectedItem="{Binding SelectedServerTarget}" Margin="0,0,0,10">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Converter={StaticResource ServerTargetToLabel}}" />
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                    </StackPanel>
 
                                     <Border Visibility="{Binding CanSelectModernEngine, Converter={StaticResource BoolToVis}}"
                                             Background="{StaticResource AbyssBrush}" BorderBrush="{StaticResource VioletAccent}" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,10">
@@ -308,9 +310,9 @@
 
                             <!-- Left Settings Column: Connection + Paths -->
                             <StackPanel Grid.Column="0">
-                                <Border Background="{StaticResource BgCard}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="8" Padding="18" Margin="0,0,0,16">
+                                <Border Visibility="{Binding IsTestingChannel, Converter={StaticResource BoolToVis}}" Background="{StaticResource BgCard}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="8" Padding="18" Margin="0,0,0,16">
                                     <StackPanel>
-                                        <TextBlock Text="SERVER CONNECTION" FontSize="13" FontWeight="Bold" Foreground="{StaticResource GoldAccent}" Margin="0,0,0,10" />
+                                        <TextBlock Text="SERVER CONNECTION (TESTING CHANNEL)" FontSize="13" FontWeight="Bold" Foreground="{StaticResource GoldAccent}" Margin="0,0,0,10" />
 
                                         <TextBlock Text="Server Environment" FontSize="12" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,4" />
                                         <ComboBox ItemsSource="{Binding ServerTargetOptions}" SelectedItem="{Binding SelectedServerTarget}" Margin="0,0,0,10">
@@ -1089,28 +1091,29 @@
 
                         <Border Grid.Column="0" Background="{StaticResource BgCard}" BorderBrush="{StaticResource BorderSubtle}" BorderThickness="1" CornerRadius="8" Padding="20">
                             <StackPanel>
-                                <TextBlock Text="WEAPONSKILL TALENT TREES" FontSize="14" FontWeight="Bold" Foreground="{StaticResource GoldAccent}" Margin="0,0,0,8" />
+                                <TextBlock Text="SOULSPIRE CORE &amp; SOULFORGE" FontSize="14" FontWeight="Bold" Foreground="{StaticResource GoldAccent}" Margin="0,0,0,8" />
                                 <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextSecondary}" FontSize="13" Margin="0,0,0,12">
-                                    All 207 player weaponskills are unlocked at level 1 and scale via 4-tier (56-point) bespoke job-themed talent trees and pickable skillchain augments.
+                                    Manage all 66 Soul Crystals, all 219 Weapon Skill talent trees, Skillchain augments, Soul Talents, and Soul Actions directly inside Soulspire Core — open it from the in-game Commands menu (Soulspire) or via slash command.
                                 </TextBlock>
                                 <Border Background="{StaticResource AbyssBrush}" CornerRadius="6" Padding="12" Margin="0,0,0,12">
                                     <StackPanel>
-                                        <TextBlock Text="/talents  (or /tal) — Open the Ashita v4 Talent Tree UI" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource CyanAccent}" Margin="0,0,0,4" />
-                                        <TextBlock Text="/talents sync — Force resync points &amp; catalog from server" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4" />
-                                        <TextBlock Text="!talent — Server-side fallback menu without the addon" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource TextPrimary}" />
+                                        <TextBlock Text="/soulspire  (or /ss) — Open Soulspire Core Hub" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource CyanAccent}" Margin="0,0,0,4" />
+                                        <TextBlock Text="/soulforge  (or /talents) — Open Weapon Mastery &amp; Soulforge" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4" />
+                                        <TextBlock Text="/crystals — Open Soul Sanctum (Socket &amp; Inspect Souls)" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4" />
+                                        <TextBlock Text="/soulhud  /  /soulhud config — Toggle or customize your Soul HUD" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource TextPrimary}" />
                                     </StackPanel>
                                 </Border>
 
-                                <TextBlock Text="SCHOLAR: CALL EOS &amp; SPECS" FontSize="14" FontWeight="Bold" Foreground="{StaticResource GoldAccent}" Margin="0,6,0,8" />
+                                <TextBlock Text="PLAYER UTILITY COMMANDS" FontSize="14" FontWeight="Bold" Foreground="{StaticResource GoldAccent}" Margin="0,6,0,8" />
                                 <TextBlock TextWrapping="Wrap" Foreground="{StaticResource TextSecondary}" FontSize="13" Margin="0,0,0,12">
-                                    Call Eos summons a real faerie pet that maintains stackable Regen and removes debuffs (-na / Erase). Equip Orphic Egg for level-scaling Eos Refresh.
+                                    Starter Kits are granted automatically on new characters and Starter Weapons Moogles are stationed in every major city hub. Only a few specialized gameplay utilities use chat commands:
                                 </TextBlock>
                                 <Border Background="{StaticResource AbyssBrush}" CornerRadius="6" Padding="12">
                                     <StackPanel>
-                                        <TextBlock Text="!spec  /  !spec list — View available job specs" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource CyanAccent}" Margin="0,0,0,4" />
-                                        <TextBlock Text="!spec set medic — AoE Cure/Regen + double Sublimation" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4" />
-                                        <TextBlock Text="!spec set sage — Permanent Ebullience + 2h boosted Helix" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4" />
-                                        <TextBlock Text="!eos heal  /  !eos dismiss — Control Eos manually" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource TextPrimary}" />
+                                        <TextBlock Text="!eos dismiss — Release Scholar's Eos or Titania faerie companion" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource CyanAccent}" Margin="0,0,0,4" />
+                                        <TextBlock Text="!buckler — Equip a Size-1 Buckler in Sub slot (WAR Spartan fallback)" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4" />
+                                        <TextBlock Text="!spec resetspells — Restore BLU Magus baseline Blue Magic spells" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource TextPrimary}" Margin="0,0,0,4" />
+                                        <TextBlock Text="!trustengage 0|1 — Choose Trust engagement behavior" FontFamily="Consolas" FontSize="12.5" Foreground="{StaticResource TextPrimary}" />
                                     </StackPanel>
                                 </Border>
                             </StackPanel>

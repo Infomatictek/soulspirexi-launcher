@@ -479,7 +479,7 @@ function M.render(imgui, ctx)
             if withHint then
                 lines[#lines + 1] = { sep = true }
                 lines[#lines + 1] = {
-                    text = ctx.demo and 'Demo preview' or (cfg.locked and 'Locked: /soulhud lock to unlock' or 'Right-click medallion: display mode & options'),
+                    text = ctx.demo and 'Demo preview' or (cfg.locked and 'Locked (right-click or /soulhud unlock)' or 'Right-click medallion: display mode & options'),
                     color = C.text_dim,
                 }
             end
