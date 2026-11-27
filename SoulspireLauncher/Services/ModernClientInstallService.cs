@@ -477,19 +477,10 @@ public sealed class ModernClientInstallService
         return copied;
     }
 
-    private static readonly string[] RetiredModernAddonNames =
-    {
-        "overlords_boost",
-        "boost",
-        "overlords_talents",
-        "overlords_gear",
-        "overlords_soulhud",
-        "overlords_soul_actions"
-    };
-
     /// <summary>
-    /// Removes retired SoulspireXI/OverlordsXI addon folders from a VanaCore profile without
-    /// touching user-owned optional addons or settings directories.
+    /// Removes only positively identified, retired project-managed addon folders
+    /// (ManifestUpdateService.RetiredAddonFolders — zero wildcards) from a VanaCore profile
+    /// without touching unmanaged player addons or settings directories.
     /// </summary>
     public static int RemoveRetiredModernAddons(string profileDir)
     {
@@ -507,7 +498,7 @@ public sealed class ModernClientInstallService
                 continue;
             }
 
-            foreach (var name in RetiredModernAddonNames)
+            foreach (var name in ManifestUpdateService.RetiredAddonFolders)
             {
                 var target = Path.Combine(flavourDir, name);
                 if (!Directory.Exists(target))

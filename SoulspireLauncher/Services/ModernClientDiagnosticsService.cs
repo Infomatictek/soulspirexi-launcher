@@ -291,8 +291,8 @@ public sealed class ModernClientDiagnosticsService
                 developerModeEnabled ? "Developer tool evaluated under active developer mode." : "Disabled by default in player builds (DEC-033)."));
         }
 
-        // 5. Retired Components: overlords_boost / boost / crystaljobs.dll — NEVER expected to load.
-        foreach (var retired in new[] { "overlords_boost", "boost" })
+        // 5. Retired Project-Managed Components: overlords_boost — NEVER expected to load.
+        foreach (var retired in new[] { "overlords_boost" })
         {
             var presentVana = Directory.Exists(Path.Combine(profileDir, "addons", "vanacore", retired));
             var presentAshita = Directory.Exists(Path.Combine(profileDir, "addons", "ashita", retired));

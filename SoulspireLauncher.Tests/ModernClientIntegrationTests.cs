@@ -571,16 +571,25 @@ public sealed class ModernClientIntegrationTests
             };
             Assert.True(ManifestUpdateService.IsOptionalOverlayEnabled(settings, reqOverlay));
 
-            // 3. Retired Boost folder is removed while user optional addon is preserved
+            // 3. Positively identified retired overlords_boost is removed while unmanaged player folders
+            //    (including arbitrary 'boost' or 'overlords_custom_user') and optional addons are preserved untouched.
             var boostDir = Path.Combine(profileDir, "addons", "vanacore", "overlords_boost");
+            var unmanagedBoostDir = Path.Combine(profileDir, "addons", "vanacore", "boost");
+            var unmanagedCustomDir = Path.Combine(profileDir, "addons", "vanacore", "overlords_custom_user");
             var optDir = Path.Combine(profileDir, "addons", "vanacore", "freecam");
             Directory.CreateDirectory(boostDir);
+            Directory.CreateDirectory(unmanagedBoostDir);
+            Directory.CreateDirectory(unmanagedCustomDir);
             Directory.CreateDirectory(optDir);
             File.WriteAllText(Path.Combine(boostDir, "overlords_boost.lua"), "-- retired");
+            File.WriteAllText(Path.Combine(unmanagedBoostDir, "boost.lua"), "-- unmanaged third-party");
+            File.WriteAllText(Path.Combine(unmanagedCustomDir, "overlords_custom_user.lua"), "-- unmanaged");
             File.WriteAllText(Path.Combine(optDir, "freecam.lua"), "-- optional");
             var removed = ModernClientInstallService.RemoveRetiredModernAddons(profileDir);
             Assert.Equal(1, removed);
             Assert.False(Directory.Exists(boostDir));
+            Assert.True(Directory.Exists(unmanagedBoostDir));
+            Assert.True(Directory.Exists(unmanagedCustomDir));
             Assert.True(Directory.Exists(optDir));
 
             // 4. Component health diagnostics fail on missing mandatory core addon/DATs, never on missing optional or retired Boost
