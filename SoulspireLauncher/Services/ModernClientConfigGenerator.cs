@@ -238,9 +238,15 @@ public sealed class ModernClientConfigGenerator
         if (mode == ClientEngineMode.ModernNative)
         {
             sb.AppendLine("# Modern — Soulspire Native: pure VanaCore-native Soulspire engine ([soulspire] enabled=1, [addons] ashita.enabled=0).");
-            sb.AppendLine("# Loads EXACTLY ONE unified VanaCore-native Soulspire Core addon with zero Ashita compatibility fallback (DEC-028).");
+            sb.AppendLine("# Loads Soulspire Core, plus optional BattleLens when selected; no compatibility fallback (DEC-028).");
             sb.AppendLine("/wait 1");
             sb.AppendLine("/addon load soulspire_core vanacore");
+            if (settings.AutoLoadBattleLensAddon)
+            {
+                sb.AppendLine("/addon load battlelens vanacore");
+                sb.AppendLine("/wait 1");
+                sb.AppendLine("/battlelens launcher-on");
+            }
             return sb.ToString();
         }
 

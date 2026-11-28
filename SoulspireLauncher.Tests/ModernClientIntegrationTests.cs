@@ -432,6 +432,7 @@ public sealed class ModernClientIntegrationTests
             .Where(l => !string.IsNullOrEmpty(l) && !l.StartsWith("#", StringComparison.Ordinal))
             .ToList();
         Assert.Contains("/addon load soulspire_core vanacore", activeLines);
+        Assert.DoesNotContain("/addon load battlelens vanacore", activeLines);
         Assert.Single(activeLines, l => l.StartsWith("/addon load", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(activeLines, l => l.Contains("ashita", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(activeLines, l => l.Contains("soulspire_native", StringComparison.OrdinalIgnoreCase));
@@ -447,12 +448,15 @@ public sealed class ModernClientIntegrationTests
             File.WriteAllText(Path.Combine(ashitaDir, "plugins", "data", "soul-identities.json"), "{\"souls\":[]}");
             Directory.CreateDirectory(Path.Combine(ashitaDir, "addons", "vanacore", "soulspire_core"));
             File.WriteAllText(Path.Combine(ashitaDir, "addons", "vanacore", "soulspire_core", "soulspire_core.lua"), "-- native");
+            Directory.CreateDirectory(Path.Combine(ashitaDir, "addons", "vanacore", "battlelens"));
+            File.WriteAllText(Path.Combine(ashitaDir, "addons", "vanacore", "battlelens", "battlelens.lua"), "-- optional");
             Directory.CreateDirectory(Path.Combine(ashitaDir, "addons", "soulspire_core"));
             File.WriteAllText(Path.Combine(ashitaDir, "addons", "soulspire_core", "soulspire_core.lua"), "-- ashita");
 
             var copied = ModernClientInstallService.SyncNativeOverlayFromAshita(ashitaDir, nativeDir);
             Assert.True(copied >= 2);
             Assert.True(File.Exists(Path.Combine(nativeDir, "addons", "vanacore", "soulspire_core", "soulspire_core.lua")));
+            Assert.True(File.Exists(Path.Combine(nativeDir, "addons", "vanacore", "battlelens", "battlelens.lua")));
             Assert.True(File.Exists(Path.Combine(nativeDir, "data", "soul-identities.json")));
             Assert.False(File.Exists(Path.Combine(nativeDir, "plugins", "ashita", "soulspire_native.dll")));
             Assert.False(Directory.Exists(Path.Combine(nativeDir, "addons", "ashita")));
@@ -464,6 +468,22 @@ public sealed class ModernClientIntegrationTests
                 Directory.Delete(root, recursive: true);
             }
         }
+    }
+
+    [Fact]
+    public void BattleLens_IsOptIn_OnlyForModernNativeBoot()
+    {
+        var settings = new LauncherSettings { AutoLoadBattleLensAddon = true };
+        var nativeBoot = ModernClientConfigGenerator.BuildBootScriptContent(settings, ClientEngineMode.ModernNative);
+        Assert.Contains("/addon load battlelens vanacore", nativeBoot);
+        Assert.Contains("/battlelens launcher-on", nativeBoot);
+        Assert.True(nativeBoot.IndexOf("/addon load battlelens vanacore", StringComparison.Ordinal)
+                    < nativeBoot.IndexOf("/battlelens launcher-on", StringComparison.Ordinal));
+
+        var compatBoot = ModernClientConfigGenerator.BuildBootScriptContent(settings, ClientEngineMode.ModernCompat);
+        Assert.DoesNotContain("battlelens", compatBoot);
+        var baselineBoot = ModernClientConfigGenerator.BuildBootScriptContent(settings, ClientEngineMode.ModernBaseline);
+        Assert.DoesNotContain("battlelens", baselineBoot);
     }
 
     [Fact]

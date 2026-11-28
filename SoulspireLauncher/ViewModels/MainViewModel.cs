@@ -906,6 +906,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         set { if (_settings.AutoLoadSoulHudAddon != value) { _settings.AutoLoadSoulHudAddon = value; OnPropertyChanged(); } }
     }
 
+    public bool AutoLoadBattleLensAddon
+    {
+        get => _settings.AutoLoadBattleLensAddon;
+        set { if (_settings.AutoLoadBattleLensAddon != value) { _settings.AutoLoadBattleLensAddon = value; OnPropertyChanged(); } }
+    }
+
     public bool AutoCloseOnLaunch
     {
         get => _settings.AutoCloseOnLaunch;
@@ -1089,6 +1095,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 OnPropertyChanged(nameof(SelectedClientEngine));
                 OnPropertyChanged(nameof(CanSelectModernEngine));
                 OnPropertyChanged(nameof(IsModernEngineSelected));
+                OnPropertyChanged(nameof(IsModernNativeSelected));
                 OnPropertyChanged(nameof(ClientEngineStatusText));
                 NotifyPayloadMetadataChanged();
                 SyncCorePerfConfigSafe();
@@ -1137,6 +1144,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 _settings.ClientEngine = effective;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(IsModernEngineSelected));
+                OnPropertyChanged(nameof(IsModernNativeSelected));
                 OnPropertyChanged(nameof(IsModernCompatSelected));
                 OnPropertyChanged(nameof(ActiveModernProfileDirectory));
                 OnPropertyChanged(nameof(ClientEngineStatusText));
@@ -1154,6 +1162,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     }
 
     public bool IsModernEngineSelected => ModernClientConfigGenerator.IsModernEngine(SelectedClientEngine);
+    public bool IsModernNativeSelected => SelectedClientEngine == ClientEngineMode.ModernNative;
     public bool IsModernCompatSelected => SelectedClientEngine == ClientEngineMode.ModernCompat;
 
     public string ModernClientPath

@@ -12,7 +12,7 @@
     "notes": "Testing channel build pairing verified 27-hook Soulspire Native (soulspire_native.dll) with server."
   },
   "serverName": "SoulspireXI",
-  "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
+  "tagline": "Faerie Companions (Eos & Titania) • Job Specs • 4-Tier Weaponskill Talent Trees",
   "defaultHost": "play.soulspirexi.com",
   "useHairpin": false,
   "ports": {
@@ -10115,6 +10115,27 @@
       "targetPath": "vanacore/soulspire_core/assets/crystals/zealot.png",
       "sha256": "0fb5f25f0a35287dab98495a23e51fd093d8120c35a29cb219f3d9a5cc57b527",
       "size": 1339
+    },
+    {
+      "category": "addon",
+      "sourcePath": "channels/testing/payload/addons/vanacore/battlelens/README.md",
+      "targetPath": "vanacore/battlelens/README.md",
+      "sha256": "977cedf19f6ae7b3d1167083bf137ee4fcd347da32f99626685b866305ad0f34",
+      "size": 1913
+    },
+    {
+      "category": "addon",
+      "sourcePath": "channels/testing/payload/addons/vanacore/battlelens/battlelens.lua",
+      "targetPath": "vanacore/battlelens/battlelens.lua",
+      "sha256": "cde1f1360b3a1d7ce85f811795b9e7856ef0482f412e67efac0f62d1f13b64b7",
+      "size": 1793
+    },
+    {
+      "category": "addon",
+      "sourcePath": "channels/testing/payload/addons/vanacore/battlelens/rules.lua",
+      "targetPath": "vanacore/battlelens/rules.lua",
+      "sha256": "9a1c1e0103166e2e927605f2dbe45ae821930718c75bad67bd1502d2665b3515",
+      "size": 4447
     }
   ],
   "news": [
@@ -12181,5 +12202,5 @@
     }
   },
   "version": "2.2.3-testing.29",
-  "notes": "SoulspireXI Testing v2.2.3-testing.29 \u2014 fixes retail Trust 1018/1019 leak (Iroha II / Shantotto II), adds canonical role icons and concise descriptions for all 66 Soul Echoes, adds Client Sentinel 90-action metadata parity diagnostics, and pins VanaCore v0.9.9-soulspire-native.17."
+  "notes": "SoulspireXI Testing v2.2.3-testing.29 — fixes retail Trust 1018/1019 leak (Iroha II / Shantotto II), adds canonical role icons and concise descriptions for all 66 Soul Echoes, adds Client Sentinel 90-action metadata parity diagnostics, and pins VanaCore v0.9.9-soulspire-native.17."
 }

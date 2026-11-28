@@ -461,6 +461,14 @@ public sealed class ModernClientInstallService
             }
         }
 
+        // Install the optional addon as files only. The boot script controls whether it loads.
+        var srcBattleLens = Path.Combine(ashitaDir, "addons", "vanacore", "battlelens");
+        if (Directory.Exists(srcBattleLens))
+        {
+            copied += CopyDirectoryContents(srcBattleLens,
+                Path.Combine(nativeDir, "addons", "vanacore", "battlelens"), preserveExistingSettings: true);
+        }
+
         // 3. Pivot DAT overlays (mandatory base soulspirexi + protected COR flintlock-akimbo-compact)
         foreach (var overlay in new[] { AshitaConfigGenerator.OverlayFolderName, AshitaConfigGenerator.FlintlockOverlayFolderName })
         {
