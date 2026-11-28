@@ -12143,12 +12143,12 @@
     "baseline": {
       "profile": "baseline",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-native.17",
-      "commitSha": "45329fea19",
+      "tag": "v0.9.9-soulspire-native.19",
+      "commitSha": "c1781d7699",
       "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.17/soulspirexi-client-experimental-0.9.9-45329fea19-win32.zip",
-      "packageSha256": "88bee0f3010e7c93ec21449af4f78b6b468cde0f883b0454bb0dae5d17150272",
-      "packageSize": 99073395,
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.19/soulspirexi-client-experimental-0.9.9-c1781d7699-win32.zip",
+      "packageSha256": "f22fd954eecd3b3164fdc29c47dbd168bbe260d413558cfef5f8856099e52ebd",
+      "packageSize": 99085170,
       "experimentalEligible": true,
       "clientVerified": false,
       "notes": "VanaCore Baseline profile on v0.9.9-soulspire-native.9 (d42f2646d8): combines Phase D native weapon/model hooks (#22, #25-#27, #32-#35), C++ 0x1FC/0x1FF decoders, and PLAYER-CMD-001 fail-closed defaults ([mcp] available=0, [developer] enabled=0, /vana2 disabled); launcher disables all addons/hooks for clean baseline certification."
@@ -12156,12 +12156,12 @@
     "compat": {
       "profile": "compat",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-native.17",
-      "commitSha": "45329fea19",
+      "tag": "v0.9.9-soulspire-native.19",
+      "commitSha": "c1781d7699",
       "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.17/soulspirexi-client-experimental-0.9.9-45329fea19-win32.zip",
-      "packageSha256": "88bee0f3010e7c93ec21449af4f78b6b468cde0f883b0454bb0dae5d17150272",
-      "packageSize": 99073395,
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.19/soulspirexi-client-experimental-0.9.9-c1781d7699-win32.zip",
+      "packageSha256": "f22fd954eecd3b3164fdc29c47dbd168bbe260d413558cfef5f8856099e52ebd",
+      "packageSize": 99085170,
       "experimentalEligible": true,
       "clientVerified": false,
       "notes": "VanaCore-Native Soulspire v0.9.9-soulspire-native.9 (d42f2646d8, Compatibility Recovery profile): combines Phase D native weapon/model hooks (#22, #25-#27, #32-#35) and PLAYER-CMD-001 fail-closed defaults ([mcp] available=0, [developer] enabled=0, /vana2 disabled)."
@@ -12169,15 +12169,15 @@
     "native": {
       "profile": "native",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-native.17",
-      "commitSha": "45329fea19",
+      "tag": "v0.9.9-soulspire-native.19",
+      "commitSha": "c1781d7699",
       "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.17/soulspirexi-client-experimental-0.9.9-45329fea19-win32.zip",
-      "packageSha256": "88bee0f3010e7c93ec21449af4f78b6b468cde0f883b0454bb0dae5d17150272",
-      "packageSize": 99073395,
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.19/soulspirexi-client-experimental-0.9.9-c1781d7699-win32.zip",
+      "packageSha256": "f22fd954eecd3b3164fdc29c47dbd168bbe260d413558cfef5f8856099e52ebd",
+      "packageSize": 99085170,
       "experimentalEligible": true,
       "clientVerified": false,
-      "notes": "Full VanaCore-Native Soulspire v0.9.9-soulspire-native.17 (45329fea19, DEC-028 API v2, DEC-038 Soul Echoes, DEC-039 SOUL-SPELL-001): fixes retail Trust 1018 (Iroha II) & 1019 (Shantotto II) leak via kTrustSpellMaxId=1023, wires dynamic canonical role icons (Tank/Healer/Damage/Support/Hybrid) for all 66 Soul Echoes via hook_magic_icon + concise non-redundant descriptions, and hardens Dynamic Spellbook runtime spell_res sync."
+      "notes": "Full VanaCore-Native Soulspire v0.9.9-soulspire-native.19 (c1781d7699, DEC-028 API v2, DEC-038 Soul Echoes, DEC-039 Dynamic Spellbook): adds native world nameplate Soul icons and native party HUD Soul icons + 3-letter abbreviations for all 66 Souls via shared soulspire_core/assets/crystals/*.png (zero new FFXiMain.dll hooks), dynamic Echo role icons, 16-bit spell_res job levels, and PLAYER-CMD-001 fail-closed defaults."
     }
   },
   "version": "2.2.3-testing.29",

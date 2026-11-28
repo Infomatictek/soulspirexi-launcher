@@ -8,12 +8,12 @@
   "baseline": {
     "profile": "baseline",
     "version": "0.9.9",
-    "tag": "v0.9.9-soulspire-native.18",
-    "commitSha": "ad1238f44a",
+    "tag": "v0.9.9-soulspire-native.19",
+    "commitSha": "c1781d7699",
     "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-    "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.18/soulspirexi-client-experimental-0.9.9-ad1238f44a-win32.zip",
-    "packageSha256": "6c44e4f5525929b29e4a24b381e87e7aea825f7b8e08fb855b8cb89bae96d89d",
-    "packageSize": 99073407,
+    "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.19/soulspirexi-client-experimental-0.9.9-c1781d7699-win32.zip",
+    "packageSha256": "f22fd954eecd3b3164fdc29c47dbd168bbe260d413558cfef5f8856099e52ebd",
+    "packageSize": 99085170,
     "experimentalEligible": true,
     "clientVerified": false,
     "notes": "VanaCore Baseline profile on v0.9.9-soulspire-native.9 (d42f2646d8): combines Phase D native weapon/model hooks (#22, #25-#27, #32-#35), C++ 0x1FC/0x1FF decoders, and PLAYER-CMD-001 fail-closed defaults ([mcp] available=0, [developer] enabled=0, /vana2 disabled); launcher disables all addons/hooks for clean baseline certification."
@@ -21,12 +21,12 @@
   "compat": {
     "profile": "compat",
     "version": "0.9.9",
-    "tag": "v0.9.9-soulspire-native.18",
-    "commitSha": "ad1238f44a",
+    "tag": "v0.9.9-soulspire-native.19",
+    "commitSha": "c1781d7699",
     "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-    "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.18/soulspirexi-client-experimental-0.9.9-ad1238f44a-win32.zip",
-    "packageSha256": "6c44e4f5525929b29e4a24b381e87e7aea825f7b8e08fb855b8cb89bae96d89d",
-    "packageSize": 99073407,
+    "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.19/soulspirexi-client-experimental-0.9.9-c1781d7699-win32.zip",
+    "packageSha256": "f22fd954eecd3b3164fdc29c47dbd168bbe260d413558cfef5f8856099e52ebd",
+    "packageSize": 99085170,
     "experimentalEligible": true,
     "clientVerified": false,
     "notes": "VanaCore-Native Soulspire v0.9.9-soulspire-native.9 (d42f2646d8, Compatibility Recovery profile): combines Phase D native weapon/model hooks (#22, #25-#27, #32-#35) and PLAYER-CMD-001 fail-closed defaults ([mcp] available=0, [developer] enabled=0, /vana2 disabled)."
@@ -34,14 +34,14 @@
   "native": {
     "profile": "native",
     "version": "0.9.9",
-    "tag": "v0.9.9-soulspire-native.18",
-    "commitSha": "ad1238f44a",
+    "tag": "v0.9.9-soulspire-native.19",
+    "commitSha": "c1781d7699",
     "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-    "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.18/soulspirexi-client-experimental-0.9.9-ad1238f44a-win32.zip",
-    "packageSha256": "6c44e4f5525929b29e4a24b381e87e7aea825f7b8e08fb855b8cb89bae96d89d",
-    "packageSize": 99073407,
+    "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.19/soulspirexi-client-experimental-0.9.9-c1781d7699-win32.zip",
+    "packageSha256": "f22fd954eecd3b3164fdc29c47dbd168bbe260d413558cfef5f8856099e52ebd",
+    "packageSize": 99085170,
     "experimentalEligible": true,
     "clientVerified": false,
-    "notes": "Full VanaCore-Native Soulspire v0.9.9-soulspire-native.18 (ad1238f44a, DEC-028 API v2, DEC-038 Soul Echoes, DEC-039 SOUL-SPELL-001): fixes spell_res 24x uint16_t job unlock levels (+14..+61) & Black Magic icons (8,240) for all 24 Necromancy spells, fixes retail Trust 1018/1019 leak (kTrustSpellMaxId=1023), and wires dynamic canonical role icons for all 66 Soul Echoes via hook_magic_icon."
+    "notes": "Full VanaCore-Native Soulspire v0.9.9-soulspire-native.19 (c1781d7699, DEC-028 API v2, DEC-038 Soul Echoes, DEC-039 Dynamic Spellbook): adds native world nameplate Soul icons and native party HUD Soul icons + 3-letter abbreviations for all 66 Souls via shared soulspire_core/assets/crystals/*.png (zero new FFXiMain.dll hooks), dynamic Echo role icons, 16-bit spell_res job levels, and PLAYER-CMD-001 fail-closed defaults."
   }
 }
