@@ -186,6 +186,10 @@
                                                 </ComboBox.ItemTemplate>
                                             </ComboBox>
                                             <TextBlock Text="{Binding ClientEngineStatusText}" FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" Margin="0,2,0,4" />
+                                            <CheckBox Content="Load optional BattleLens (off until /battlelens on)"
+                                                      IsChecked="{Binding AutoLoadBattleLensAddon}"
+                                                      Visibility="{Binding IsModernNativeSelected, Converter={StaticResource BoolToVis}}"
+                                                      Margin="0,2,0,4" />
                                             <WrapPanel Orientation="Horizontal" Visibility="{Binding IsModernEngineSelected, Converter={StaticResource BoolToVis}}" Margin="0,2,0,0">
                                                 <Button Content="Export Modern Diagnostics" Style="{StaticResource SecondaryButton}"
                                                         Command="{Binding ExportModernDiagnosticsCommand}" Padding="9,4" FontSize="11" Margin="0,0,6,0" />

@@ -9919,6 +9919,27 @@
       "targetPath": "vanacore/soulspire_core/data/soul-dynamic-spellbooks.json",
       "sha256": "c1a9862d236402f717bf73d207d883eb9009145519a4688b624582937a2b58bc",
       "size": 44749
+    },
+    {
+      "category": "addon",
+      "sourcePath": "channels/testing/payload/addons/vanacore/battlelens/README.md",
+      "targetPath": "vanacore/battlelens/README.md",
+      "sha256": "2bb579a1a0f695fd958ddd45bcef1be402b190f9562029caf2bbc4f1190b8ce5",
+      "size": 1912
+    },
+    {
+      "category": "addon",
+      "sourcePath": "channels/testing/payload/addons/vanacore/battlelens/battlelens.lua",
+      "targetPath": "vanacore/battlelens/battlelens.lua",
+      "sha256": "cbaa1c246259255fdfe5b5eb7d97c8c5c7187e64a776c78754d62d6420b20004",
+      "size": 1303
+    },
+    {
+      "category": "addon",
+      "sourcePath": "channels/testing/payload/addons/vanacore/battlelens/rules.lua",
+      "targetPath": "vanacore/battlelens/rules.lua",
+      "sha256": "9a1c1e0103166e2e927605f2dbe45ae821930718c75bad67bd1502d2665b3515",
+      "size": 4447
     }
   ],
   "news": [

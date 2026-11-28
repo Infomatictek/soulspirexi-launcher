@@ -241,6 +241,10 @@ public sealed class ModernClientConfigGenerator
             sb.AppendLine("# Loads EXACTLY ONE unified VanaCore-native Soulspire Core addon with zero Ashita compatibility fallback (DEC-028).");
             sb.AppendLine("/wait 1");
             sb.AppendLine("/addon load soulspire_core vanacore");
+            if (settings.AutoLoadBattleLensAddon)
+            {
+                sb.AppendLine("/addon load battlelens vanacore");
+            }
             return sb.ToString();
         }
 
