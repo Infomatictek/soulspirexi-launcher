@@ -58,12 +58,13 @@ jobs:
           set -euo pipefail
           python -m unittest discover -s tests -p "test_*.py" -v
 
-      - name: Run Ashita Lua unit tests
+      - name: Run Lua addon unit tests
         shell: bash
         run: |
           set -euo pipefail
           python -m pip install 'lupa==2.8'
           python tests/run_soul_lua_tests.py
+          python -m unittest discover -s tests -p "test_battlelens.py" -v
 
       - name: Verify launcher manifest (strict read-only)
         shell: bash

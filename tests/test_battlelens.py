@@ -11,7 +11,10 @@ NATIVE = ROOT / "channels" / "testing" / "payload" / "addons" / "vanacore" / "ba
 class BattleLensTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from lupa.luajit21 import LuaRuntime
+        try:
+            from lupa.luajit21 import LuaRuntime
+        except ImportError as error:
+            raise unittest.SkipTest("LuaJIT bindings are installed in the Lua test stage") from error
 
         cls.rules = LuaRuntime().execute((NATIVE / "rules.lua").read_text(encoding="utf-8"))
 
