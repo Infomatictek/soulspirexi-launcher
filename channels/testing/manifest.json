@@ -9580,8 +9580,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/data/soul-companions.json",
       "targetPath": "vanacore/soulspire_core/data/soul-companions.json",
-      "sha256": "87546eb6407fd36efe62a36bff4314dc02fe83642768d8de667d768310c6a436",
-      "size": 21194
+      "sha256": "65f11b55a03e08f76aa1cb3e25556413129bcd972853fef5049b7909f6cfe921",
+      "size": 29127
     },
     {
       "category": "addon",
@@ -9636,8 +9636,8 @@
       "category": "addon",
       "sourcePath": "addons/vanacore/soulspire_core/modules/status_and_diag.lua",
       "targetPath": "vanacore/soulspire_core/modules/status_and_diag.lua",
-      "sha256": "10370754f6e8739fb5e0adae215adaf995d7b4f938bbed874002379786eac182",
-      "size": 12965
+      "sha256": "bf1f5124a8fa2e0061842b2d48630f096687d14aea95778493a622fca381b676",
+      "size": 14037
     },
     {
       "category": "addon",
@@ -11947,12 +11947,12 @@
     "baseline": {
       "profile": "baseline",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-native.15",
-      "commitSha": "91dafcf51e",
+      "tag": "v0.9.9-soulspire-native.17",
+      "commitSha": "45329fea19",
       "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.15/soulspirexi-client-experimental-0.9.9-91dafcf51e-win32.zip",
-      "packageSha256": "eb979afdb30c8b37a9a6f5cbbc6927a8c13b1652fa716a36b290b0a671fd1b05",
-      "packageSize": 99073167,
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.17/soulspirexi-client-experimental-0.9.9-45329fea19-win32.zip",
+      "packageSha256": "88bee0f3010e7c93ec21449af4f78b6b468cde0f883b0454bb0dae5d17150272",
+      "packageSize": 99073395,
       "experimentalEligible": true,
       "clientVerified": false,
       "notes": "VanaCore Baseline profile on v0.9.9-soulspire-native.9 (d42f2646d8): combines Phase D native weapon/model hooks (#22, #25-#27, #32-#35), C++ 0x1FC/0x1FF decoders, and PLAYER-CMD-001 fail-closed defaults ([mcp] available=0, [developer] enabled=0, /vana2 disabled); launcher disables all addons/hooks for clean baseline certification."
@@ -11960,12 +11960,12 @@
     "compat": {
       "profile": "compat",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-native.15",
-      "commitSha": "91dafcf51e",
+      "tag": "v0.9.9-soulspire-native.17",
+      "commitSha": "45329fea19",
       "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.15/soulspirexi-client-experimental-0.9.9-91dafcf51e-win32.zip",
-      "packageSha256": "eb979afdb30c8b37a9a6f5cbbc6927a8c13b1652fa716a36b290b0a671fd1b05",
-      "packageSize": 99073167,
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.17/soulspirexi-client-experimental-0.9.9-45329fea19-win32.zip",
+      "packageSha256": "88bee0f3010e7c93ec21449af4f78b6b468cde0f883b0454bb0dae5d17150272",
+      "packageSize": 99073395,
       "experimentalEligible": true,
       "clientVerified": false,
       "notes": "VanaCore-Native Soulspire v0.9.9-soulspire-native.9 (d42f2646d8, Compatibility Recovery profile): combines Phase D native weapon/model hooks (#22, #25-#27, #32-#35) and PLAYER-CMD-001 fail-closed defaults ([mcp] available=0, [developer] enabled=0, /vana2 disabled)."
@@ -11973,17 +11973,17 @@
     "native": {
       "profile": "native",
       "version": "0.9.9",
-      "tag": "v0.9.9-soulspire-native.15",
-      "commitSha": "91dafcf51e",
+      "tag": "v0.9.9-soulspire-native.17",
+      "commitSha": "45329fea19",
       "upstreamCommit": "04545ec52120c2df527ac3c0c4ab32392cfc10c5",
-      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.15/soulspirexi-client-experimental-0.9.9-91dafcf51e-win32.zip",
-      "packageSha256": "eb979afdb30c8b37a9a6f5cbbc6927a8c13b1652fa716a36b290b0a671fd1b05",
-      "packageSize": 99073167,
+      "packageUrl": "https://github.com/Infomatictek/soulspirexi-client/releases/download/v0.9.9-soulspire-native.17/soulspirexi-client-experimental-0.9.9-45329fea19-win32.zip",
+      "packageSha256": "88bee0f3010e7c93ec21449af4f78b6b468cde0f883b0454bb0dae5d17150272",
+      "packageSize": 99073395,
       "experimentalEligible": true,
       "clientVerified": false,
-      "notes": "Full VanaCore-Native Soulspire v0.9.9-soulspire-native.15 (91dafcf51e, DEC-028 API v2, DEC-038 Soul Echoes rebranding, DEC-039 SOUL-SPELL-001 Dynamic Spellbook & Necromancer overhaul): adds universal Dynamic Spellbook & 66-Soul action eligibility filtering ([SSDSB]), runtime spell_res metadata overrides for all 24 Necromancy spells, native job/pet ability visibility filtering, Soul Echoes native UI/button/filter/system-chat rebranding, tester-exclusive 66-Soul Echoes Magic menu integration, protected soulspire_core & 278 COR DATs, Phase D weapon hooks, and PLAYER-CMD-001 fail-closed defaults."
+      "notes": "Full VanaCore-Native Soulspire v0.9.9-soulspire-native.17 (45329fea19, DEC-028 API v2, DEC-038 Soul Echoes, DEC-039 SOUL-SPELL-001): fixes retail Trust 1018 (Iroha II) & 1019 (Shantotto II) leak via kTrustSpellMaxId=1023, wires dynamic canonical role icons (Tank/Healer/Damage/Support/Hybrid) for all 66 Soul Echoes via hook_magic_icon + concise non-redundant descriptions, and hardens Dynamic Spellbook runtime spell_res sync."
     }
   },
-  "version": "2.2.3-testing.28",
-  "notes": "SoulspireXI Testing v2.2.3-testing.28 — ships SOUL-SPELL-001 (DEC-039) Universal Dynamic Spellbook, 66-Soul action eligibility filtering, and 24-spell BLM Necromancer overhaul alongside DEC-038 Soul Echoes, pinning VanaCore v0.9.9-soulspire-native.15."
+  "version": "2.2.3-testing.29",
+  "notes": "SoulspireXI Testing v2.2.3-testing.29 — fixes retail Trust 1018/1019 leak (Iroha II / Shantotto II), adds canonical role icons and concise descriptions for all 66 Soul Echoes, adds Client Sentinel 90-action metadata parity diagnostics, and pins VanaCore v0.9.9-soulspire-native.17."
 }

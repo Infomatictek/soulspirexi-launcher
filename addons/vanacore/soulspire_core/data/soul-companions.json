@@ -1,10 +1,10 @@
 {
   "schemaVersion": "1.0.0",
   "registryVersion": "2026.11.22-66-souls-approved",
-  "companionHash": "a434e3462b30e5ec",
+  "companionHash": "e5302bade8c09728",
   "trustSpellBaseId": 896,
   "trustSpellLastSoulId": 961,
-  "trustSpellMaxId": 1017,
+  "trustSpellMaxId": 1023,
   "systemName": "Soul Echoes",
   "categoryLabel": "Echoes",
   "companions": [
@@ -18,7 +18,9 @@
       "displayName": "Commander",
       "abbreviation": "CDR",
       "roleCategory": "support",
-      "description": "WAR Commander (SUPPORT) - Active Tactical Buffer"
+      "iconId": 22,
+      "iconIdV2": 1014,
+      "description": "Commander (WAR Support) - Active battlefield tactician (Lv10+): weaves short-cooldown party & mark JAs that scale..."
     },
     {
       "spellId": 897,
@@ -30,7 +32,9 @@
       "displayName": "Berserker",
       "abbreviation": "BRZ",
       "roleCategory": "dps",
-      "description": "WAR Berserker (DPS) - Fury / Heavy Burst DPS"
+      "iconId": 22,
+      "iconIdV2": 1010,
+      "description": "Berserker (WAR Damage) - Unrelenting fury (Lv10+): amplifies Berserk, Blood Rage, and Warcry with heavy Attack..."
     },
     {
       "spellId": 898,
@@ -42,7 +46,9 @@
       "displayName": "Spartan",
       "abbreviation": "SPT",
       "roleCategory": "tank",
-      "description": "WAR Spartan (TANK) - Phalanx Spear-Wall & Grit Barrier Tank"
+      "iconId": 22,
+      "iconIdV2": 1000,
+      "description": "Spartan (WAR Tank) - Frontline phalanx tank (Lv10+): requires a Polearm paired with a Size-1 Buckler (or an empty..."
     },
     {
       "spellId": 899,
@@ -54,7 +60,9 @@
       "displayName": "Sensei",
       "abbreviation": "SEN",
       "roleCategory": "tank",
-      "description": "MNK Sensei (TANK) - Staff Evasion & Counter Tank"
+      "iconId": 22,
+      "iconIdV2": 1000,
+      "description": "Sensei (MNK Tank) - Agile staff master (Lv10+): evades and parries incoming blows with a Staff, ripostes missed or..."
     },
     {
       "spellId": 900,
@@ -66,7 +74,9 @@
       "displayName": "Stillwater",
       "abbreviation": "STW",
       "roleCategory": "healer",
-      "description": "MNK Stillwater (HEALER) - Unarmed Ranged Chi & Pulse Healer"
+      "iconId": 22,
+      "iconIdV2": 1038,
+      "description": "Stillwater (MNK Healer) - Bare-handed Chi channeler (Lv10+): cannot equip weapons in Main or Sub slots, firing dual..."
     },
     {
       "spellId": 901,
@@ -78,7 +88,9 @@
       "displayName": "Wayfarer",
       "abbreviation": "WAY",
       "roleCategory": "dps",
-      "description": "MNK Wayfarer (DPS) - Hand-to-Hand Martial DPS"
+      "iconId": 22,
+      "iconIdV2": 1010,
+      "description": "Wayfarer (MNK Damage) - Pure Hand-to-Hand striker (Lv10+): restricted strictly to Hand-to-Hand weapons or bare..."
     },
     {
       "spellId": 902,
@@ -90,7 +102,9 @@
       "displayName": "Bishop",
       "abbreviation": "BSP",
       "roleCategory": "healer",
-      "description": "WHM Bishop (HEALER) - Healer"
+      "iconId": 22,
+      "iconIdV2": 1038,
+      "description": "Bishop (WHM Healer) - Proactive Barrier-Cure & Afflatus Solace Conduit (Lv10+): converts Cure healing and..."
     },
     {
       "spellId": 903,
@@ -102,7 +116,9 @@
       "displayName": "Penitent",
       "abbreviation": "PEN",
       "roleCategory": "dps",
-      "description": "WHM Penitent (DPS) - Damage"
+      "iconId": 22,
+      "iconIdV2": 1010,
+      "description": "Penitent (WHM Damage) - Fight in melee to refill MP with Staff Communion. Spend it on powerful light magic against a..."
     },
     {
       "spellId": 904,
@@ -114,7 +130,9 @@
       "displayName": "Intercessor",
       "abbreviation": "INC",
       "roleCategory": "support",
-      "description": "WHM Intercessor (SUPPORT) - Support"
+      "iconId": 22,
+      "iconIdV2": 1014,
+      "description": "Intercessor (WHM Support) - A polearm support Soul that rescues one ally after enemy damage interrupts a spell."
     },
     {
       "spellId": 905,
@@ -126,7 +144,9 @@
       "displayName": "Goetist",
       "abbreviation": "GOE",
       "roleCategory": "dps",
-      "description": "BLM Goetist (DPS) - Damage"
+      "iconId": 22,
+      "iconIdV2": 1010,
+      "description": "Goetist (BLM Damage) - Read an enemy with elemental probes and commit to one decisive, single-target Ancient Magic cast."
     },
     {
       "spellId": 906,
@@ -138,7 +158,9 @@
       "displayName": "Channeler",
       "abbreviation": "CNL",
       "roleCategory": "support",
-      "description": "BLM Channeler (SUPPORT) - Support"
+      "iconId": 22,
+      "iconIdV2": 1014,
+      "description": "Channeler (BLM Support) - Give one ally a faster, cheaper cast by committing your own casting window."
     },
     {
       "spellId": 907,
@@ -150,7 +172,9 @@
       "displayName": "Necromancer",
       "abbreviation": "NEC",
       "roleCategory": "tank",
-      "description": "BLM Necromancer (TANK) - Scythe & Undead Summoner"
+      "iconId": 22,
+      "iconIdV2": 1000,
+      "description": "Necromancer (BLM Tank) - Scythe-wielding Black Mage who commands undead tank and ranged dark caster summons, drains..."
     },
     {
       "spellId": 908,
@@ -162,7 +186,9 @@
       "displayName": "Thornveil",
       "abbreviation": "TVL",
       "roleCategory": "tank",
-      "description": "RDM Thornveil (TANK) - Hex-Crippling Fencer & Barrier Weaver"
+      "iconId": 22,
+      "iconIdV2": 1000,
+      "description": "Thornveil (RDM Tank) - Frontline duelist tank (Lv10+): requires a 1H Sword with an empty off-hand to unlock Fencer..."
     },
     {
       "spellId": 909,
@@ -174,7 +200,9 @@
       "displayName": "Arbiter",
       "abbreviation": "ARB",
       "roleCategory": "support",
-      "description": "RDM Arbiter (SUPPORT) - Support"
+      "iconId": 22,
+      "iconIdV2": 1014,
+      "description": "Arbiter (RDM Support) - Choose a useful enfeeble, then make the tactical decision of who receives your order."
     },
     {
       "spellId": 910,
@@ -186,7 +214,9 @@
       "displayName": "Conflux",
       "abbreviation": "CFL",
       "roleCategory": "dps",
-      "description": "RDM Conflux (DPS) - Damage"
+      "iconId": 22,
+      "iconIdV2": 1010,
+      "description": "Conflux (RDM Damage) - Commit to one offensive form. Yin focuses elemental spell damage. Yang focuses ordinary Sword..."
     },
     {
       "spellId": 911,
@@ -198,7 +228,9 @@
       "displayName": "Trickster",
       "abbreviation": "TRK",
       "roleCategory": "support",
-      "description": "THF Trickster (SUPPORT) - Support"
+      "iconId": 22,
+      "iconIdV2": 1014,
+      "description": "Trickster (THF Support) - Position behind the party member who should take threat, and weaken the enemy with..."
     },
     {
       "spellId": 912,
@@ -210,7 +242,9 @@
       "displayName": "Opportunist",
       "abbreviation": "OPP",
       "roleCategory": "dps",
-      "description": "THF Opportunist (DPS) - Damage"
+      "iconId": 22,
+      "iconIdV2": 1010,
+      "description": "Opportunist (THF Damage) - Time a landed Dagger or Sword weapon skill to exploit a weakness and reclaim TP."
     },
     {
       "spellId": 913,
@@ -222,7 +256,9 @@
       "displayName": "Phantom",
       "abbreviation": "PTM",
       "roleCategory": "tank",
-      "description": "THF Phantom (TANK) - Tank"
+      "iconId": 22,
+      "iconIdV2": 1000,
+      "description": "Phantom (THF Tank) - A Dagger or Katana evasion tank that opens with direct threat and maintains it as enemy swings..."
     },
     {
       "spellId": 914,
@@ -234,7 +270,9 @@
       "displayName": "Lightkeeper",
       "abbreviation": "LTK",
       "roleCategory": "healer",
-      "description": "PLD Lightkeeper (HEALER) - Healer"
+      "iconId": 22,
+      "iconIdV2": 1038,
+      "description": "Lightkeeper (PLD Healer) - Frontline Holy Light & Perpetual Majesty AoE Cure Crusader (Lv10+, Club+Shield): splashes..."
     },
     {
       "spellId": 915,
@@ -246,7 +284,9 @@
       "displayName": "Martyr",
       "abbreviation": "MRT",
       "roleCategory": "tank",
-      "description": "PLD Martyr (TANK) - Party-Intercepting Holy Bastion"
+      "iconId": 22,
+      "iconIdV2": 1000,
+      "description": "Martyr (PLD Tank) - Order of the Silver Aegis tank (Lv10+): requires a Club + Shield to unlock Divine Intercept..."
     },
     {
       "spellId": 916,
@@ -258,7 +298,9 @@
       "displayName": "Oathbreaker",
       "abbreviation": "OTB",
       "roleCategory": "dps",
-      "description": "PLD Oathbreaker (DPS) - Damage"
+      "iconId": 22,
+      "iconIdV2": 1010,
+      "description": "Oathbreaker (PLD Damage) - Commit before combat to vulnerable Great Sword pressure or a reactive retaliation vow."
     },
     {
       "spellId": 917,
@@ -270,7 +312,9 @@
       "displayName": "Harbinger",
       "abbreviation": "HRB",
       "roleCategory": "dps",
-      "description": "DRK Harbinger (DPS) - Damage"
+      "iconId": 22,
+      "iconIdV2": 1010,
+      "description": "Harbinger (DRK Damage) - A Scythe executioner who times powerful single-target strikes as enemies recover from their..."
     },
     {
       "spellId": 918,
@@ -282,7 +326,9 @@
       "displayName": "Dreadnought",
       "abbreviation": "DRN",
       "roleCategory": "tank",
-      "description": "DRK Dreadnought (TANK) - Blood-Pool & Dread Spikes Tank"
+      "iconId": 22,
+      "iconIdV2": 1000,
+      "description": "Dreadnought (DRK Tank) - Abyssal blood-knight tank (Lv10+): requires a Scythe to unlock Max-HP scaled Drain II..."
     },
     {
       "spellId": 919,
@@ -294,7 +340,9 @@
       "displayName": "Maleficar",
       "abbreviation": "MLF",
       "roleCategory": "support",
-      "description": "DRK Maleficar (SUPPORT) - Support"
+      "iconId": 22,
+      "iconIdV2": 1014,
+      "description": "Maleficar (DRK Support) - Choose one curse to dampen a dangerous enemy action, with a short ward against explicit..."
     },
     {
       "spellId": 920,
@@ -306,7 +354,9 @@
       "displayName": "Packmate",
       "abbreviation": "PKM",
       "roleCategory": "dps",
-      "description": "BST Packmate (DPS) - Damage"
+      "iconId": 22,
+      "iconIdV2": 1010,
+      "description": "Packmate (BST Damage) - Fight alongside an offensive hare and trade TP as you land attacks against the same enemy."
     },
     {
       "spellId": 921,
@@ -318,7 +368,9 @@
       "displayName": "Alpha Warden",
       "abbreviation": "ALW",
       "roleCategory": "tank",
-      "description": "BST Alpha Warden (TANK) - Tank"
+      "iconId": 22,
+      "iconIdV2": 1000,
+      "description": "Alpha Warden (BST Tank) - Symbiotic 1H Axe & Guardian Beast tank (Lv10+): always-on 50% Soul-Link damage split, 4..."
     },
     {
       "spellId": 922,
@@ -330,7 +382,9 @@
       "displayName": "Wildsavant",
       "abbreviation": "WSV",
       "roleCategory": "support",
-      "description": "BST Wildsavant (SUPPORT) - Support"
+      "iconId": 22,
+      "iconIdV2": 1014,
+      "description": "Wildsavant (BST Support) - Identify your quarry’s physical weakness and ask your tracker to open it up for your..."
     },
     {
       "spellId": 923,
@@ -342,7 +396,9 @@
       "displayName": "Skald",
       "abbreviation": "SKL",
       "roleCategory": "dps",
-      "description": "BRD Skald (DPS) - Melee Damage (Dagger / Sword)"
+      "iconId": 22,
+      "iconIdV2": 1010,
+      "description": "Skald (BRD Damage) - Wandering troubadour spec: Dual-wield Dagger/Sword DPS with Cadence stacks, Sonic WS..."
     },
     {
       "spellId": 924,
@@ -354,7 +410,9 @@
       "displayName": "Cantor",
       "abbreviation": "CNT",
       "roleCategory": "support",
-      "description": "BRD Cantor (SUPPORT) - Magical Song Nuker"
+      "iconId": 22,
+      "iconIdV2": 1014,
+      "description": "Cantor (BRD Support) - Tavnazian lyrical mage spec: Turns Threnodies, Requiems, and Elegies into fast-cast elemental..."
     },
     {
       "spellId": 925,
@@ -366,7 +424,9 @@
       "displayName": "Provocateur",
       "abbreviation": "PRV",
       "roleCategory": "tank",
-      "description": "BRD Provocateur (TANK) - Pre-Nerf Lv.75 Song Tank"
+      "iconId": 22,
+      "iconIdV2": 1000,
+      "description": "Provocateur (BRD Tank) - Homage to the pre-nerf Lv.75 BRD tank: Uncapped enmity on Lullaby/Elegy/Requiem..."
     },
     {
       "spellId": 926,
@@ -378,7 +438,9 @@
       "displayName": "Sniper",
       "abbreviation": "SNP",
       "roleCategory": "dps",
-      "description": "RNG Sniper (DPS) - Damage"
+      "iconId": 22,
+      "iconIdV2": 1010,
+      "description": "Sniper (RNG Damage) - A deliberate marksman who commits to one high-precision shot with a gun or crossbow."
     },
     {
       "spellId": 927,
@@ -390,7 +452,9 @@
       "displayName": "Fangbound",
       "abbreviation": "FGB",
       "roleCategory": "tank",
-      "description": "RNG Fangbound (TANK) - Modal Beastmaster Ranger"
+      "iconId": 22,
+      "iconIdV2": 1000,
+      "description": "Fangbound (RNG Tank) - Modal Pet-Tank & Pack Ranger who bonds with Glacial Tuskers (Wild Raaz / Cehuetzi) to anchor..."
     },
     {
       "spellId": 928,
@@ -402,7 +466,9 @@
       "displayName": "Spellfletcher",
       "abbreviation": "SFL",
       "roleCategory": "support",
-      "description": "RNG Spellfletcher (SUPPORT) - Support"
+      "iconId": 22,
+      "iconIdV2": 1014,
+      "description": "Spellfletcher (RNG Support) - Select one of six elements and land an arrow to amplify one coordinated allied follow-up."
     },
     {
       "spellId": 929,
@@ -414,7 +480,9 @@
       "displayName": "Ronin",
       "abbreviation": "RON",
       "roleCategory": "tank",
-      "description": "SAM Ronin (TANK) - Mushin Seigan & Stagger Tank"
+      "iconId": 22,
+      "iconIdV2": 1000,
+      "description": "Ronin (SAM Tank) - Masterless Mushin tank: requires a Great Katana to unlock Seigan mitigation, multi-charge Mind's..."
     },
     {
       "spellId": 930,
@@ -426,7 +494,9 @@
       "displayName": "Amatsu",
       "abbreviation": "AMT",
       "roleCategory": "dps",
-      "description": "SAM Amatsu (DPS) - Oisoya Bow & Blade Skirmisher"
+      "iconId": 22,
+      "iconIdV2": 1010,
+      "description": "Amatsu (SAM Damage) - Tenzen-inspired Bow & Great Katana skirmisher: raises Archery to A+ with 100% arrow..."
     },
     {
       "spellId": 931,
@@ -438,7 +508,9 @@
       "displayName": "Kensei",
       "abbreviation": "KEN",
       "roleCategory": "support",
-      "description": "SAM Kensei (SUPPORT) - Cursed Onimaru & Iaijutsu Tactical Support"
+      "iconId": 22,
+      "iconIdV2": 1014,
+      "description": "Kensei (SAM Support) - Cursed Onimaru & Iaijutsu battlefield support (Lv10+): keeps the aggressive Great Katana &..."
     },
     {
       "spellId": 932,
@@ -450,7 +522,9 @@
       "displayName": "Shinobi",
       "abbreviation": "SNI",
       "roleCategory": "dps",
-      "description": "NIN Shinobi (DPS) - Damage"
+      "iconId": 22,
+      "iconIdV2": 1010,
+      "description": "Shinobi (NIN Damage) - Tier 1 Pure Physical DPS Ninja (Lv10+, Katana): shadow-clone commander that fields up to 5..."
     },
     {
       "spellId": 933,
@@ -462,7 +536,9 @@
       "displayName": "Kagemusha",
       "abbreviation": "KGM",
       "roleCategory": "tank",
-      "description": "NIN Kagemusha (TANK) - Shadow & Ninjutsu Tank"
+      "iconId": 22,
+      "iconIdV2": 1000,
+      "description": "Kagemusha (NIN Tank) - Decoy-detonating shadow & ninjutsu tank (Lv10+, Dual Katanas): unlocks zero-tool Ninjutsu &..."
     },
     {
       "spellId": 934,
@@ -474,7 +550,9 @@
       "displayName": "Fūin",
       "abbreviation": "FUI",
       "roleCategory": "support",
-      "description": "NIN Fūin (SUPPORT) - Support"
+      "iconId": 22,
+      "iconIdV2": 1014,
+      "description": "Fūin (NIN Support) - React to enemy telegraphs with a seal that disrupts one hostile spell or weakens one physical move."
     },
     {
       "spellId": 935,
@@ -486,7 +564,9 @@
       "displayName": "Highlancer",
       "abbreviation": "HLC",
       "roleCategory": "dps",
-      "description": "DRG Highlancer (DPS) - Damage"
+      "iconId": 22,
+      "iconIdV2": 1010,
+      "description": "Highlancer (DRG Damage) - A polearm specialist whose long, clear launch lanes give stronger vault strikes and a jump..."
     },
     {
       "spellId": 936,
@@ -498,7 +578,9 @@
       "displayName": "Drachenward",
       "abbreviation": "DRW",
       "roleCategory": "tank",
-      "description": "DRG Drachenward (TANK) - Tank"
+      "iconId": 22,
+      "iconIdV2": 1000,
+      "description": "Drachenward (DRG Tank) - A polearm tank who opens with an enmity challenge and times a short guard without leaving..."
     },
     {
       "spellId": 937,
@@ -510,7 +592,9 @@
       "displayName": "Wyvernheart",
       "abbreviation": "WYV",
       "roleCategory": "healer",
-      "description": "DRG Wyvernheart (HEALER) - Healer"
+      "iconId": 22,
+      "iconIdV2": 1038,
+      "description": "Wyvernheart (DRG Healer) - Pure martial Dragon-Blood Lancer & Wyvern Triage Healer (Lv10+, Polearm): unlocks Call..."
     },
     {
       "spellId": 938,
@@ -522,7 +606,9 @@
       "displayName": "Eidolarch",
       "abbreviation": "EID",
       "roleCategory": "dps",
-      "description": "SMN Eidolarch (DPS) - Damage"
+      "iconId": 22,
+      "iconIdV2": 1010,
+      "description": "Eidolarch (SMN Damage) - Commit an avatar’s element to a single target and exploit the enemy’s weakest elemental..."
     },
     {
       "spellId": 939,
@@ -534,7 +620,9 @@
       "displayName": "Celestial",
       "abbreviation": "CEL",
       "roleCategory": "healer",
-      "description": "SMN Celestial (HEALER) - Healer"
+      "iconId": 22,
+      "iconIdV2": 1038,
+      "description": "Celestial (SMN Healer) - Astral Avatar Conduit, Sanctuary & Ward-Reset Healer (Lv10+): projects a 15y Celestial..."
     },
     {
       "spellId": 940,
@@ -546,7 +634,9 @@
       "displayName": "Accordant",
       "abbreviation": "ACD",
       "roleCategory": "support",
-      "description": "SMN Accordant (SUPPORT) - Support"
+      "iconId": 22,
+      "iconIdV2": 1014,
+      "description": "Accordant (SMN Support) - Invite a party to follow your avatar’s element. Each member has a separate opportunity to..."
     },
     {
       "spellId": 941,
@@ -558,7 +648,9 @@
       "displayName": "Assimilator",
       "abbreviation": "ASM",
       "roleCategory": "dps",
-      "description": "BLU Assimilator (DPS) - Damage"
+      "iconId": 22,
+      "iconIdV2": 1010,
+      "description": "Assimilator (BLU Damage) - Read one enemy and select the monster technique that best answers its defenses."
     },
     {
       "spellId": 942,
@@ -570,7 +662,9 @@
       "displayName": "Magus",
       "abbreviation": "MAG",
       "roleCategory": "healer",
-      "description": "BLU Magus (HEALER) - Healer"
+      "iconId": 22,
+      "iconIdV2": 1038,
+      "description": "Magus (BLU Healer) - Azure Alchemist, Dual-Wielding Siphon-Healer & Blue Magic Mender (Lv10+): splashes Blue Magic..."
     },
     {
       "spellId": 943,
@@ -582,7 +676,9 @@
       "displayName": "Chrysalis",
       "abbreviation": "CRY",
       "roleCategory": "tank",
-      "description": "BLU Chrysalis (TANK) - Monster-Core Assimilator & Dual-Wield Tank"
+      "iconId": 22,
+      "iconIdV2": 1000,
+      "description": "Chrysalis (BLU Tank) - Monster-forged frontliner (Lv10+): grants early Dual Wield at Lv.10+, 100% Spell Interruption..."
     },
     {
       "spellId": 944,
@@ -594,7 +690,9 @@
       "displayName": "Flintlock",
       "abbreviation": "FLT",
       "roleCategory": "dps",
-      "description": "COR Flintlock (DPS) - Damage"
+      "iconId": 22,
+      "iconIdV2": 1010,
+      "description": "Flintlock (COR Damage) - Tier 1 Pure Damage Corsair spec (Lv10+): Deadeye Chamber, Powder Mark Quick Draw..."
     },
     {
       "spellId": 945,
@@ -606,7 +704,9 @@
       "displayName": "Gambler",
       "abbreviation": "GMB",
       "roleCategory": "support",
-      "description": "COR Gambler (SUPPORT) - Support"
+      "iconId": 22,
+      "iconIdV2": 1014,
+      "description": "Gambler (COR Support) - Tier 3 Pure Support Corsair spec (Lv10+): High-Roller Stakes with Safe Standing (Roll 8-9..."
     },
     {
       "spellId": 946,
@@ -618,7 +718,9 @@
       "displayName": "Blackwake",
       "abbreviation": "BKW",
       "roleCategory": "tank",
-      "description": "COR Blackwake (TANK) - Tank"
+      "iconId": 22,
+      "iconIdV2": 1000,
+      "description": "Blackwake (COR Tank) - Tier 6 Pure Tank Corsair spec (Lv10+): requires 1H Sword + Gun (optional Buckler or 12%..."
     },
     {
       "spellId": 947,
@@ -630,7 +732,9 @@
       "displayName": "Ironlink",
       "abbreviation": "IRN",
       "roleCategory": "tank",
-      "description": "PUP Ironlink (TANK) - Tank"
+      "iconId": 22,
+      "iconIdV2": 1000,
+      "description": "Ironlink (PUP Tank) - Pure Valoredge Automaton Tank (Lv10+, H2H): forces Valoredge Head+Frame, 100% Overload..."
     },
     {
       "spellId": 948,
@@ -642,7 +746,9 @@
       "displayName": "Patchwork",
       "abbreviation": "PTW",
       "roleCategory": "healer",
-      "description": "PUP Patchwork (HEALER) - Healer"
+      "iconId": 22,
+      "iconIdV2": 1038,
+      "description": "Patchwork (PUP Healer) - Pure martial Automaton Medic & Tactical Maneuver Healer (Lv10+, Hand-to-Hand): unlocks..."
     },
     {
       "spellId": 949,
@@ -654,7 +760,9 @@
       "displayName": "Tandem",
       "abbreviation": "TDM",
       "roleCategory": "dps",
-      "description": "PUP Tandem (DPS) - Damage"
+      "iconId": 22,
+      "iconIdV2": 1010,
+      "description": "Tandem (PUP Damage) - Pure Tandem DPS (Lv10+, H2H): Valoredge/Sharpshot Automaton with 0% post-damage penalty, +350..."
     },
     {
       "spellId": 950,
@@ -666,7 +774,9 @@
       "displayName": "Revel",
       "abbreviation": "RVL",
       "roleCategory": "healer",
-      "description": "DNC Revel (HEALER) - Healer"
+      "iconId": 22,
+      "iconIdV2": 1038,
+      "description": "Revel (DNC Healer) - Crimson Blood-Dancer, Lifesteal Waltz & Sanguine Step Healer (Lv10+, 0-MP TP/FM Engine)..."
     },
     {
       "spellId": 951,
@@ -678,7 +788,9 @@
       "displayName": "Bladewheel",
       "abbreviation": "BLW",
       "roleCategory": "dps",
-      "description": "DNC Bladewheel (DPS) - Ranged Chakram Dancer"
+      "iconId": 22,
+      "iconIdV2": 1010,
+      "description": "Bladewheel (DNC Damage) - Ranged chakram spec: auto-attacks with your chakram when out of melee range (or at all..."
     },
     {
       "spellId": 952,
@@ -690,7 +802,9 @@
       "displayName": "Dervish",
       "abbreviation": "DRV",
       "roleCategory": "tank",
-      "description": "DNC Dervish (TANK) - Fan-Dance Rhythm & Waltz-Shield Tank"
+      "iconId": 22,
+      "iconIdV2": 1000,
+      "description": "Dervish (DNC Tank) - Acrobatic frontline dancer tank (Lv10+): requires Dual Daggers to unlock Fan Dance Rhythm..."
     },
     {
       "spellId": 953,
@@ -702,7 +816,9 @@
       "displayName": "Chirurgeon",
       "abbreviation": "CRG",
       "roleCategory": "healer",
-      "description": "SCH Chirurgeon (HEALER) - Light Arts / Eos Support"
+      "iconId": 22,
+      "iconIdV2": 1038,
+      "description": "Chirurgeon (SCH Healer) - Light Arts spec: Call Eos faerie companion, safer Sublimation, and automatic Accession for..."
     },
     {
       "spellId": 954,
@@ -714,7 +830,9 @@
       "displayName": "Heliarch",
       "abbreviation": "HEL",
       "roleCategory": "dps",
-      "description": "SCH Heliarch (DPS) - Dark Arts / Titania & Helix"
+      "iconId": 22,
+      "iconIdV2": 1010,
+      "description": "Heliarch (SCH Damage) - Dark Arts spec: Call Titania dark faerie companion, permanent Ebullience, stronger Helix..."
     },
     {
       "spellId": 955,
@@ -726,7 +844,9 @@
       "displayName": "Archivist",
       "abbreviation": "ARC",
       "roleCategory": "support",
-      "description": "SCH Archivist (SUPPORT) - Support"
+      "iconId": 22,
+      "iconIdV2": 1014,
+      "description": "Archivist (SCH Support) - Observe one enemy, record an exact hostile action, and prepare a specific countermeasure..."
     },
     {
       "spellId": 956,
@@ -738,7 +858,9 @@
       "displayName": "Meridian",
       "abbreviation": "MRD",
       "roleCategory": "support",
-      "description": "GEO Meridian (SUPPORT) - Support"
+      "iconId": 22,
+      "iconIdV2": 1014,
+      "description": "Meridian (GEO Support) - Use your position and a fixed anchor to create a lane of physical and magical accuracy for..."
     },
     {
       "spellId": 957,
@@ -750,7 +872,9 @@
       "displayName": "Verdant",
       "abbreviation": "VRD",
       "roleCategory": "healer",
-      "description": "GEO Verdant (HEALER) - Healer"
+      "iconId": 22,
+      "iconIdV2": 1038,
+      "description": "Verdant (GEO Healer) - Sylvan Luopan Sanctuary, Living Earth-Pulse & Nature's Renewal Healer (Lv10+): pulses 3s..."
     },
     {
       "spellId": 958,
@@ -762,7 +886,9 @@
       "displayName": "Seismancer",
       "abbreviation": "SEI",
       "roleCategory": "dps",
-      "description": "GEO Seismancer (DPS) - Damage"
+      "iconId": 22,
+      "iconIdV2": 1010,
+      "description": "Seismancer (GEO Damage) - Predict a claimed quarry’s position and erupt a single-target fault beneath it."
     },
     {
       "spellId": 959,
@@ -774,7 +900,9 @@
       "displayName": "Spellblade",
       "abbreviation": "SPB",
       "roleCategory": "dps",
-      "description": "RUN Spellblade (DPS) - Greatsword & Conduction Spellweaver DPS"
+      "iconId": 22,
+      "iconIdV2": 1010,
+      "description": "Spellblade (RUN Damage) - Elemental Greatsword spellweaver (Lv10+): Enchanted attacks (Rune Edge), Effusion Slash &..."
     },
     {
       "spellId": 960,
@@ -786,7 +914,9 @@
       "displayName": "Lifebinder",
       "abbreviation": "LFB",
       "roleCategory": "healer",
-      "description": "RUN Lifebinder (HEALER) - Vivacious Pulse & Runic Mending Healer"
+      "iconId": 22,
+      "iconIdV2": 1038,
+      "description": "Lifebinder (RUN Healer) - Keeper of Sacred Yggdrasil Runes (Lv10+): turns Vivacious Pulse into a 15s CD party AoE..."
     },
     {
       "spellId": 961,
@@ -798,7 +928,9 @@
       "displayName": "Runeweft",
       "abbreviation": "RNW",
       "roleCategory": "tank",
-      "description": "RUN Runeweft (TANK) - Hybrid Stance-Swapping Ward Tank"
+      "iconId": 22,
+      "iconIdV2": 1000,
+      "description": "Runeweft (RUN Tank) - Order of Conscience ward tank (Lv10+): harbors 3 Runes at Lv10+, never loses Runes on..."
     }
   ]
 }

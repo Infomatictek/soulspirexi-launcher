@@ -150,6 +150,25 @@ function StatusDiagMod:draw(imgui, dl, F_arg, L, x, y, w, h, _ctx)
                 tostring(d.companions_enabled == true),
                 tonumber(d.companion_spell_count) or 0,
                 tostring((d.companion_category_label and d.companion_category_label ~= '') and d.companion_category_label or 'Echoes')))
+            if type(vana.soulspire.lookup_action) == 'function' and type(vana.soulspire.decide_visibility) == 'function' then
+                local echo_named = 0
+                local legacy_leaks = 0
+                for sid = 896, 961 do
+                    local rec = vana.soulspire.lookup_action(1, sid)
+                    if type(rec) == 'table' and type(rec.name) == 'string' and rec.name ~= '' then
+                        echo_named = echo_named + 1
+                    end
+                end
+                for sid = 962, 1023 do
+                    if vana.soulspire.decide_visibility(1, sid, 75) ~= 'hide' then
+                        legacy_leaks = legacy_leaks + 1
+                    end
+                end
+                imgui.Text(string.format('Native Spell Parity (90-Action): EchoesNamed=%d/66 | LegacyTrustLeaks(962..1023)=%d | DynamicSpells=%d (active=%s)',
+                    echo_named, legacy_leaks,
+                    tonumber(d.dynamic_spell_count) or 0,
+                    tostring(d.dynamic_spellbook_active == true)))
+            end
             if self.identity and self.identity.registry_source then
                 imgui.Text('  souls.json: ' .. tostring(self.identity.registry_source))
             end
