@@ -62,6 +62,24 @@ public sealed class ModernClientConfigGenerator
         return settings.ClientEngine;
     }
 
+    public static ClientEngineMode ResolveEngineForLaunch(LauncherSettings settings, LauncherManifest manifest)
+    {
+        var engine = ResolveEffectiveEngine(settings, manifest);
+        if (settings.ClientEngine == ClientEngineMode.ModernNative &&
+            ManifestUpdateService.NormalizeUserFacingChannel(settings.UpdateChannel) == UpdateChannel.Testing)
+        {
+            var package = manifest.ModernClient?.Native;
+            if (engine != ClientEngineMode.ModernNative || package is null ||
+                !string.Equals(package.Profile, "native", StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(package.PackageUrl))
+            {
+                throw new InvalidOperationException(
+                    "The Testing manifest does not provide an eligible Modern Native client package. Check / Sync Updates or explicitly select another client profile.");
+            }
+        }
+        return engine;
+    }
+
     public static string GetAccountIniFileName(string? username)
     {
         if (string.IsNullOrWhiteSpace(username))

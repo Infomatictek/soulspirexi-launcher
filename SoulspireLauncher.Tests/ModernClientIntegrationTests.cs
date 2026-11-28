@@ -106,6 +106,31 @@ public sealed class ModernClientIntegrationTests
     }
 
     [Fact]
+    public void ModernNativeLaunch_RequiresAnExplicitEligibleNativePackageOnTesting()
+    {
+        var manifest = BuildTestingModernManifest(baselineEligible: true, compatEligible: true, verified: false);
+        var settings = new LauncherSettings { UpdateChannel = UpdateChannel.Testing, ClientEngine = ClientEngineMode.ModernNative };
+
+        Assert.Null(manifest.ModernClient!.ResolvePackage(ClientEngineMode.ModernNative));
+        Assert.Throws<InvalidOperationException>(() => ModernClientConfigGenerator.ResolveEngineForLaunch(settings, manifest));
+
+        var native = new ManifestModernClientPackage
+        {
+            Profile = "native",
+            PackageUrl = "https://example.test/native.zip",
+            ExperimentalEligible = false
+        };
+        manifest.ModernClient.Native = native;
+        Assert.Throws<InvalidOperationException>(() => ModernClientConfigGenerator.ResolveEngineForLaunch(settings, manifest));
+        native.ExperimentalEligible = true;
+        Assert.Same(native, manifest.ModernClient.ResolvePackage(ClientEngineMode.ModernNative));
+        Assert.Equal(ClientEngineMode.ModernNative, ModernClientConfigGenerator.ResolveEngineForLaunch(settings, manifest));
+
+        settings.UpdateChannel = UpdateChannel.Stable;
+        Assert.Equal(ClientEngineMode.Classic, ModernClientConfigGenerator.ResolveEngineForLaunch(settings, manifest));
+    }
+
+    [Fact]
     public void StableManifest_FailsClosedWhenModernClientIsUnverified_AndTestingValidatesShaAndHttps()
     {
         var manifest = BuildTestingModernManifest(baselineEligible: true, compatEligible: true, verified: false);

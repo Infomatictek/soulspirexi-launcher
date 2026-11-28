@@ -2079,7 +2079,11 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             _manifestUnavailableError = null;
             ApplyManifest(result.Manifest);
 
-            await _manifestService.EnsureAshitaAndToolsAsync(_manifest, _settings, progress);
+            var setupEngine = ModernClientConfigGenerator.ResolveEngineForLaunch(_settings, _manifest);
+            if (setupEngine != ClientEngineMode.ModernNative)
+            {
+                await _manifestService.EnsureAshitaAndToolsAsync(_manifest, _settings, progress);
+            }
             if (result.FromRemote)
             {
                 await _manifestService.SyncSoulspireFilesAsync(_manifest, _settings, forceAll: false, progress);
@@ -2091,7 +2095,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
             PendingUpdatesCount = _manifestService.GetOutdatedFiles(_manifest, _settings).Count;
             RefreshDiagnostics();
-            Log("Ashita v4, xiloader, XIPivot, and SoulspireXI files are ready.");
+            Log(setupEngine == ClientEngineMode.ModernNative
+                ? "SoulspireXI payload sync for Modern Native finished."
+                : "Ashita v4, xiloader, XIPivot, and SoulspireXI files are ready.");
         }
         catch (Exception ex)
         {
@@ -2156,8 +2162,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             _manifestUnavailableError = null;
             ApplyManifest(result.Manifest);
 
-            StatusMessage = "Checking Ashita v4 prerequisites...";
-            await _manifestService.EnsureAshitaAndToolsAsync(_manifest, _settings, progress);
+            var effectiveEngine = ModernClientConfigGenerator.ResolveEngineForLaunch(_settings, _manifest);
+            if (effectiveEngine != ClientEngineMode.ModernNative)
+            {
+                StatusMessage = "Checking Ashita v4 prerequisites...";
+                await _manifestService.EnsureAshitaAndToolsAsync(_manifest, _settings, progress);
+            }
 
             if (result.FromRemote)
             {
@@ -2234,7 +2244,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
                 _stagingRelay.Stop();
             }
 
-            var effectiveEngine = ModernClientConfigGenerator.ResolveEffectiveEngine(_settings, _manifest);
             if (ModernClientConfigGenerator.IsModernEngine(effectiveEngine))
             {
                 var profileDir = ModernClientConfigGenerator.ResolveProfileDirectory(ModernClientPath, effectiveEngine);

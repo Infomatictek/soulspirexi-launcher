@@ -437,9 +437,9 @@ public sealed class ManifestModernClient
             return Baseline;
         }
 
-        if (mode == ClientEngineMode.ModernNative && (Native ?? Compat) is not null)
+        if (mode == ClientEngineMode.ModernNative)
         {
-            return Native ?? Compat;
+            return Native;
         }
 
         if (mode == ClientEngineMode.ModernCompat && Compat is not null)
@@ -447,14 +447,13 @@ public sealed class ManifestModernClient
             return Compat;
         }
 
-        if (mode is ClientEngineMode.ModernBaseline or ClientEngineMode.ModernCompat or ClientEngineMode.ModernNative &&
+        if (mode is ClientEngineMode.ModernBaseline or ClientEngineMode.ModernCompat &&
             (!string.IsNullOrWhiteSpace(PackageUrl) || !string.IsNullOrWhiteSpace(Version) || ExperimentalEligible || ClientVerified))
         {
             return new ManifestModernClientPackage
             {
                 Profile = mode switch
                 {
-                    ClientEngineMode.ModernNative => "native",
                     ClientEngineMode.ModernCompat => "compat",
                     _ => "baseline"
                 },
