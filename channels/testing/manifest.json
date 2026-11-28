@@ -9924,15 +9924,15 @@
       "category": "addon",
       "sourcePath": "channels/testing/payload/addons/vanacore/battlelens/README.md",
       "targetPath": "vanacore/battlelens/README.md",
-      "sha256": "2bb579a1a0f695fd958ddd45bcef1be402b190f9562029caf2bbc4f1190b8ce5",
-      "size": 1912
+      "sha256": "977cedf19f6ae7b3d1167083bf137ee4fcd347da32f99626685b866305ad0f34",
+      "size": 1913
     },
     {
       "category": "addon",
       "sourcePath": "channels/testing/payload/addons/vanacore/battlelens/battlelens.lua",
       "targetPath": "vanacore/battlelens/battlelens.lua",
-      "sha256": "cbaa1c246259255fdfe5b5eb7d97c8c5c7187e64a776c78754d62d6420b20004",
-      "size": 1303
+      "sha256": "cde1f1360b3a1d7ce85f811795b9e7856ef0482f412e67efac0f62d1f13b64b7",
+      "size": 1793
     },
     {
       "category": "addon",

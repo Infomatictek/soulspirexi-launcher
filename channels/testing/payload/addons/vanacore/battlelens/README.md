@@ -1,15 +1,15 @@
 # BattleLens
 
-Optional client-side battle log formatting for SoulspireXI on VanaCore. It is not loaded by the launcher or boot script and starts **off** even when manually loaded. It changes only recognized mode-9 melee, miss, and evade display lines. Unknown, injected, system, Echo, Soul action, critical hit, skillchain, magic burst, status, and game-control-code lines pass through unchanged. No packets, server settings, or global VanaCore settings are changed.
+Optional client-side battle log formatting for SoulspireXI on VanaCore. The launcher leaves it **off by default**. Checking its option loads and activates it automatically on the next launch. It changes only recognized mode-9 melee, miss, and evade display lines. Unknown, injected, system, Echo, Soul action, critical hit, skillchain, magic burst, status, and game-control-code lines pass through unchanged. No packets, server settings, or global VanaCore settings are changed.
 
 ## Use
 
-1. In the launcher, choose **Modern Native** and check **Load optional BattleLens**. Save settings and launch the game. The launcher installs the addon files into the native profile and adds its load command to that profile's boot script. The checkbox is off by default.
-2. In game, enter `/battlelens on` to opt in to formatting. `/battlelens off` restores vanilla display immediately; uncheck the launcher option to stop loading it next time. `/addon unload battlelens` removes it for the current session.
+1. In the launcher, choose **Modern Native** and check **Enable optional BattleLens battle log**. Save settings and launch the game. BattleLens is active without an in-game command. The checkbox is off by default.
+2. Uncheck the option to restore vanilla chat on the next launch. `/battlelens off` restores vanilla display immediately for the current session; `/addon unload battlelens` removes it for that session.
 
 For a manual install, copy this folder to `addons/vanacore/battlelens/` in the chosen VanaCore profile and enter `/addon load battlelens vanacore` in game.
 
-Settings are per character in VanaCore's `settings/addons/battlelens/<Character>/settings.json`. The initial `enabled` value is `false`; a player who opts in retains that choice until switching it off.
+Filter and color settings are per character in VanaCore's `settings/addons/battlelens/<Character>/settings.json`. The launcher applies its checked state when the addon loads, including before character login. A manual load starts off until `/battlelens on` is entered.
 
 | Command | Effect |
 | --- | --- |

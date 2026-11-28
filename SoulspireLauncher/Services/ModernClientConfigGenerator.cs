@@ -244,6 +244,8 @@ public sealed class ModernClientConfigGenerator
             if (settings.AutoLoadBattleLensAddon)
             {
                 sb.AppendLine("/addon load battlelens vanacore");
+                sb.AppendLine("/wait 1");
+                sb.AppendLine("/battlelens launcher-on");
             }
             return sb.ToString();
         }

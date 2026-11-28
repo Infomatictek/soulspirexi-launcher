@@ -186,7 +186,7 @@
                                                 </ComboBox.ItemTemplate>
                                             </ComboBox>
                                             <TextBlock Text="{Binding ClientEngineStatusText}" FontSize="11" Foreground="{StaticResource TextSecondary}" TextWrapping="Wrap" Margin="0,2,0,4" />
-                                            <CheckBox Content="Load optional BattleLens (off until /battlelens on)"
+                                            <CheckBox Content="Enable optional BattleLens battle log"
                                                       IsChecked="{Binding AutoLoadBattleLensAddon}"
                                                       Visibility="{Binding IsModernNativeSelected, Converter={StaticResource BoolToVis}}"
                                                       Margin="0,2,0,4" />

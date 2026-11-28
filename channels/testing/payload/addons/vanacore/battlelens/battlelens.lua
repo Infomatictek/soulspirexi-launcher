@@ -6,11 +6,28 @@ addon.desc = 'Optional battle log filtering and formatting; off by default.'
 
 local root = addon.path:gsub('[/\\]+$', '')
 local rules = assert(loadfile(root .. '/rules.lua'))()
-local store = vana.settings.register({ scope = 'character', defaults = rules.defaults() })
+local launch_enabled = false
+local store = vana.settings.register({
+    scope = 'character',
+    defaults = rules.defaults(),
+    changed = function(data, current_store)
+        if launch_enabled then
+            data.enabled = true
+            if current_store.ready then current_store:save() end
+        end
+    end,
+})
 
 vana.events.on('command', function(e)
+    if e.command:lower():match('^%s*/battlelens%s+launcher%-on%s*$') then
+        launch_enabled = true
+        store.data.enabled = true
+        if store.ready then store:save() end
+        return true
+    end
     local handled, reply, changed = rules.command(store.data, e.command)
     if not handled then return end
+    launch_enabled = store.data.enabled == true
     if changed and store.ready then
         local ok, why = store:save()
         if not ok then print('[BattleLens] Settings could not be saved: ' .. tostring(why)) end

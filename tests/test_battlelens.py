@@ -106,6 +106,41 @@ class BattleLensTests(unittest.TestCase):
         self.assertEqual(event["message_modified"], "Alice misses Goblin.")
         self.assertEqual(lua.globals().saved, 2)
 
+    def test_launcher_checkbox_activates_after_character_login(self):
+        from lupa.luajit21 import LuaRuntime
+
+        lua = LuaRuntime()
+        lua.globals().addon = lua.table_from({"path": str(NATIVE)})
+        lua.execute("""
+            callbacks = {}
+            saved = 0
+            print = function() end
+            vana = {
+                settings = { register = function(options)
+                    config = { data = options.defaults, ready = false,
+                        save = function(self) saved = saved + 1; return true end }
+                    changed = options.changed
+                    return config
+                end },
+                events = { on = function(name, fn) callbacks[name] = fn end },
+            }
+        """)
+        lua.execute((NATIVE / "battlelens.lua").read_text(encoding="utf-8"))
+        self.assertTrue(lua.globals().callbacks["command"](
+            lua.table_from({"command": "/battlelens launcher-on"})))
+        self.assertTrue(lua.globals().config["data"]["enabled"])
+        self.assertEqual(lua.globals().saved, 0)
+
+        # A character's saved defaults replace the title-screen table on login.
+        lua.globals().config["data"] = lua.execute((NATIVE / "rules.lua").read_text(encoding="utf-8")).defaults()
+        lua.globals().config["ready"] = True
+        lua.globals().changed(lua.globals().config["data"], lua.globals().config)
+        self.assertTrue(lua.globals().config["data"]["enabled"])
+        self.assertEqual(lua.globals().saved, 1)
+
+        lua.globals().callbacks["command"](lua.table_from({"command": "/battlelens off"}))
+        self.assertFalse(lua.globals().config["data"]["enabled"])
+
 
 if __name__ == "__main__":
     unittest.main()

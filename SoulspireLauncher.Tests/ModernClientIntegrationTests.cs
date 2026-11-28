@@ -476,7 +476,9 @@ public sealed class ModernClientIntegrationTests
         var settings = new LauncherSettings { AutoLoadBattleLensAddon = true };
         var nativeBoot = ModernClientConfigGenerator.BuildBootScriptContent(settings, ClientEngineMode.ModernNative);
         Assert.Contains("/addon load battlelens vanacore", nativeBoot);
-        Assert.DoesNotContain("/battlelens on", nativeBoot); // Per-character opt-in remains separate.
+        Assert.Contains("/battlelens launcher-on", nativeBoot);
+        Assert.True(nativeBoot.IndexOf("/addon load battlelens vanacore", StringComparison.Ordinal)
+                    < nativeBoot.IndexOf("/battlelens launcher-on", StringComparison.Ordinal));
 
         var compatBoot = ModernClientConfigGenerator.BuildBootScriptContent(settings, ClientEngineMode.ModernCompat);
         Assert.DoesNotContain("battlelens", compatBoot);
