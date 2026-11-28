@@ -1,6 +1,7 @@
 import hashlib
 import json
 import pathlib
+import re
 import unittest
 
 
@@ -43,9 +44,16 @@ class WeaponRenderProbeDeliveryTest(unittest.TestCase):
         self.assertRegex(testing_ver, r"^2\.2\.\d+-testing\.\d+$", f"unexpected testing manifestVersion: {testing_ver}")
         self.assertEqual(testing_manifest.get("repo", {}).get("branch"), "main")
 
+        # The shared probe keeps its source version when Testing updates only its native client.
+        version_pattern = r"2\.2\.(\d+)-testing\.(\d+)"
+        source_version = re.search(rf"(?m)^M\.PROBE_SOURCE_COMMIT\s*=\s*'{version_pattern}'\s*$", text)
+        manifest_version = re.fullmatch(version_pattern, testing_ver)
+        self.assertIsNotNone(source_version)
+        self.assertIsNotNone(manifest_version)
+        self.assertLessEqual(tuple(map(int, source_version.groups())), tuple(map(int, manifest_version.groups())))
+
         required_tokens = [
             "M.PROBE_VERSION",
-            f"M.PROBE_SOURCE_COMMIT   = '{testing_ver}'",
             "M.LOADED_LUA_PATH",
             "build_unique_output_path",
             '"captureId"',
