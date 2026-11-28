@@ -164,25 +164,10 @@ function StatusDiagMod:draw(imgui, dl, F_arg, L, x, y, w, h, _ctx)
                         legacy_leaks = legacy_leaks + 1
                     end
                 end
-                imgui.Text(string.format('Native Spell Parity (90-Action): EchoesNamed=%d/66 | LegacyTrustLeaks(962..1023)=%d | DynamicSpells=%d (active=%s, hash=%s)',
+                imgui.Text(string.format('Native Spell Parity (90-Action): EchoesNamed=%d/66 | LegacyTrustLeaks(962..1023)=%d | DynamicSpells=%d (active=%s)',
                     echo_named, legacy_leaks,
                     tonumber(d.dynamic_spell_count) or 0,
-                    tostring(d.dynamic_spellbook_active == true),
-                    tostring(d.dynamic_spellbook_hash or '')))
-                local dr = type(d.dynamic_runtime) == 'table' and d.dynamic_runtime or nil
-                if dr ~= nil then
-                    local sp_ids = {}
-                    for _, sid in ipairs(dr.allowed_spells or {}) do sp_ids[#sp_ids + 1] = tostring(sid) end
-                    local ab_ids = {}
-                    for _, aid in ipairs(dr.allowed_abilities or {}) do ab_ids[#ab_ids + 1] = tostring(aid) end
-                    imgui.Text(string.format('Action Eligibility (SOUL-ACTION-002): soul=%s lv=%d | replaceSpell=%s replaceAbil=%s | pet=%s(alive=%s)',
-                        tostring(dr.soul or 'none'), tonumber(dr.level) or 0,
-                        tostring(dr.replace_base == true), tostring(dr.replace_base_abilities == true),
-                        tostring(dr.pet_type or 'none'), tostring(dr.pet_alive == true)))
-                    imgui.Text(string.format('  AllowedSpells(%d): %s | AllowedAbils(%d): %s',
-                        #sp_ids, (#sp_ids > 0 and table.concat(sp_ids, ',') or 'none'),
-                        #ab_ids, (#ab_ids > 0 and table.concat(ab_ids, ',') or 'none')))
-                end
+                    tostring(d.dynamic_spellbook_active == true)))
             end
             if self.identity and self.identity.registry_source then
                 imgui.Text('  souls.json: ' .. tostring(self.identity.registry_source))

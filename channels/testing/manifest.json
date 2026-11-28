@@ -12,7 +12,7 @@
     "notes": "Testing channel build pairing verified 27-hook Soulspire Native (soulspire_native.dll) with server."
   },
   "serverName": "SoulspireXI",
-  "tagline": "Faerie Companions (Eos & Titania) • Job Specs • 4-Tier Weaponskill Talent Trees",
+  "tagline": "Faerie Companions (Eos & Titania) \u2022 Job Specs \u2022 4-Tier Weaponskill Talent Trees",
   "defaultHost": "play.soulspirexi.com",
   "useHairpin": false,
   "ports": {
@@ -9928,7 +9928,7 @@
     },
     {
       "category": "addon",
-      "sourcePath": "addons/vanacore/soulspire_core/modules/status_and_diag.lua",
+      "sourcePath": "channels/testing/payload/addons/vanacore/soulspire_core/modules/status_and_diag.lua",
       "targetPath": "vanacore/soulspire_core/modules/status_and_diag.lua",
       "sha256": "77d334188c77b0066f824318c71b3c21b1505f862596fa93e0c06de62ec91caf",
       "size": 15246
@@ -10019,10 +10019,10 @@
     },
     {
       "category": "addon",
-      "sourcePath": "addons/vanacore/soulspire_core/soulhud/soulhud_roster.lua",
+      "sourcePath": "channels/testing/payload/addons/vanacore/soulspire_core/soulhud/soulhud_roster.lua",
       "targetPath": "vanacore/soulspire_core/soulhud/soulhud_roster.lua",
-      "sha256": "d94c1039dc7be2bf042017b0c176761c36aafba41fdfb38de9f8586085758049",
-      "size": 4986
+      "sha256": "4d06f945895b7ec17fa8ea623da9addaee4b2ea027d4992e2ede70ed12c23c61",
+      "size": 4982
     },
     {
       "category": "addon",
@@ -12188,5 +12188,5 @@
     }
   },
   "version": "2.2.3-testing.29",
-  "notes": "SoulspireXI Testing v2.2.3-testing.29 — fixes retail Trust 1018/1019 leak (Iroha II / Shantotto II), adds canonical role icons and concise descriptions for all 66 Soul Echoes, adds Client Sentinel 90-action metadata parity diagnostics, and pins VanaCore v0.9.9-soulspire-native.17."
+  "notes": "SoulspireXI Testing v2.2.3-testing.29 \u2014 fixes retail Trust 1018/1019 leak (Iroha II / Shantotto II), adds canonical role icons and concise descriptions for all 66 Soul Echoes, adds Client Sentinel 90-action metadata parity diagnostics, and pins VanaCore v0.9.9-soulspire-native.17."
 }

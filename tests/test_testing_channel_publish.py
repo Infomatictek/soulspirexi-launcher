@@ -106,6 +106,16 @@ class TestingChannelPublishTests(unittest.TestCase):
                 by_target["soulspire_native.dll"]["sourcePath"],
             )
 
+            # VanaCore overrides use the same in-game target as the shared addon.
+            self.assertEqual(
+                "channels/testing/payload/addons/vanacore/soulspire_core/modules/status_and_diag.lua",
+                by_target["vanacore/soulspire_core/modules/status_and_diag.lua"]["sourcePath"],
+            )
+            self.assertEqual(
+                "channels/testing/payload/addons/vanacore/soulspire_core/soulhud/soulhud_roster.lua",
+                by_target["vanacore/soulspire_core/soulhud/soulhud_roster.lua"]["sourcePath"],
+            )
+
             # Both Stable and Testing manifests pass strict read-only verifier
             self.assertEqual([], verify_manifest.verify_manifest(tmp_repo, manifest_path=stable_path))
             self.assertEqual([], verify_manifest.verify_manifest(tmp_repo, manifest_path=out_path))

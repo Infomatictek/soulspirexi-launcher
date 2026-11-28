@@ -360,6 +360,7 @@ def build_testing_manifest(
         ("dat", payload_root / "dat-overlay" / "ROM", payload_root / "dat-overlay"),
         ("plugin", payload_root / "plugins" / "ashita4", payload_root / "plugins" / "ashita4"),
         ("addon", payload_root / "addons" / "ashita4", payload_root / "addons" / "ashita4"),
+        ("addon", payload_root / "addons" / "vanacore", payload_root / "addons"),
     ]
 
     overrides: dict[tuple[str, str], dict[str, object]] = {}
